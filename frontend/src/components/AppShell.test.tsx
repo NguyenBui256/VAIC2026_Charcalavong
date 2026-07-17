@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import AppShell from "./AppShell";
+import { CommandPaletteProvider } from "./CommandPalette/CommandPaletteContext";
 
 // Mock useAuth to return authenticated state
 vi.mock("../hooks/useAuth", () => ({
@@ -25,11 +26,13 @@ vi.mock("../hooks/useAuth", () => ({
 function renderShell() {
   return render(
     <MemoryRouter initialEntries={["/dashboard"]}>
-      <Routes>
-        <Route element={<AppShell />}>
-          <Route path="/dashboard" element={<div>Dashboard content</div>} />
-        </Route>
-      </Routes>
+      <CommandPaletteProvider>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="/dashboard" element={<div>Dashboard content</div>} />
+          </Route>
+        </Routes>
+      </CommandPaletteProvider>
     </MemoryRouter>,
   );
 }

@@ -16,6 +16,12 @@ if (!window.matchMedia) {
   }));
 }
 
+// jsdom does not implement scrollIntoView — stub it so command palette
+// keyboard navigation tests don't crash.
+if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
+
 afterEach(() => {
   cleanup();
   sessionStorage.clear();
