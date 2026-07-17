@@ -147,7 +147,7 @@ export default function AgentDetailShell({ agentId }: AgentDetailShellProps) {
                 onSaved={handleSaved}
               />
             )}
-            {activeTab === "knowledge-base" && <KnowledgeBaseTab />}
+            {activeTab === "knowledge-base" && <KnowledgeBaseTab agentId={agentId} isNew={isNew} />}
             {activeTab === "tools" && <ToolsTab />}
             {activeTab === "api-integrations" && <ApiIntegrationsTab />}
             {activeTab === "prompt" && (

@@ -25,6 +25,15 @@ vi.mock("../lib/agentsApi", async () => {
   };
 });
 
+const mockListKbDocuments = vi.fn();
+vi.mock("../lib/kbApi", async () => {
+  const actual = await vi.importActual<typeof import("../lib/kbApi")>("../lib/kbApi");
+  return {
+    ...actual,
+    listKbDocuments: (...args: unknown[]) => mockListKbDocuments(...args),
+  };
+});
+
 const agent: Agent = {
   id: "agent-1",
   tenant_id: "tenant-1",
@@ -59,6 +68,7 @@ describe("AgentDetailPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetAgent.mockResolvedValue(agent);
+    mockListKbDocuments.mockResolvedValue([]);
   });
 
   it("renders all 6 tabs with Identity as the default active tab", async () => {
@@ -73,13 +83,15 @@ describe("AgentDetailPage", () => {
     expect(screen.getByTestId("vaic-tab-model")).toBeInTheDocument();
   });
 
-  it("switches to the Knowledge Base placeholder tab on click", async () => {
+  it("switches to the Knowledge Base tab on click", async () => {
     renderDetail();
     await waitFor(() => expect(screen.getByTestId("vaic-identity-tab")).toBeInTheDocument());
 
     fireEvent.click(screen.getByTestId("vaic-tab-knowledge-base"));
 
-    expect(screen.getByText(/Coming soon/i)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("vaic-kb-nfr9-advisory")).toBeInTheDocument(),
+    );
     expect(screen.queryByTestId("vaic-identity-tab")).not.toBeInTheDocument();
   });
 
