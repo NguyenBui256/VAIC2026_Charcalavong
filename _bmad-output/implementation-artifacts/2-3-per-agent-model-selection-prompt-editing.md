@@ -1,5 +1,5 @@
 ---
-baseline_commit: 86e0dc8c653ccb3633a45d3fa8e37c53e4747fe7
+baseline_commit: 4e2c5ad3cb823b8edb5f8ce6d0ea8b3d94a4fd1c
 ---
 
 # Story 2.3: Per-Agent Model Selection & Prompt Editing

@@ -1,5 +1,5 @@
 ---
-baseline_commit: 86e0dc8c653ccb3633a45d3fa8e37c53e4747fe7
+baseline_commit: f3a0633eeb4c7569fafe53bef41ab66d3fef93e9
 ---
 
 # Story 2.2: Agent List & Detail Shell with Identity Tab
