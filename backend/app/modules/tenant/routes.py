@@ -27,11 +27,17 @@ from app.modules.tenant.models import User
 from app.modules.tenant.service import (
     authenticate,
     issue_token,
+    list_departments,
     list_tenant_users,
     user_profile,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+# Story 2.8 (carried item #2) — tenant-scoped Department listing, consumed by
+# the Agent Builder Identity-tab dropdown and the Agent-list Department
+# filter. Unprefixed (not under /auth) since it's a general tenant resource.
+departments_router = APIRouter(tags=["departments"])
 
 
 # ---------------------------------------------------------------------------
@@ -183,3 +189,16 @@ def list_users(
     """List users visible under the current RLS context (tenant-isolated)."""
     users = list_tenant_users(session)
     return JSONResponse(status_code=200, content=_ok(users))
+
+
+@departments_router.get("/departments")
+def list_departments_route(
+    session: Session = Depends(get_tenant_session),  # noqa: B008 -- FastAPI idiom
+) -> JSONResponse:
+    """GET /departments — tenant-scoped Department list (Story 2.8 item #2).
+
+    RLS on `departments` (Story 1.2) hides cross-tenant rows; no Python-side
+    tenant filter here.
+    """
+    departments = list_departments(session)
+    return JSONResponse(status_code=200, content=_ok(departments))

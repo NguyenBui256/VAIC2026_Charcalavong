@@ -25,7 +25,7 @@ from app.core.auth import (
 from app.core.auth import (
     hash_password as _hash_password,
 )
-from app.modules.tenant.models import User
+from app.modules.tenant.models import Department, User
 
 __all__ = [
     "authenticate",
@@ -33,6 +33,8 @@ __all__ = [
     "issue_token",
     "user_profile",
     "list_tenant_users",
+    "list_departments",
+    "department_profile",
 ]
 
 
@@ -106,3 +108,19 @@ def user_by_id(session: Session, user_id: uuid.UUID | str) -> User | None:
     """Fetch a single user by id — subject to RLS isolation."""
     stmt = select(User).where(User.id == uuid.UUID(str(user_id)))
     return session.execute(stmt).scalar_one_or_none()
+
+
+def department_profile(department: Department) -> dict[str, Any]:
+    """Serialize a Department to the response payload shape."""
+    return {"id": str(department.id), "name": department.name}
+
+
+def list_departments(session: Session) -> list[dict[str, Any]]:
+    """List Departments visible under the current RLS context (Story 2.8).
+
+    The caller's session MUST already have `app.tenant_id` set (via
+    `get_tenant_session`) — RLS enforces isolation, no Python-side filter.
+    Ordered by name for a stable dropdown/filter listing.
+    """
+    rows = session.execute(select(Department).order_by(Department.name)).scalars().all()
+    return [department_profile(d) for d in rows]
