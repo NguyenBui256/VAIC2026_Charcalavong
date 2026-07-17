@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
+from passlib.context import CryptContext
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -29,7 +31,13 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
 from app.core.db import AdminSessionLocal, SessionLocal, admin_engine, engine  # noqa: E402
+from app.core.tenant_context import tenant_context  # noqa: E402
+from app.main import app  # noqa: E402
 from app.modules.tenant.models import Department, Tenant, User  # noqa: E402
+
+# Shared password for seeded users in Story 1.3 tests.
+_PWD = CryptContext(schemes=["argon2"], deprecated="auto")
+SEED_PASSWORD = "Password123!"
 
 # -- Session-scoped migrations ---------------------------------------------
 
@@ -142,3 +150,38 @@ def app_session(seed_data: dict[str, dict[str, Any]]) -> Iterator[Session]:
 # Re-export so `from tests.integration.conftest import engine, admin_engine`
 # works for ad-hoc inspection.
 _ = (engine, admin_engine)
+
+
+# -- Story 1.3 additions ---------------------------------------------------
+
+@pytest.fixture(scope="session")
+def auth_seed(seed_data: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Set Argon2 password_hash on seeded users (Story 1.3 AC7).
+
+    Idempotent — re-runs the UPDATE every session.
+    """
+    pw_hash = _PWD.hash(SEED_PASSWORD)
+    with AdminSessionLocal() as s:
+        s.execute(
+            text("UPDATE users SET password_hash = :h WHERE email LIKE 'alice@%'"),
+            {"h": pw_hash},
+        )
+        s.execute(
+            text("UPDATE users SET password_hash = :h WHERE email LIKE 'bob@%'"),
+            {"h": pw_hash},
+        )
+        s.commit()
+    return seed_data
+
+
+@pytest.fixture()
+def api_client(auth_seed: dict[str, dict[str, Any]]) -> Iterator[TestClient]:
+    """Yield a FastAPI TestClient.
+
+    Resets `tenant_context` before and after each test to prove AC8 — the
+    contextvar default must be None when no request is in flight.
+    """
+    tenant_context.set(None)
+    with TestClient(app) as c:
+        yield c
+    tenant_context.set(None)
