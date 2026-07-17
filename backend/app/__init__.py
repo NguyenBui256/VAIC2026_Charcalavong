@@ -1,0 +1,1 @@
+"""VAIC backend application package."""
