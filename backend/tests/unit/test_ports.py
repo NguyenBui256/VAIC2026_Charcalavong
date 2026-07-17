@@ -296,3 +296,25 @@ def test_llm_completion_result_model_exists() -> None:
     assert "content" in fields
     assert "model" in fields
     assert "latency_ms" in fields
+
+
+# -- SubprocessSandbox / AgentToolPort structural compliance (Story 2.6) ----
+
+def test_subprocess_sandbox_satisfies_sandbox_port() -> None:
+    """`SubprocessSandbox` structurally satisfies `SandboxPort` (AC4/AC5)."""
+    from app.core.adapters.sandbox import SubprocessSandbox
+    from app.core.ports.sandbox import SandboxPort
+
+    assert isinstance(SubprocessSandbox(), SandboxPort)
+
+
+def test_agent_tool_port_satisfies_tool_port() -> None:
+    """`AgentToolPort` structurally satisfies `ToolPort` (AC2-AC5)."""
+    import uuid
+
+    from app.core.ports.tool import ToolPort
+    from app.modules.agent_builder.tool_service import AgentToolPort
+
+    fake_session = object()
+    port = AgentToolPort(fake_session, agent_id=uuid.uuid4())  # type: ignore[arg-type]
+    assert isinstance(port, ToolPort)

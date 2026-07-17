@@ -37,6 +37,14 @@ from app.modules.agent_builder.service import (
     update_agent,
 )
 from app.modules.agent_builder.service import get_agent as get_agent_service
+from app.modules.agent_builder.tool_crud import (
+    create_tool,
+    list_tools,
+    serialize_tool,
+    soft_delete_tool,
+    update_tool,
+)
+from app.modules.agent_builder.tool_service import get_tool, invoke_tool
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -58,6 +66,26 @@ class UpdateAgentRequest(BaseModel):
     department_id: uuid.UUID | None = None
     # Story 2.3 (AD-7): ModelRef {provider, model_name, parameters} as data.
     model: dict[str, Any] | None = None
+
+
+class CreateToolRequest(BaseModel):
+    display_name: str = Field(..., min_length=1, max_length=255)
+    header: dict[str, Any] = Field(default_factory=dict)
+    input_schema: dict[str, Any]
+    output_schema: dict[str, Any]
+    embedded_python: str | None = None
+
+
+class UpdateToolRequest(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=255)
+    header: dict[str, Any] | None = None
+    input_schema: dict[str, Any] | None = None
+    output_schema: dict[str, Any] | None = None
+    embedded_python: str | None = None
+
+
+class TestToolRequest(BaseModel):
+    sample_input: dict[str, Any] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -217,3 +245,97 @@ def delete_kb_document_route(
     principal = _principal(request)
     delete_kb_document(session, document_id=document_id, principal=principal)
     return JSONResponse(status_code=200, content=_ok({"id": str(document_id)}))
+
+
+# ---------------------------------------------------------------------------
+# Tool routes (Story 2.6)
+# ---------------------------------------------------------------------------
+
+@router.post("/{agent_id}/tools")
+def create_tool_route(
+    agent_id: uuid.UUID,
+    body: CreateToolRequest,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """POST /agents/{id}/tools — register a Tool (AC1)."""
+    principal = _principal(request)
+    tool = create_tool(
+        session,
+        agent_id=agent_id,
+        principal=principal,
+        display_name=body.display_name,
+        header=body.header,
+        input_schema=body.input_schema,
+        output_schema=body.output_schema,
+        embedded_python=body.embedded_python,
+    )
+    return JSONResponse(status_code=201, content=_ok(serialize_tool(tool)))
+
+
+@router.get("/{agent_id}/tools")
+def list_tools_route(
+    agent_id: uuid.UUID,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """GET /agents/{id}/tools — list, RLS-scoped, header masked."""
+    tools = list_tools(session, agent_id=agent_id)
+    return JSONResponse(status_code=200, content=_ok([serialize_tool(t) for t in tools]))
+
+
+@router.patch("/{agent_id}/tools/{tool_id}")
+def update_tool_route(
+    agent_id: uuid.UUID,
+    tool_id: uuid.UUID,
+    body: UpdateToolRequest,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """PATCH /agents/{id}/tools/{tool_id} — owner-or-same-department only."""
+    principal = _principal(request)
+    tool = update_tool(
+        session,
+        agent_id=agent_id,
+        tool_id=tool_id,
+        principal=principal,
+        **body.model_dump(exclude_unset=True),
+    )
+    return JSONResponse(status_code=200, content=_ok(serialize_tool(tool)))
+
+
+@router.delete("/{agent_id}/tools/{tool_id}")
+def delete_tool_route(
+    agent_id: uuid.UUID,
+    tool_id: uuid.UUID,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """DELETE /agents/{id}/tools/{tool_id} — soft-delete only."""
+    principal = _principal(request)
+    soft_delete_tool(session, agent_id=agent_id, tool_id=tool_id, principal=principal)
+    return JSONResponse(status_code=200, content=_ok({"id": str(tool_id)}))
+
+
+@router.post("/{agent_id}/tools/{tool_id}/test")
+def test_tool_route(
+    agent_id: uuid.UUID,
+    tool_id: uuid.UUID,
+    body: TestToolRequest,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """POST /agents/{id}/tools/{tool_id}/test — Test Tool affordance (AC7).
+
+    Exercises the SAME invoke -> validate -> (sandbox|MCP) -> validate path
+    as a real invocation, so validation/sandbox errors surface here first.
+    """
+    principal = _principal(request)
+    tool = get_tool(session, agent_id=agent_id, tool_id=tool_id)
+    result = invoke_tool(
+        session,
+        tool,
+        body.sample_input,
+        tenant_id=principal.tenant_id,
+        department_id=tool.department_id,
+    )
+    return JSONResponse(status_code=200, content=_ok(result.model_dump()))

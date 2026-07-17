@@ -77,3 +77,56 @@ class Agent(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class Tool(Base):
+    """A Tool registered against an Agent (Story 2.6).
+
+    `embedded_python` NULL => MCP-routed tool; non-NULL => sandbox-routed
+    (AR-14). `header` (incl. auth) is stored but NEVER echoed to the client
+    in full (NFR-9) — routes mask it in serialization.
+    """
+
+    __tablename__ = "tools"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid7,
+    )
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    department_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("departments.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    header: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default="{}"
+    )
+    input_schema: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    output_schema: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    embedded_python: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", default=False
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

@@ -1,0 +1,94 @@
+"""Unit tests for `SubprocessSandbox` (Story 2.6 T7.4, AC4/AC5, AR-14).
+
+Exercises the REAL subprocess sandbox (no fakes) -- these are the mandatory
+timeout / memory-breach / no-network / stdin-stdout tests from the Dev
+Notes "Mandatory sandbox tests" section. The dev host here is Windows, so
+the POSIX-only `resource.setrlimit` path is inactive and the cross-platform
+`psutil` watchdog (see `app/core/adapters/sandbox.py`) is the active
+enforcement mechanism (T3.5).
+"""
+
+from __future__ import annotations
+
+import sys
+
+from app.core.adapters.sandbox import SubprocessSandbox
+
+
+def test_stdin_stdout_roundtrip() -> None:
+    """Input via stdin, output read from stdout as JSON (AC4)."""
+    code = (
+        "import sys, json\n"
+        "data = json.loads(sys.stdin.read())\n"
+        "print(json.dumps({'doubled': data['n'] * 2}))\n"
+    )
+    result = SubprocessSandbox().run(code, stdin='{"n": 21}', timeout_s=5, memory_mb=64)
+    assert not result.timed_out
+    assert result.exit_code == 0
+    assert result.output == {"doubled": 42}
+
+
+def test_timeout_terminates_and_sets_timed_out() -> None:
+    """A script that spins past the CPU/wall-clock cap is terminated (AC5)."""
+    code = (
+        "import time\n"
+        "end = time.time() + 30\n"
+        "while time.time() < end:\n"
+        "    pass\n"
+    )
+    result = SubprocessSandbox().run(code, timeout_s=1, memory_mb=64)
+    assert result.timed_out is True
+    assert result.exit_code < 0
+
+
+def test_memory_breach_is_killed_and_surfaces_as_violation() -> None:
+    """A script allocating well past the memory cap is killed (AC5)."""
+    code = (
+        "chunks = []\n"
+        "while True:\n"
+        "    chunks.append(bytearray(10 * 1024 * 1024))\n"
+    )
+    result = SubprocessSandbox().run(code, timeout_s=10, memory_mb=32)
+    assert result.exit_code < 0
+    # Either the watchdog/rlimit flags it as a timeout-style kill or a
+    # distinct negative exit -- both are "forcibly killed" per AR-14.
+    assert result.output == {}
+
+
+def test_no_network_egress_blocked() -> None:
+    """An outbound socket attempt fails inside the sandbox (AR-14)."""
+    code = (
+        "import json\n"
+        "try:\n"
+        "    import socket\n"
+        "    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)\n"
+        "    s.connect(('example.com', 80))\n"
+        "    print(json.dumps({'blocked': False}))\n"
+        "except Exception as exc:\n"
+        "    print(json.dumps({'blocked': True, 'error': str(exc)}))\n"
+    )
+    result = SubprocessSandbox().run(code, timeout_s=5, memory_mb=64)
+    assert not result.timed_out
+    assert result.output.get("blocked") is True
+
+
+def test_fs_escape_via_open_blocked() -> None:
+    """`open()` is disabled -- restricted builtins (AR-14)."""
+    code = (
+        "import json\n"
+        "try:\n"
+        "    open('C:/Windows/win.ini' if 'win' in __import__('sys').platform else '/etc/passwd')\n"
+        "    print(json.dumps({'blocked': False}))\n"
+        "except Exception as exc:\n"
+        "    print(json.dumps({'blocked': True, 'error': str(exc)}))\n"
+    )
+    result = SubprocessSandbox().run(code, timeout_s=5, memory_mb=64)
+    assert not result.timed_out
+    assert result.output.get("blocked") is True
+
+
+def test_uses_same_python_interpreter() -> None:
+    """Sanity: the sandbox launches the same interpreter running the tests."""
+    code = "import sys, json\nprint(json.dumps({'v': sys.version_info[0]}))\n"
+    result = SubprocessSandbox().run(code, timeout_s=5, memory_mb=64)
+    assert result.output.get("v") == sys.version_info[0]

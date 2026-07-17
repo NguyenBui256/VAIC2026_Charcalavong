@@ -148,7 +148,7 @@ export default function AgentDetailShell({ agentId }: AgentDetailShellProps) {
               />
             )}
             {activeTab === "knowledge-base" && <KnowledgeBaseTab agentId={agentId} isNew={isNew} />}
-            {activeTab === "tools" && <ToolsTab />}
+            {activeTab === "tools" && <ToolsTab agentId={agentId} isNew={isNew} />}
             {activeTab === "api-integrations" && <ApiIntegrationsTab />}
             {activeTab === "prompt" && (
               <PromptTab
