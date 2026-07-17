@@ -4,7 +4,7 @@ baseline_commit: ec5fdd5fe5f014ac4057cd6b9ea231a0b8e46ee3
 
 # Story 1.10: Dashboard Surface
 
-Status: review
+Status: done
 
 ## Story
 

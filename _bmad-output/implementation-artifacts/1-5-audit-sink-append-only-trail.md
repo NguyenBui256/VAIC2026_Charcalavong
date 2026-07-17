@@ -4,7 +4,7 @@ baseline_commit: a89a914525c5776c30fb97ff94cbbf2a56fb97a7
 
 # Story 1.5: Audit Sink & Append-Only Trail
 
-Status: review
+Status: done
 
 ## Story
 

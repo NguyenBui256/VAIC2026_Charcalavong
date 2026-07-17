@@ -4,7 +4,7 @@ baseline_commit: 2687de3085877509c213f35a493939a7a7964437
 
 # Story 1.9: Component Primitives & State System
 
-Status: review
+Status: done
 
 ## Story
 

@@ -4,7 +4,7 @@ baseline_commit: f72229bd3ba60d7a96fe2ed29d321650bb274fe3
 
 # Story 1.2: Multi-Tenant Data Layer with Postgres RLS
 
-Status: review
+Status: done
 
 ## Story
 

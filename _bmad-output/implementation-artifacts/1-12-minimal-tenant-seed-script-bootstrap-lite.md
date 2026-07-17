@@ -4,7 +4,7 @@ baseline_commit: a89a914525c5776c30fb97ff94cbbf2a56fb97a7
 
 # Story 1.12: Minimal Tenant Seed Script (Bootstrap Lite)
 
-Status: review
+Status: done
 
 ## Story
 

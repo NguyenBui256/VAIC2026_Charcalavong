@@ -4,7 +4,7 @@ baseline_commit: 9ad9a118ddae0027006eb8a296792fe98d4282c9
 
 # Story 1.7: arq Background Job Foundation
 
-Status: review
+Status: done
 
 ## Story
 

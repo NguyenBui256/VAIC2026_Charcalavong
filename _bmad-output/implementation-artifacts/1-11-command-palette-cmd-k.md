@@ -4,7 +4,7 @@ baseline_commit: ec5fdd5fe5f014ac4057cd6b9ea231a0b8e46ee3
 
 # Story 1.11: Command Palette (Cmd+K)
 
-Status: review
+Status: done
 
 ## Story
 

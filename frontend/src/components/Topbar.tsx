@@ -104,7 +104,7 @@ const badgeStyle: React.CSSProperties = {
   padding: "0 4px",
   borderRadius: "8px",
   background: "var(--color-error)",
-  color: "#fff",
+  color: "var(--color-text-inverse)",
   fontSize: "10px",
   fontWeight: 700,
   display: "flex",

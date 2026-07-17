@@ -4,7 +4,7 @@ baseline_commit: 9ad9a118ddae0027006eb8a296792fe98d4282c9
 
 # Story 1.4: Core Ports & API Error Envelope
 
-Status: review
+Status: done
 
 ## Story
 
