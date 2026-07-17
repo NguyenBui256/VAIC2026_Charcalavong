@@ -266,6 +266,10 @@ def test_agent_provider_port_structural_compliance() -> None:
             self, agent_id, query, *, tenant_id, department_id, top_k=5
         ): ...
 
+        async def execute_task(  # noqa: ANN001
+            self, agent_id, task_payload, *, tenant_id, department_id
+        ): ...
+
     assert isinstance(FakeAgentProvider(), AgentProviderPort)
 
 

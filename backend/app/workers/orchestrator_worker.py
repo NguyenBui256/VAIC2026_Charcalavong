@@ -22,10 +22,12 @@ so `run_workflow` must skip the `pending -> running` CAS for this call and
 proceed straight into the worker body instead of losing the CAS race and
 silently abandoning the Run forever (the bug this kwarg fixes).
 
-Story 3.2 scope: `run_workflow` proves CAS `pending -> running` then
-(stub, no-op) `running -> completed`. Story 3.3 replaces the stub at the
-marked EXTENSION POINT with real decomposition (`orchestrate_run`) — do
-NOT add decomposition logic here (Dev Notes "Scope Boundaries").
+Story 3.2 proved CAS `pending -> running` then a stub `running ->
+completed`. Story 3.3/3.4 replace that stub with `orchestrate_run` —
+decomposition, Task dispatch, aggregation — imported from
+`app.modules.orchestrator.service`. Do NOT inline that logic here (Dev
+Notes "Scope Boundaries") — this module owns only the state-machine
+skeleton + tenant/RLS bootstrap around it.
 """
 
 from __future__ import annotations
@@ -46,6 +48,7 @@ from app.core.tenant_context import (
     set_tenant_session_var,
     tenant_context,
 )
+from app.modules.orchestrator.service import orchestrate_run
 from app.modules.orchestrator.state import transition_and_audit
 
 logger = logging.getLogger(__name__)
@@ -115,20 +118,15 @@ async def run_workflow(ctx: dict[str, Any], *, run_id: str, resume: bool = False
             logger.debug("run_workflow: lost pending->running race run_id=%s", run_id)
             return
 
-    # --- EXTENSION POINT (Story 3.3) -------------------------------------
-    # TODO(Story 3.3): replace the stub transition below with
-    # `orchestrate_run(session, run_id)` — decomposition, Task dispatch,
-    # aggregation. Story 3.2 proves only the state-machine skeleton
-    # end-to-end (a no-op "Run runs, transitions to completed" happy path).
-    # FORWARD-COMPAT (Story 3.4): both the fresh-dispatch and `resume=True`
-    # paths funnel into this same body. Once decomposition/Task-dispatch
-    # replaces this stub, a resumed Run will re-enter here and re-run that
-    # logic — it MUST be idempotent (e.g. skip Task creation if Tasks
-    # already exist for `run_id`), or a resumed Run will duplicate its
-    # dispatched Tasks.
-    await loop.run_in_executor(
-        None, _transition, session, tenant_id, run_id, "running", "completed"
-    )
+    # Story 3.3/3.4: decomposition, Task dispatch, aggregation. Runs directly
+    # on the event loop (not `run_in_executor`) so the `tenant_context`
+    # contextvar set above stays visible to `orchestrate_run`'s internal RLS
+    # re-assertions (executor threads would NOT see it — see `_transition`).
+    # Both the fresh-dispatch and `resume=True` paths funnel into this same
+    # call — `decompose_run` is idempotent (skips Task creation if Tasks
+    # already exist for `run_id`), so a resumed Run re-entering here never
+    # duplicates its dispatched Tasks.
+    await orchestrate_run(session, run_id)
 
 
 async def resume_orphaned_runs(ctx: dict[str, Any]) -> None:

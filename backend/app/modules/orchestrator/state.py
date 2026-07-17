@@ -34,14 +34,13 @@ __all__ = [
     "transition_and_audit",
 ]
 
-_RUN_CAS_SQL = text(
-    "UPDATE workflow_runs SET status=CAST(:to AS varchar), "
+_RUN_CAS_SET_CLAUSES = [
+    "status=CAST(:to AS varchar)",
     "started_at = CASE WHEN CAST(:to AS varchar)='running' "
-    "THEN now() ELSE started_at END, "
+    "THEN now() ELSE started_at END",
     "ended_at = CASE WHEN CAST(:to AS varchar) IN ('completed','failed','timed_out') "
-    "THEN now() ELSE ended_at END "
-    "WHERE id=:id AND status=CAST(:from AS varchar)"
-)
+    "THEN now() ELSE ended_at END",
+]
 
 
 def transition_run_status(
@@ -50,17 +49,30 @@ def transition_run_status(
     *,
     from_status: str,
     to_status: str,
+    extra_cols: dict[str, Any] | None = None,
 ) -> bool:
     """CAS `workflow_runs.status`. Returns True iff exactly one row updated.
 
     Commits immediately (the CAS `UPDATE`'s own row lock, under Postgres
     READ COMMITTED, is what serializes concurrent callers — Divergence 8;
     no `SELECT ... FOR UPDATE` needed).
+
+    `extra_cols` mirrors `transition_task_status` — lets a caller (e.g.
+    `orchestrate_run`) write `result` atomically with the `running ->
+    completed` CAS instead of a separate post-commit UPDATE (AD-6: no
+    window where the Run is `completed` with `result=NULL`).
     """
-    result = session.execute(
-        _RUN_CAS_SQL,
-        {"to": to_status, "from": from_status, "id": str(run_id)},
+    set_clauses = list(_RUN_CAS_SET_CLAUSES)
+    params: dict[str, Any] = {"to": to_status, "from": from_status, "id": str(run_id)}
+    if extra_cols:
+        set_clauses.extend(f"{key}=:{key}" for key in extra_cols)
+        params.update(extra_cols)
+
+    sql = text(
+        f"UPDATE workflow_runs SET {', '.join(set_clauses)} "
+        "WHERE id=:id AND status=CAST(:from AS varchar)"
     )
+    result = session.execute(sql, params)
     session.commit()
     return result.rowcount == 1
 
@@ -125,7 +137,11 @@ def transition_and_audit(
     """
     if kind == "run":
         ok = transition_run_status(
-            session, entity_id, from_status=from_status, to_status=to_status
+            session,
+            entity_id,
+            from_status=from_status,
+            to_status=to_status,
+            extra_cols=extra_cols,
         )
     else:
         ok = transition_task_status(

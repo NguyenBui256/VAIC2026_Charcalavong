@@ -3,8 +3,12 @@
 Proves the FULL skeleton described in Dev Notes: `POST /workflows/{id}/runs`
 enqueues `run_workflow` with materialized tenant_id (AD-10); a real arq
 Worker picks it up, bootstraps tenant context, CAS `pending -> running`,
-then (T5.5 stub) CAS `running -> completed`; both transitions are audited
-(AC9). Requires real Redis (`VAIC_REDIS_URL`, see `.env`) and Postgres.
+then hands off to `orchestrate_run` (Story 3.3/3.4). Both tests here
+monkeypatch `orchestrate_run` to a lightweight stub that just performs the
+old T5.5 `running -> completed` transition -- these tests only prove the
+CAS/tenant-plumbing skeleton (AC4/AC5/AC8/AC9); real decomposition/dispatch
+behavior is covered by `test_orchestrator_execution.py`. Requires real
+Redis (`VAIC_REDIS_URL`, see `.env`) and Postgres.
 """
 
 from __future__ import annotations
@@ -12,6 +16,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+import pytest
 from arq import Worker, create_pool
 from arq import func as arq_func
 from arq.connections import RedisSettings
@@ -22,6 +27,8 @@ from app.core.db import AdminSessionLocal
 from app.core.jobs import TENANT_ID_KWARG
 from app.core.settings import get_settings
 from app.modules.orchestrator.models import Workflow, WorkflowRun
+from app.modules.orchestrator.state import transition_and_audit
+from app.workers import orchestrator_worker
 from app.workers.orchestrator_worker import run_workflow
 from tests.integration.conftest import login_token
 
@@ -30,12 +37,23 @@ def _auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+async def _stub_orchestrate(session: Any, run_id: str, **_kwargs: Any) -> None:
+    """Old T5.5 no-op behavior — CAS `running -> completed` only."""
+    transition_and_audit(
+        session, kind="run", entity_id=run_id, run_id=run_id,
+        from_status="running", to_status="completed",
+    )
+
+
 async def test_e2e_run_workflow_transitions_pending_to_completed(
-    agent_client: TestClient, agent_seed_data: dict[str, Any]
+    agent_client: TestClient,
+    agent_seed_data: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import redis.asyncio as aioredis
     from arq.connections import RedisSettings
 
+    monkeypatch.setattr(orchestrator_worker, "orchestrate_run", _stub_orchestrate)
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     r = aioredis.from_url(get_settings().redis_url)
     await r.flushdb()
@@ -97,6 +115,7 @@ async def test_e2e_run_workflow_transitions_pending_to_completed(
 
 async def test_e2e_resumed_run_workflow_reaches_completed(
     agent_seed_data: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Regression — resume=True path (AC8 crash recovery) must not be a no-op.
 
@@ -114,6 +133,7 @@ async def test_e2e_resumed_run_workflow_reaches_completed(
     """
     import redis.asyncio as aioredis
 
+    monkeypatch.setattr(orchestrator_worker, "orchestrate_run", _stub_orchestrate)
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     r = aioredis.from_url(get_settings().redis_url)
     await r.flushdb()
