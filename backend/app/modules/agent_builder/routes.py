@@ -12,7 +12,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, File, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -20,6 +20,14 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_tenant_session
 from app.core.model_catalog import get_provider_catalog
 from app.core.settings import get_settings
+from app.modules.agent_builder.kb_service import (
+    delete_document as delete_kb_document,
+)
+from app.modules.agent_builder.kb_service import (
+    list_documents as list_kb_documents,
+)
+from app.modules.agent_builder.kb_service import serialize_document as serialize_kb_document
+from app.modules.agent_builder.kb_service import upload_document as upload_kb_document
 from app.modules.agent_builder.service import (
     Principal,
     create_agent,
@@ -158,3 +166,54 @@ def delete_agent_route(
     principal = _principal(request)
     soft_delete_agent(session, agent_id, principal)
     return JSONResponse(status_code=200, content=_ok({"id": str(agent_id)}))
+
+
+# ---------------------------------------------------------------------------
+# Knowledge Base routes (Story 2.4)
+# ---------------------------------------------------------------------------
+
+@router.post("/{agent_id}/kb/documents")
+def upload_kb_document_route(
+    agent_id: uuid.UUID,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+    file: UploadFile = File(...),  # noqa: B008
+) -> JSONResponse:
+    """POST /agents/{id}/kb/documents — upload + ingest (AC1, AC2, AC3, AC4)."""
+    principal = _principal(request)
+    data = file.file.read()
+    doc = upload_kb_document(
+        session,
+        agent_id=agent_id,
+        principal=principal,
+        filename=file.filename or "document",
+        content_type=file.content_type or "application/octet-stream",
+        data=data,
+    )
+    return JSONResponse(status_code=201, content=_ok(serialize_kb_document(doc)))
+
+
+@router.get("/{agent_id}/kb/documents")
+def list_kb_documents_route(
+    agent_id: uuid.UUID,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """GET /agents/{id}/kb/documents — status-aware document list (AC2)."""
+    docs = list_kb_documents(session, agent_id=agent_id)
+    return JSONResponse(
+        status_code=200, content=_ok([serialize_kb_document(d) for d in docs])
+    )
+
+
+@router.delete("/{agent_id}/kb/documents/{document_id}")
+def delete_kb_document_route(
+    agent_id: uuid.UUID,
+    document_id: uuid.UUID,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """DELETE /agents/{id}/kb/documents/{doc_id} — index removal (AC5)."""
+    _ = agent_id  # path scoping only; ownership resolved via the document's Agent
+    principal = _principal(request)
+    delete_kb_document(session, document_id=document_id, principal=principal)
+    return JSONResponse(status_code=200, content=_ok({"id": str(document_id)}))

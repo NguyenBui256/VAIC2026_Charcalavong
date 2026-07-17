@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterator
 
 from sqlalchemy import text
@@ -17,10 +18,16 @@ from sqlalchemy.orm import Session
 from app.core.auth import AuthError
 from app.core.db import SessionLocal
 from app.core.ids import uuid7
+from app.core.ports.mcp_client import McpClientPort
 from app.core.settings import get_settings
 from app.core.tenant_context import set_tenant_session_var, tenant_context
 
-__all__ = ["get_tenant_session", "crud_audit_ids", "assume_app_role"]
+__all__ = [
+    "get_tenant_session",
+    "crud_audit_ids",
+    "assume_app_role",
+    "get_mcp_client",
+]
 
 
 def assume_app_role(session: Session) -> None:
@@ -75,3 +82,16 @@ def crud_audit_ids(entity_id: str) -> tuple[str, str]:
     run_id = str(entity_id)
     step_id = str(uuid7())
     return run_id, step_id
+
+
+def get_mcp_client(*, agent_department_id: uuid.UUID) -> McpClientPort:
+    """Factory for the `McpClientPort` implementation (AD-3, Story 2.4 T3.3).
+
+    Returns the stub adapter today (no real MCP server exists yet). Swapping
+    in the real adapter later (AD-3, parallel team) only touches this
+    factory -- callers depend on the `McpClientPort` interface, never a
+    concrete class (hexagonal boundary, AD-1).
+    """
+    from app.core.adapters.mcp_client_stub import McpClientStub
+
+    return McpClientStub(agent_department_id=agent_department_id)
