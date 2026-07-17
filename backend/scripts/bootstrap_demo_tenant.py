@@ -133,7 +133,6 @@ def _upsert_tenant(session: Any) -> tuple[Tenant, bool]:
 
     audit_key = _generate_audit_key_id()
     tenant = Tenant(
-        id=uuid.uuid4(),
         name=DEMO_TENANT_NAME,
         audit_key_id=audit_key,
     )
@@ -163,7 +162,6 @@ def _upsert_departments(
             departments.append(existing)
             continue
         dept = Department(
-            id=uuid.uuid4(),
             tenant_id=tenant.id,
             name=name,
         )
@@ -199,7 +197,6 @@ def _upsert_users(
                 f"Department {dept_name!r} not found for user {email!r}"
             )
         user = User(
-            id=uuid.uuid4(),
             tenant_id=tenant.id,
             department_id=department.id,
             email=email,

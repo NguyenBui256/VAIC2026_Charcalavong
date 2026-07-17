@@ -63,7 +63,7 @@ development_status:
   1-9-component-primitives-state-system: backlog
   1-10-dashboard-surface: backlog
   1-11-command-palette-cmd-k: backlog
-  1-12-minimal-tenant-seed-script-bootstrap-lite: backlog
+  1-12-minimal-tenant-seed-script-bootstrap-lite: review
   epic-1-retrospective: optional
 
   # ============================================================
