@@ -33,7 +33,7 @@ from app.core.ports.tool import ToolOutput
 from app.modules.agent_builder.models import Tool
 from app.modules.agent_builder.schema_validation import validate_instance
 
-__all__ = ["AgentToolPort", "get_tool", "invoke_tool"]
+__all__ = ["AgentToolPort", "get_tool", "get_tool_by_name", "invoke_tool"]
 
 McpFactory = Callable[..., McpClientPort]
 
@@ -47,6 +47,20 @@ def get_tool(session: Session, *, agent_id: uuid.UUID, tool_id: uuid.UUID) -> To
     ).scalar_one_or_none()
     if tool is None:
         raise NotFoundError("Tool not found")
+    return tool
+
+
+def get_tool_by_name(session: Session, *, agent_id: uuid.UUID, display_name: str) -> Tool:
+    """Fetch a Tool scoped to an Agent by `display_name` (Orchestrator dispatch, Story 3.4)."""
+    tool = session.execute(
+        select(Tool).where(
+            Tool.agent_id == agent_id,
+            Tool.display_name == display_name,
+            Tool.is_deleted.is_(False),
+        )
+    ).scalar_one_or_none()
+    if tool is None:
+        raise NotFoundError(f"Tool '{display_name}' not found for this Agent")
     return tool
 
 
