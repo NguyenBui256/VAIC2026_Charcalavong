@@ -52,8 +52,8 @@ development_status:
   # Epic 1: Foundation & Contracts (12 stories)
   # ============================================================
   epic-1: in-progress
-  1-1-repo-skeleton-infrastructure-setup: review
-  1-2-multi-tenant-data-layer-postgres-rls: backlog
+  1-1-repo-skeleton-infrastructure-setup: done
+  1-2-multi-tenant-data-layer-postgres-rls: review
   1-3-auth-tenant-context-middleware: backlog
   1-4-core-ports-api-error-envelope: backlog
   1-5-audit-sink-append-only-trail: backlog
