@@ -1,0 +1,26 @@
+# Sources
+
+- [FastAPI Release Notes](https://fastapi.tiangolo.com/release-notes/) — FastAPI 0.139.2 (2026-07-16)
+- [Python.org Downloads](https://www.python.org/downloads/) — Python 3.14.6 latest, 3.12 in security-only
+- [Vite Releases](https://vite.dev/releases) — Vite 8.1.x current stable; [Vite 8 Announcement](https://vite.dev/blog/announcing-vite8)
+- [TypeScript on npm](https://www.npmjs.com/package/typescript) — TypeScript 7.0.2 current
+- [React Versions](https://react.dev/versions) — React 19.2.7 current
+- [MCP Python SDK — GitHub](https://github.com/modelcontextprotocol/python-sdk) — v1.x stable, v2 alpha targeting 2026-07-28 spec
+- [MCP 2026-07-28 Release Candidate Blog](https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/)
+- [arq v0.28.0 Documentation](https://arq-docs.helpmanual.io/) — cron_jobs feature confirmed
+- [arq on PyPI](https://pypi.org/project/arq/) — 0.28.0 (2026-04-16)
+- [PostgreSQL Release Notes](https://www.postgresql.org/docs/release/) — PG 18.4 latest stable, 16.14 still supported
+- [pgvector on GitHub](https://github.com/pgvector/pgvector) — 0.8.1 latest, supports PG 13-18
+- [Redis Docs — Release Notes](https://redis.io/docs/latest/operate/rs/release-notes/) — Redis 8.8.0 current; 7.2 EOL 2026-02-28
+- [SQLAlchemy Documentation](https://docs.sqlalchemy.org/) — 2.0.51 stable, 2.1 in beta
+- [Pydantic on PyPI](https://pypi.org/project/pydantic/) — 2.13.4 (2026-05-06)
+- [Alembic Documentation](https://alembic.sqlalchemy.org/) — 1.18.5 (2026-06-25)
+- [Anthropic Python SDK on PyPI](https://pypi.org/project/anthropic/) — 0.114.0 confirmed
+- [OpenAI Python SDK — GitHub](https://github.com/openai/openai-python) — 2.45.0 (2026-07-09)
+- [google-genai on PyPI](https://pypi.org/project/google-genai/) — 2.11.0 (2026-07-09)
+- [Tailwind CSS v4 Blog](https://tailwindcss.com/blog/tailwindcss-v4) — v4 stable since Jan 2025; 4.3.2 current
+- [TanStack Query — GitHub Releases](https://github.com/tanstack/query/releases) — 5.101.2 latest
+- [Vitest 4.1 Blog](https://vitest.dev/blog/vitest-4-1.html) — 4.1.10 current, supports Vite 8
+- [Playwright Release Notes](https://playwright.dev/docs/release-notes) — v1.61 latest
+- [AWS — Multi-tenant Data Isolation with PostgreSQL RLS](https://aws.amazon.com/blogs/database/multi-tenant-data-isolation-with-postgresql-row-level-security/)
+- [Crunchy Data — Row Level Security for Tenants](https://www.crunchydata.com/blog/row-level-security-for-tenants-in-postgres)
