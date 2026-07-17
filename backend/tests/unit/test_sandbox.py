@@ -92,3 +92,85 @@ def test_uses_same_python_interpreter() -> None:
     code = "import sys, json\nprint(json.dumps({'v': sys.version_info[0]}))\n"
     result = SubprocessSandbox().run(code, timeout_s=5, memory_mb=64)
     assert result.output.get("v") == sys.version_info[0]
+
+
+def test_raw_socket_c_extension_blocked() -> None:
+    """`import _socket` (raw C-extension) bypass is blocked (bypass #1)."""
+    code = (
+        "import json\n"
+        "try:\n"
+        "    import _socket\n"
+        "    s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)\n"
+        "    s.connect(('example.com', 80))\n"
+        "    print(json.dumps({'blocked': False}))\n"
+        "except Exception as exc:\n"
+        "    print(json.dumps({'blocked': True, 'error': str(exc)}))\n"
+    )
+    result = SubprocessSandbox().run(code, timeout_s=5, memory_mb=64)
+    assert not result.timed_out
+    assert result.output.get("blocked") is True
+
+
+def test_ssl_c_extension_blocked() -> None:
+    """`import _ssl` (raw C-extension) bypass is blocked (bypass #1)."""
+    code = (
+        "import json\n"
+        "try:\n"
+        "    import _ssl\n"
+        "    print(json.dumps({'blocked': False}))\n"
+        "except Exception as exc:\n"
+        "    print(json.dumps({'blocked': True, 'error': str(exc)}))\n"
+    )
+    result = SubprocessSandbox().run(code, timeout_s=5, memory_mb=64)
+    assert not result.timed_out
+    assert result.output.get("blocked") is True
+
+
+def test_importlib_import_module_bypass_blocked() -> None:
+    """`importlib.import_module` bypasses `builtins.__import__` (bypass #2)."""
+    code = (
+        "import json\n"
+        "try:\n"
+        "    import importlib\n"
+        "    socket = importlib.import_module('socket')\n"
+        "    print(json.dumps({'blocked': False}))\n"
+        "except Exception as exc:\n"
+        "    print(json.dumps({'blocked': True, 'error': str(exc)}))\n"
+    )
+    result = SubprocessSandbox().run(code, timeout_s=5, memory_mb=64)
+    assert not result.timed_out
+    assert result.output.get("blocked") is True
+
+
+def test_io_open_bypass_blocked() -> None:
+    """`io.open` is a distinct binding from `builtins.open` (bypass #3)."""
+    code = (
+        "import json\n"
+        "try:\n"
+        "    import io\n"
+        "    is_win = 'win' in __import__('sys').platform\n"
+        "    win_p = 'C:/Windows/Temp/vaic_sandbox_test.txt'\n"
+        "    path = win_p if is_win else '/tmp/vaic_sandbox_test.txt'\n"
+        "    f = io.open(path, 'w')\n"
+        "    print(json.dumps({'blocked': False}))\n"
+        "except Exception as exc:\n"
+        "    print(json.dumps({'blocked': True, 'error': str(exc)}))\n"
+    )
+    result = SubprocessSandbox().run(code, timeout_s=5, memory_mb=64)
+    assert not result.timed_out
+    assert result.output.get("blocked") is True
+
+
+def test_ctypes_import_blocked() -> None:
+    """`import ctypes` (could call libc/network directly) is blocked (probe)."""
+    code = (
+        "import json\n"
+        "try:\n"
+        "    import ctypes\n"
+        "    print(json.dumps({'blocked': False}))\n"
+        "except Exception as exc:\n"
+        "    print(json.dumps({'blocked': True, 'error': str(exc)}))\n"
+    )
+    result = SubprocessSandbox().run(code, timeout_s=5, memory_mb=64)
+    assert not result.timed_out
+    assert result.output.get("blocked") is True

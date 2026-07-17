@@ -1,15 +1,41 @@
 """SubprocessSandbox — SandboxPort implementation (AR-14, Story 2.6 T3).
 
 Embedded Python executes in a **child subprocess only** (never in-process,
-never `eval`/`exec` on the caller's process):
+never `eval`/`exec` on the caller's process).
 
-- **No network egress** — the child harness monkeypatches `socket` to raise
-  before user code runs, and blocks importing network/fs-escape modules
-  (`socket`, `ssl`, `urllib*`, `http*`, `ftplib`, `smtplib`, `subprocess`,
-  `os`, `ctypes`, ...). This is language-level restriction inside the child
-  interpreter — it works identically on POSIX and Windows dev hosts, unlike
-  OS-level network namespaces/seccomp (out of MVP scope per Dev Notes).
-- **Restricted builtins** — `open` is disabled (no filesystem escape).
+**SECURITY DISCLAIMER — READ BEFORE RELYING ON THIS FOR UNTRUSTED CODE**
+
+This is **best-effort, language-level isolation** achieved by monkeypatching
+dangerous builtins/modules and blocking known-dangerous imports *inside the
+same OS process* as the interpreter running the Tool's code. It is **NOT a
+hard security boundary**. A determined attacker with arbitrary Python
+execution inside the child interpreter has many potential avenues to defeat
+purely language-level restrictions (e.g. reaching blocked functionality via
+attribute introspection, `__builtins__` manipulation, `os.fork`/`ctypes`-free
+syscalls, C-extension modules we haven't enumerated, or bugs in this harness
+itself). Treat embedded-Python Tools as **semi-trusted, builder-authored
+code**, not as isolation from a malicious/adversarial author. Real,
+defense-in-depth isolation for genuinely untrusted code REQUIRES OS-level
+sandboxing — a container with a dropped/firewalled network namespace,
+seccomp-bpf syscall filtering, or a network-namespace-scoped child process —
+which is explicitly **out of scope for this MVP** and deferred to a future
+story.
+
+What this harness DOES do, best-effort:
+- **Import blocking** — blocks importing a broad set of network/fs/process
+  escape modules by name (`socket`, `_socket`, `ssl`, `_ssl`, `urllib*`,
+  `http*`, `ftplib`, `smtplib`, `subprocess`, `os`, `ctypes`, `_ctypes`,
+  `importlib`, ...), intercepting both `builtins.__import__` AND
+  `importlib.import_module` so the latter can't bypass the former.
+- **Socket monkeypatching** — `socket.socket`/`create_connection`/
+  `getaddrinfo` raise before user code runs (belt-and-suspenders on top of
+  the import block, in case a module is already resolvable via `sys.modules`
+  aliasing).
+- **Filesystem write/read denial** — both `builtins.open` and `io.open` are
+  disabled (they are distinct bindings; patching only one leaves a bypass).
+- **Isolated interpreter flags** — the child runs with `-S` (skip `site`)
+  and `-I` (isolated mode: ignores `PYTHONPATH`/env, blocks `sys.path`
+  user-site injection) to reduce ambient attack surface.
 - **10s CPU cap / 128MB memory cap** — enforced two ways:
     1. POSIX: `resource.setrlimit(RLIMIT_CPU, ...)` / `RLIMIT_AS` via
        `preexec_fn` (hard OS-level kill on breach).
@@ -48,49 +74,90 @@ _WATCHDOG_POLL_S = 0.1
 
 # Modules that provide network egress or filesystem/process escape hatches —
 # blocked at import time inside the child interpreter (AR-14 "restricted
-# builtins" + "no network egress").
+# builtins" + "no network egress"). Includes underscore C-extension modules
+# (`_socket`, `_ssl`, `_ctypes`) which are never touched by the
+# `socket.socket = ...` monkeypatch below, plus the `importlib` family which
+# can load a blocked module without going through `builtins.__import__`.
 _BLOCKED_MODULES = frozenset(
     {
-        "socket", "ssl", "select", "selectors", "asyncio",
+        "socket", "_socket", "ssl", "_ssl", "select", "selectors", "asyncio",
         "urllib", "urllib2", "urllib3", "http", "httplib", "httpx",
         "requests", "ftplib", "smtplib", "telnetlib", "poplib", "imaplib",
-        "subprocess", "multiprocessing", "os", "shutil", "ctypes",
+        "subprocess", "multiprocessing", "os", "shutil", "ctypes", "_ctypes",
         "socketserver", "xmlrpc", "webbrowser",
+        "importlib", "pkgutil", "runpy", "zipimport",
     }
 )
 
 # The harness prelude — injected before the Tool's own source. Disables
-# network sockets + dangerous imports + filesystem writes, then runs the
-# Tool's code with real stdin/stdout still wired through.
+# network sockets + dangerous imports (via both `__import__` and
+# `importlib.import_module`) + filesystem read/write (both `open` bindings),
+# then runs the Tool's code with real stdin/stdout still wired through.
+#
+# NOTE: this is best-effort language-level hardening, not a hard security
+# boundary -- see the module docstring's SECURITY DISCLAIMER.
 _HARNESS_PRELUDE = f"""
 import builtins as __vaic_builtins
+import sys as __vaic_sys
 
 class _VaicSandboxViolation(OSError):
     pass
 
 def __vaic_blocked(*_a, **_k):
     raise _VaicSandboxViolation(
-        "network egress is disabled in the embedded-Python sandbox (AR-14)"
+        "network egress / filesystem / dangerous-import is disabled in the "
+        "embedded-Python sandbox (AR-14)"
     )
 
+# Patch socket internals before installing the import guard below (this
+# `import socket` call is trusted harness code, run before user code).
 import socket as __vaic_socket
 __vaic_socket.socket = __vaic_blocked
 __vaic_socket.create_connection = __vaic_blocked
 __vaic_socket.getaddrinfo = __vaic_blocked
 
 _VAIC_BLOCKED_MODULES = {_BLOCKED_MODULES!r}
-__vaic_orig_import = __vaic_builtins.__import__
 
-def __vaic_restricted_import(name, *args, **kwargs):
+def __vaic_check_blocked(name):
     top = name.split(".")[0]
     if top in _VAIC_BLOCKED_MODULES:
         raise ImportError(
             f"module '{{name}}' is blocked in the embedded-Python sandbox (AR-14)"
         )
+
+__vaic_orig_import = __vaic_builtins.__import__
+
+def __vaic_restricted_import(name, *args, **kwargs):
+    __vaic_check_blocked(name)
     return __vaic_orig_import(name, *args, **kwargs)
 
 __vaic_builtins.__import__ = __vaic_restricted_import
+
+# `importlib.import_module` (and `importlib.__import__`) do NOT route
+# through `builtins.__import__` -- guard them directly so they can't be
+# used to bypass the block above. `importlib` itself is also in the
+# blocklist, so a fresh `import importlib` is already denied; this extra
+# guard covers the case where `importlib` is already resolvable via
+# `sys.modules` before this prelude runs.
+if "importlib" in __vaic_sys.modules:
+    __vaic_importlib = __vaic_sys.modules["importlib"]
+    __vaic_importlib.import_module = __vaic_blocked
+    if hasattr(__vaic_importlib, "__import__"):
+        __vaic_importlib.__import__ = __vaic_blocked
+
+# Purge already-imported dangerous modules from the cache so user code can't
+# fetch a live reference via `sys.modules[...]` directly (bypassing both
+# guards above).
+for __vaic_mod_name in list(__vaic_sys.modules):
+    if __vaic_mod_name.split(".")[0] in _VAIC_BLOCKED_MODULES:
+        del __vaic_sys.modules[__vaic_mod_name]
+
 __vaic_builtins.open = __vaic_blocked
+
+# `io.open` is a distinct binding from `builtins.open` -- patch it too, or
+# filesystem read/write remains reachable via `io.open(...)`.
+import io as __vaic_io
+__vaic_io.open = __vaic_blocked
 
 # --- Tool source begins ---
 """
@@ -228,8 +295,13 @@ class SubprocessSandbox:
         memory_mb: int,
     ) -> SandboxResult:
         preexec_fn = _posix_preexec(memory_mb, timeout_s)
+        # -S: skip importing `site` (fewer ambient imports/sys.path entries).
+        # -I: isolated mode (implies -E -P -s: ignores PYTHONPATH/PYTHONHOME
+        # and other env vars, disables user site-packages). Both reduce the
+        # child's ambient attack surface; neither is a substitute for OS-level
+        # isolation (see module docstring).
         proc = subprocess.Popen(  # noqa: S603 -- fixed interpreter, sandboxed script
-            [sys.executable, str(script_path)],
+            [sys.executable, "-S", "-I", str(script_path)],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
