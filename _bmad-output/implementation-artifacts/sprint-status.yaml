@@ -61,7 +61,7 @@ development_status:
   1-7-arq-background-job-foundation: review
   1-8-frontend-shell-design-tokens-login: review
   1-9-component-primitives-state-system: review
-  1-10-dashboard-surface: backlog
+  1-10-dashboard-surface: review
   1-11-command-palette-cmd-k: backlog
   1-12-minimal-tenant-seed-script-bootstrap-lite: review
   epic-1-retrospective: optional
