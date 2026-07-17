@@ -17,6 +17,7 @@ from app.core.auth import AuthMiddleware
 from app.core.db import SessionLocal
 from app.core.errors import register_error_handlers
 from app.modules.agent_builder.routes import router as agents_router
+from app.modules.orchestrator.routes import router as workflows_router
 from app.modules.tenant.routes import departments_router
 from app.modules.tenant.routes import router as tenant_router
 
@@ -37,6 +38,9 @@ app.include_router(departments_router)
 
 # Story 2.1 — Agent Builder CRUD routes.
 app.include_router(agents_router)
+
+# Story 3.1 — Orchestrator Workflow CRUD routes.
+app.include_router(workflows_router)
 
 # Story 1.4 — wire the error envelope exception handlers.
 register_error_handlers(app)
