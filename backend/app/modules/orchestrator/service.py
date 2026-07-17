@@ -311,6 +311,7 @@ def _validate_and_route_task(
     try:
         ts = TaskSchemaModel(**item)
     except (TypeError, ValueError):
+        _reassert_rls(session)
         _audit(
             session,
             dict(
@@ -320,6 +321,7 @@ def _validate_and_route_task(
         )
         return None
     if ts.target_agent_id not in valid_ids:
+        _reassert_rls(session)
         _audit(
             session,
             dict(
@@ -351,9 +353,12 @@ def decompose_run(
     )
     if existing:
         return existing
-
     run = session.get(WorkflowRun, run_id)
+    if run is None:
+        raise NotFoundError("WorkflowRun not found")
     workflow = session.get(Workflow, run.workflow_id)
+    if workflow is None:
+        raise NotFoundError("Workflow not found")
     candidates = list_routable_agents(session)
     valid_ids = {c["id"]: c for c in candidates}
     llm = llm or _orchestrator_llm()
@@ -368,6 +373,7 @@ def decompose_run(
         if (task := _validate_and_route_task(session, run, item, valid_ids)) is not None
     ]
 
+    _reassert_rls(session)
     session.add_all(tasks)
     session.commit()
     _reassert_rls(session)
@@ -421,8 +427,8 @@ async def execute_task_row(
 
     _reassert_rls(session)
     executor = executor or AgentExecutor(session)
-    dept_id = _task_department(session, task)
     try:
+        dept_id = _task_department(session, task)
         res = await _run_with_retry(executor, task, dept_id, timeout_s, retries)
         _reassert_rls(session)
         transition_task_status(
