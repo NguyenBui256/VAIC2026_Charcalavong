@@ -5,14 +5,20 @@ Story 1.2: adds `GET /ready` for DB-readiness checks (DB-free `/health`
 preserved per AR-1 anti-pattern #1).
 Story 1.3: adds AuthMiddleware + tenant module routes (login, refresh, me).
 Story 1.4: registers error envelope exception handlers.
+Story 3.2: wires an arq pool onto `app.state` (lifespan) so
+`POST /workflows/{id}/runs` can enqueue `run_workflow` (AD-10).
 Domain routes for other modules arrive in Stories 1.5–1.12 and Epics 2–7.
 """
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException
 from sqlalchemy import text
 
+from app.core.arq_pool import close_arq_pool, init_arq_pool
 from app.core.auth import AuthMiddleware
 from app.core.db import SessionLocal
 from app.core.errors import register_error_handlers
@@ -21,10 +27,24 @@ from app.modules.orchestrator.routes import router as workflows_router
 from app.modules.tenant.routes import departments_router
 from app.modules.tenant.routes import router as tenant_router
 
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Story 3.2: create the arq pool at startup, close it at shutdown.
+
+    Non-fatal if Redis is unreachable (see `app/core/arq_pool.py`) — other
+    modules' tests boot the app via `TestClient` without needing Redis.
+    """
+    await init_arq_pool(app)
+    yield
+    await close_arq_pool(app)
+
+
 app = FastAPI(
     title="VAIC",
     description="Vietnamese banking AI-agent platform",
     version="0.1.0",
+    lifespan=_lifespan,
 )
 
 # Story 1.3 — auth + tenant context middleware.

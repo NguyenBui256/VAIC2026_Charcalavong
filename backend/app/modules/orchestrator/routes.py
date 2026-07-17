@@ -6,8 +6,8 @@ flow through the registered exception handlers (`core/errors.py`).
 
 Success envelope: `{data, error: null, meta: {}}` (AR-14).
 
-Run lifecycle routes (`POST /workflows/{id}/runs`, etc.) are Story 3.2 —
-not implemented here.
+Run lifecycle route (`POST /workflows/{id}/runs`) added in Story 3.2 —
+creates a `pending` Run and enqueues `run_workflow` via the arq pool.
 """
 
 from __future__ import annotations
@@ -15,16 +15,21 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.arq_pool import get_arq_pool
 from app.core.deps import get_tenant_session
+from app.core.jobs import enqueue_job_with_context
 from app.modules.orchestrator.service import (
     Principal,
+    create_run,
     create_workflow,
     list_workflows,
+    serialize_run,
     serialize_workflow,
     update_workflow,
 )
@@ -49,6 +54,10 @@ class UpdateWorkflowRequest(BaseModel):
     constraints: list[str] | None = None
     confidence_threshold: float | None = None
     escalation_timeout_seconds: int | None = None
+
+
+class CreateRunRequest(BaseModel):
+    input: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -130,3 +139,22 @@ def update_workflow_route(
         **body.model_dump(exclude_unset=True),
     )
     return JSONResponse(status_code=200, content=_ok(serialize_workflow(workflow)))
+
+
+@router.post("/{workflow_id}/runs")
+async def create_run_route(
+    workflow_id: uuid.UUID,
+    body: CreateRunRequest,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+    pool: ArqRedis = Depends(get_arq_pool),  # noqa: B008
+) -> JSONResponse:
+    """POST /workflows/{id}/runs — create a `pending` Run, enqueue `run_workflow`.
+
+    AC2: creates the Run row FIRST (commits, so it's durable even if the
+    enqueue fails). AC3: enqueues via `enqueue_job_with_context`, which
+    materializes `tenant_context.get()` into the job payload (AD-10) — the
+    codebase idiom, not a raw `tenant_id=` kwarg (see Story 3.2 Dev Notes).
+    """
+    run = create_run(session, workflow_id, input=body.input)
+    await enqueue_job_with_context(pool, "run_workflow", run_id=str(run.id))
+    return JSONResponse(status_code=201, content=_ok(serialize_run(run)))

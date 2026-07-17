@@ -18,6 +18,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -28,7 +29,7 @@ from app.core.errors import AuthorizationError, NotFoundError
 from app.core.ids import utcnow_iso_ms, uuid7
 from app.core.ports.audit import AuditEntry, AuditPort
 from app.core.tenant_context import tenant_context
-from app.modules.orchestrator.models import Workflow
+from app.modules.orchestrator.models import Workflow, WorkflowRun
 
 __all__ = [
     "Principal",
@@ -37,6 +38,8 @@ __all__ = [
     "list_workflows",
     "update_workflow",
     "serialize_workflow",
+    "create_run",
+    "serialize_run",
 ]
 
 
@@ -175,6 +178,55 @@ def update_workflow(
 
     _emit_audit(audit or PostgresAuditSink(), workflow, "workflow.updated", applied)
     return workflow
+
+
+def create_run(
+    session: Session,
+    workflow_id: uuid.UUID,
+    *,
+    input: dict[str, Any] | None = None,
+) -> WorkflowRun:
+    """Create a `pending` Run for a Workflow (AC2).
+
+    `get_workflow` 404s on a missing/cross-tenant `workflow_id` (RLS-backed)
+    before any Run row is created. No arq enqueue happens here — that is
+    the route's responsibility (AC3), since only the route has access to
+    the arq pool dependency (AD-1: service stays transport-agnostic).
+    """
+    workflow = get_workflow(session, workflow_id)
+    tenant_id = tenant_context.get()
+    run = WorkflowRun(
+        id=uuid7(),
+        tenant_id=tenant_id,
+        workflow_id=workflow.id,
+        status="pending",
+        input=input or {},
+    )
+    session.add(run)
+    session.commit()
+    session.refresh(run)
+    return run
+
+
+def serialize_run(run: WorkflowRun) -> dict:
+    """Response payload shape for a Run (AR-14: ISO 8601 ms timestamps)."""
+    return {
+        "id": str(run.id),
+        "tenant_id": str(run.tenant_id),
+        "workflow_id": str(run.workflow_id),
+        "status": run.status,
+        "input": run.input or {},
+        "result": run.result,
+        "started_at": (
+            run.started_at.isoformat(timespec="milliseconds")
+            if run.started_at
+            else None
+        ),
+        "ended_at": (
+            run.ended_at.isoformat(timespec="milliseconds") if run.ended_at else None
+        ),
+        "created_at": run.created_at.isoformat(timespec="milliseconds"),
+    }
 
 
 def serialize_workflow(workflow: Workflow) -> dict:

@@ -1,0 +1,152 @@
+"""arq worker entrypoints — Workflow Run lifecycle (Story 3.2).
+
+`run_workflow` — dispatched by `POST /workflows/{id}/runs`. Wrapped in
+`@tenant_aware_job` (`app/core/jobs.py`) — the ESTABLISHED codebase idiom
+— rather than the spec-literal raw `async def run_workflow(ctx, *, run_id,
+tenant_id)`. The enqueue side calls `enqueue_job_with_context(pool,
+"run_workflow", run_id=...)`, which materializes `_tenant_id`
+automatically from `tenant_context.get()` (AD-10); the decorator pops it,
+re-hydrates `tenant_context`, and stashes an RLS-scoped session on
+`ctx["session"]`. This reuses Story 1.7's tenant-boundary machinery
+instead of re-deriving it here.
+
+`resume_orphaned_runs` — startup poller (AC8). Enumerates
+`workflow_runs WHERE status='running'` under BYPASSRLS (crash recovery —
+these Runs were mid-flight when a prior worker process died) and
+re-enqueues each via the same `run_workflow` job name, materializing
+`_tenant_id` directly (mirrors `run_schedule_trigger_fanout`'s fan-out
+pattern in `app/core/jobs.py` — no caller contextvar exists in this
+administrative sweep).
+
+Story 3.2 scope: `run_workflow` proves CAS `pending -> running` then
+(stub, no-op) `running -> completed`. Story 3.3 replaces the stub at the
+marked EXTENSION POINT with real decomposition (`orchestrate_run`) — do
+NOT add decomposition logic here (Dev Notes "Scope Boundaries").
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import uuid
+from typing import Any
+
+from arq.connections import ArqRedis
+from sqlalchemy import text
+
+from app.core.db import AdminSessionLocal
+from app.core.deps import assume_app_role
+from app.core.jobs import TENANT_ID_KWARG, WorkerConfig, tenant_aware_job
+from app.core.tenant_context import (
+    set_tenant_context,
+    set_tenant_session_var,
+    tenant_context,
+)
+from app.modules.orchestrator.state import transition_and_audit
+
+logger = logging.getLogger(__name__)
+
+__all__ = ["run_workflow", "resume_orphaned_runs", "worker_config"]
+
+
+def _transition(
+    session: Any, tenant_id: uuid.UUID, run_id: str, from_status: str, to_status: str
+) -> bool:
+    """Re-apply `SET LOCAL ROLE` + tenant RLS var, then CAS + audit.
+
+    `transition_and_audit` commits internally (each CAS is its own
+    transaction) — Postgres `SET LOCAL` is transaction-scoped, so the role
+    drop and `app.tenant_id` GUC set by `@tenant_aware_job` at job entry
+    do NOT survive past that first commit. This helper re-applies both
+    immediately before every subsequent statement on the same session
+    within one job execution (AD-2/AD-10 correctness, not just at entry).
+
+    Runs on a `run_in_executor` thread — `contextvars` set in the calling
+    async task do NOT propagate to executor threads (unlike the asyncio
+    Task itself). `transition_and_audit` -> `PostgresAuditSink.log()`
+    reads `tenant_context.get()` directly, so it must be re-set HERE, on
+    this thread, immediately before the call — not just passed as a plain
+    argument.
+    """
+    set_tenant_context(tenant_id)
+    assume_app_role(session)
+    set_tenant_session_var(session, tenant_id)
+    return transition_and_audit(
+        session,
+        kind="run",
+        entity_id=run_id,
+        run_id=run_id,
+        from_status=from_status,
+        to_status=to_status,
+    )
+
+
+@tenant_aware_job
+async def run_workflow(ctx: dict[str, Any], *, run_id: str) -> None:
+    """Worker entrypoint for a Run — CAS `pending -> running` (AC4, AC5)."""
+    session = ctx["session"]
+    tenant_id = tenant_context.get()
+    if tenant_id is None:
+        # Defensive — `@tenant_aware_job` always sets this before calling us.
+        raise RuntimeError("run_workflow: tenant_context unset at job entry")
+    loop = asyncio.get_running_loop()
+
+    won = await loop.run_in_executor(
+        None, _transition, session, tenant_id, run_id, "pending", "running"
+    )
+    if not won:
+        logger.debug("run_workflow: lost pending->running race run_id=%s", run_id)
+        return
+
+    # --- EXTENSION POINT (Story 3.3) -------------------------------------
+    # TODO(Story 3.3): replace the stub transition below with
+    # `orchestrate_run(session, run_id)` — decomposition, Task dispatch,
+    # aggregation. Story 3.2 proves only the state-machine skeleton
+    # end-to-end (a no-op "Run runs, transitions to completed" happy path).
+    await loop.run_in_executor(
+        None, _transition, session, tenant_id, run_id, "running", "completed"
+    )
+
+
+async def resume_orphaned_runs(ctx: dict[str, Any]) -> None:
+    """AC8 — startup poller. Re-enqueues Runs orphaned by a crashed worker.
+
+    Runs under BYPASSRLS (`AdminSessionLocal`) to enumerate ACROSS
+    tenants by design (Dev Notes anti-pattern #4) — then re-dispatches
+    each orphaned Run through the normal `run_workflow` job path, which
+    sets tenant context from the row's own materialized `tenant_id`
+    before touching any Run-specific data.
+    """
+    pool: ArqRedis | None = ctx.get("arq_redis")
+    if pool is None:
+        raise RuntimeError(
+            "resume_orphaned_runs requires `arq_redis` in ctx (arq injects "
+            "this automatically; tests must provide it)."
+        )
+
+    loop = asyncio.get_running_loop()
+
+    def _find_orphaned() -> list[tuple[uuid.UUID, uuid.UUID]]:
+        with AdminSessionLocal() as s:
+            rows = s.execute(
+                text("SELECT id, tenant_id FROM workflow_runs WHERE status='running'")
+            ).fetchall()
+            return [(row[0], row[1]) for row in rows]
+
+    orphaned = await loop.run_in_executor(None, _find_orphaned)
+    logger.info("resume_orphaned_runs: found %d orphaned Run(s)", len(orphaned))
+
+    enqueued: list[Any] = []
+    for run_id, tid in orphaned:
+        job = await pool.enqueue_job(
+            "run_workflow", run_id=str(run_id), **{TENANT_ID_KWARG: str(tid)}
+        )
+        if job is not None:
+            enqueued.append(job)
+    ctx["enqueued_jobs"] = enqueued
+
+
+# Bundled `arq.Worker` config for a real deployment entrypoint — pass
+# `worker_config.build_worker(on_startup=resume_orphaned_runs)` to wire the
+# AC8 poller into an actual `arq worker` process.
+worker_config = WorkerConfig(functions=[run_workflow])
