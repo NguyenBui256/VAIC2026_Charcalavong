@@ -1,0 +1,50 @@
+/* Story 1.8 — Responsive sidebar collapse + nav item active class.
+ * Under 1280px viewport, sidebar collapses to 72px icon rail (UX-DR13).
+ */
+
+/* Active nav link styling — applied via React Router's className callback.
+   We also use a CSS fallback for the `.active` class that NavLink adds. */
+.vaic-nav-item.active {
+  background: var(--color-primary-soft) !important;
+  color: var(--color-primary) !important;
+  border-left: 2px solid var(--color-primary) !important;
+  font-weight: 600;
+}
+
+.vaic-nav-item:not(.active):hover {
+  background: var(--color-surface-muted);
+}
+
+/* ── Sidebar collapse under 1280px ────────────────────────────────── */
+@media (max-width: 1279px) {
+  .vaic-sidebar {
+    width: var(--sidebar-collapsed) !important;
+  }
+
+  /* Hide text labels, center icons. */
+  .vaic-sidebar .vaic-nav-item span {
+    display: none;
+  }
+
+  .vaic-sidebar .vaic-nav-item {
+    justify-content: center;
+    padding: var(--space-2) var(--space-2);
+    margin-inline: var(--space-1);
+  }
+
+  /* Hide help label too. */
+  .vaic-sidebar .vaic-nav-help span {
+    display: none;
+  }
+
+  .vaic-sidebar .vaic-nav-help {
+    justify-content: center;
+  }
+}
+
+/* ── Inspector: hide under 1024px (tight viewports) ───────────────── */
+@media (max-width: 1023px) {
+  .vaic-inspector {
+    display: none !important;
+  }
+}
