@@ -17,13 +17,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.auth import AuthError, create_access_token, decode_access_token
 from app.core.db import AdminSessionLocal, SessionLocal
-from app.core.deps import get_tenant_session
-from app.core.settings import get_settings
+from app.core.deps import assume_app_role, get_tenant_session
 from app.core.tenant_context import set_tenant_session_var, tenant_context
 from app.modules.tenant.models import User
 from app.modules.tenant.service import (
@@ -80,24 +78,6 @@ def _trace(request: Request) -> uuid.UUID:
 # ---------------------------------------------------------------------------
 # Session dependencies
 # ---------------------------------------------------------------------------
-
-def _assume_app_role(session: Session) -> None:
-    """Drop superuser privileges for this transaction.
-
-    AD-2: the application role must not have BYPASSRLS. In production the
-    runtime DSN connects via `vaic_app` directly (it's the only role the
-    app holds). In tests, the DSN connects via the superuser `vaic`, so
-    we explicitly `SET LOCAL ROLE vaic_app` to make RLS enforce.
-
-    `SET LOCAL ROLE` is transaction-scoped and only takes effect if the
-    current user is a member of the target role. The migration grants
-    membership implicitly by creating `vaic_app` from a superuser
-    context; `vaic` can SET ROLE to it.
-    """
-    app_role = get_settings().app_db_role
-    if app_role:
-        session.execute(text(f"SET LOCAL ROLE {app_role}"))
-
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -180,7 +160,7 @@ def me(request: Request) -> JSONResponse:
         )
 
     with SessionLocal() as session:
-        _assume_app_role(session)
+        assume_app_role(session)
         set_tenant_session_var(session, tenant_id)
         from sqlalchemy import select
 

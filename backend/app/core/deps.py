@@ -20,10 +20,10 @@ from app.core.ids import uuid7
 from app.core.settings import get_settings
 from app.core.tenant_context import set_tenant_session_var, tenant_context
 
-__all__ = ["get_tenant_session", "crud_audit_ids"]
+__all__ = ["get_tenant_session", "crud_audit_ids", "assume_app_role"]
 
 
-def _assume_app_role(session: Session) -> None:
+def assume_app_role(session: Session) -> None:
     """Drop superuser privileges for this transaction.
 
     AD-2: the application role must not have BYPASSRLS. In production the
@@ -54,7 +54,7 @@ def get_tenant_session() -> Iterator[Session]:
     if tenant_id is None:
         raise AuthError("No tenant context on protected path")
     with SessionLocal() as s:
-        _assume_app_role(s)
+        assume_app_role(s)
         set_tenant_session_var(s, tenant_id)
         yield s
 
