@@ -1,0 +1,216 @@
+/* Story 2.2 — Agent list/detail surface styles (Toast, ConfirmDialog, Tabs,
+ * dirty-dot, filters, department badge). Split from components.css to keep
+ * that file focused on Story 1.9 primitives (modularization rule, >200 LOC).
+ */
+
+/* ────────────────────────────────────────────────────────────────────
+ * Toast (UX-DR9 durations.toast)
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-toast-stack {
+  position: fixed;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+
+.vaic-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-small);
+  color: var(--color-text);
+  pointer-events: auto;
+  animation-name: vaic-toast-in;
+  animation-fill-mode: both;
+}
+
+.vaic-toast-success {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.vaic-toast-error {
+  border-color: var(--color-destructive);
+  color: var(--color-destructive);
+}
+
+.vaic-toast-close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: var(--text-body);
+  line-height: 1;
+  padding: 0 0 0 var(--space-2);
+}
+
+@keyframes vaic-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * ConfirmDialog (UX-DR1 escape routes, UX-DR9 durations.modal)
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation-name: vaic-confirm-overlay-in;
+  animation-fill-mode: both;
+}
+
+.vaic-confirm-dialog {
+  width: min(420px, calc(100vw - 48px));
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  animation-name: vaic-confirm-dialog-in;
+  animation-fill-mode: both;
+}
+
+.vaic-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+@keyframes vaic-confirm-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes vaic-confirm-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * Agent list filters + Department badge
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-agents-filters {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.vaic-agents-filters select {
+  min-width: 200px;
+}
+
+.vaic-agents-filters input[type="search"] {
+  flex: 1;
+  min-width: 240px;
+}
+
+.vaic-dept-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: 9999px;
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * Agent detail — 6-tab nav + dirty dot + status toggle
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-4);
+  overflow-x: auto;
+}
+
+.vaic-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: var(--text-body);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--duration-hover) ease-out, border-color var(--duration-hover) ease-out;
+}
+
+.vaic-tab:hover {
+  color: var(--color-text);
+}
+
+.vaic-tab-active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.vaic-dirty-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-destructive);
+}
+
+.vaic-status-toggle {
+  display: inline-flex;
+  gap: var(--space-2);
+}
+
+.vaic-status-toggle-active {
+  background: var(--color-primary-soft) !important;
+  border-color: var(--color-primary) !important;
+  color: var(--color-primary) !important;
+}
+
+.vaic-inline-alert {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--color-destructive-soft);
+  color: var(--color-destructive);
+  font-size: var(--text-small);
+  margin-bottom: var(--space-3);
+}

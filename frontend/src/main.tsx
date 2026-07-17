@@ -5,6 +5,7 @@ import App from "./App";
 import "./styles/global.css";
 import "./styles/shell.css";
 import "./styles/components.css";
+import "./styles/agents.css";
 import "./styles/motion.css";
 
 const queryClient = new QueryClient({
