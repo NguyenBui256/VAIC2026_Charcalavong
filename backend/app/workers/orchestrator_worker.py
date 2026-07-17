@@ -16,7 +16,11 @@ these Runs were mid-flight when a prior worker process died) and
 re-enqueues each via the same `run_workflow` job name, materializing
 `_tenant_id` directly (mirrors `run_schedule_trigger_fanout`'s fan-out
 pattern in `app/core/jobs.py` — no caller contextvar exists in this
-administrative sweep).
+administrative sweep). The re-enqueue passes `resume=True` — a resumed
+Run is ALREADY `status='running'` (that's the whole reason it's orphaned),
+so `run_workflow` must skip the `pending -> running` CAS for this call and
+proceed straight into the worker body instead of losing the CAS race and
+silently abandoning the Run forever (the bug this kwarg fixes).
 
 Story 3.2 scope: `run_workflow` proves CAS `pending -> running` then
 (stub, no-op) `running -> completed`. Story 3.3 replaces the stub at the
@@ -82,8 +86,20 @@ def _transition(
 
 
 @tenant_aware_job
-async def run_workflow(ctx: dict[str, Any], *, run_id: str) -> None:
-    """Worker entrypoint for a Run — CAS `pending -> running` (AC4, AC5)."""
+async def run_workflow(ctx: dict[str, Any], *, run_id: str, resume: bool = False) -> None:
+    """Worker entrypoint for a Run — CAS `pending -> running` (AC4, AC5).
+
+    `resume=False` (default, fresh dispatch from `POST /runs`): the Run is
+    `pending`; CAS `pending -> running` before proceeding. Losing the CAS
+    race (rowcount==0) is a legitimate no-op — someone else already claimed
+    it.
+
+    `resume=True` (crash recovery, `resume_orphaned_runs`): the Run is
+    ALREADY `running` — that's the definition of "orphaned". Attempting
+    the `pending -> running` CAS here would always lose the race (the row
+    is not `pending`) and silently abandon the Run forever. Skip straight
+    to the worker body instead; no re-transition into `running` needed.
+    """
     session = ctx["session"]
     tenant_id = tenant_context.get()
     if tenant_id is None:
@@ -91,18 +107,25 @@ async def run_workflow(ctx: dict[str, Any], *, run_id: str) -> None:
         raise RuntimeError("run_workflow: tenant_context unset at job entry")
     loop = asyncio.get_running_loop()
 
-    won = await loop.run_in_executor(
-        None, _transition, session, tenant_id, run_id, "pending", "running"
-    )
-    if not won:
-        logger.debug("run_workflow: lost pending->running race run_id=%s", run_id)
-        return
+    if not resume:
+        won = await loop.run_in_executor(
+            None, _transition, session, tenant_id, run_id, "pending", "running"
+        )
+        if not won:
+            logger.debug("run_workflow: lost pending->running race run_id=%s", run_id)
+            return
 
     # --- EXTENSION POINT (Story 3.3) -------------------------------------
     # TODO(Story 3.3): replace the stub transition below with
     # `orchestrate_run(session, run_id)` — decomposition, Task dispatch,
     # aggregation. Story 3.2 proves only the state-machine skeleton
     # end-to-end (a no-op "Run runs, transitions to completed" happy path).
+    # FORWARD-COMPAT (Story 3.4): both the fresh-dispatch and `resume=True`
+    # paths funnel into this same body. Once decomposition/Task-dispatch
+    # replaces this stub, a resumed Run will re-enter here and re-run that
+    # logic — it MUST be idempotent (e.g. skip Task creation if Tasks
+    # already exist for `run_id`), or a resumed Run will duplicate its
+    # dispatched Tasks.
     await loop.run_in_executor(
         None, _transition, session, tenant_id, run_id, "running", "completed"
     )
@@ -139,7 +162,10 @@ async def resume_orphaned_runs(ctx: dict[str, Any]) -> None:
     enqueued: list[Any] = []
     for run_id, tid in orphaned:
         job = await pool.enqueue_job(
-            "run_workflow", run_id=str(run_id), **{TENANT_ID_KWARG: str(tid)}
+            "run_workflow",
+            run_id=str(run_id),
+            resume=True,
+            **{TENANT_ID_KWARG: str(tid)},
         )
         if job is not None:
             enqueued.append(job)
