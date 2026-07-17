@@ -20,6 +20,7 @@ import {
 import { semanticIcons, ICON_STROKE_WIDTH } from "../../../lib/icons";
 import { useIntegrations } from "../../../hooks/useIntegrations";
 import { useIntegrationMutations } from "../../../hooks/useIntegrationMutations";
+import { useRegisterTab } from "../AgentBuilderContext";
 import IntegrationEditor from "../IntegrationEditor";
 import type { ApiIntegration } from "../../../lib/integrationsApi";
 
@@ -41,6 +42,9 @@ export default function ApiIntegrationsTab({ agentId, isNew }: ApiIntegrationsTa
   const { query, integrations, isLoading, isError } = useIntegrations(isNew ? undefined : agentId);
   const { remove, test } = useIntegrationMutations(agentId);
   const { show } = useToast();
+
+  // List-style tab — mutations are immediate, never form-buffered (Dev Notes T4.1).
+  useRegisterTab("api-integrations", { isDirty: false, save: async () => {}, reset: () => {} });
 
   function confirmDelete() {
     if (!pendingDeleteId) return;

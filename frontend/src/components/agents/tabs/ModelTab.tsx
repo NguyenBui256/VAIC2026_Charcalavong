@@ -14,6 +14,7 @@ import { Button, Card, useToast } from "../../ui";
 import { semanticIcons, ICON_STROKE_WIDTH } from "../../../lib/icons";
 import { useAgentProviders } from "../../../hooks/useAgentProviders";
 import { useAgentMutations } from "../../../hooks/useAgentMutations";
+import { useRegisterTab } from "../AgentBuilderContext";
 import type { Agent, ModelRef } from "../../../lib/agentsApi";
 
 export interface ModelTabProps {
@@ -68,6 +69,13 @@ export default function ModelTab({ agentId, isNew, agent, onDirtyChange }: Model
   useEffect(() => {
     onDirtyChange(isDirty);
   }, [isDirty, onDirtyChange]);
+
+  function handleReset() {
+    setForm(initial);
+    setSaveError(null);
+  }
+
+  useRegisterTab("model", { isDirty, save: handleSave, reset: handleReset });
 
   const selectedProvider = (providers ?? []).find((p) => p.id === form.provider);
   const availableModels = selectedProvider?.models ?? [];
@@ -199,7 +207,12 @@ export default function ModelTab({ agentId, isNew, agent, onDirtyChange }: Model
           </div>
         )}
 
-        <Button variant="primary" onClick={handleSave} disabled={update.isPending || !form.provider || !form.modelName}>
+        {/* Secondary weight — the shell's "Save All" is the single Primary CTA (UX-DR3). */}
+        <Button
+          variant="secondary"
+          onClick={handleSave}
+          disabled={update.isPending || !form.provider || !form.modelName}
+        >
           Save
         </Button>
       </Card>

@@ -20,6 +20,7 @@ import {
 import { semanticIcons, ICON_STROKE_WIDTH } from "../../../lib/icons";
 import { useKbDocuments } from "../../../hooks/useKbDocuments";
 import { useKbMutations } from "../../../hooks/useKbMutations";
+import { useRegisterTab } from "../AgentBuilderContext";
 import KbStatusPill from "../KbStatusPill";
 import {
   KB_MAX_BYTES,
@@ -62,6 +63,11 @@ export default function KnowledgeBaseTab({ agentId, isNew }: KnowledgeBaseTabPro
   const { query, documents, isLoading, isError } = useKbDocuments(isNew ? undefined : agentId);
   const { upload, remove } = useKbMutations(agentId);
   const { show } = useToast();
+
+  // List-style tab — mutations (upload/delete) are immediate, not
+  // form-buffered, so this tab never contributes to the shell's "unsaved
+  // changes" dirty state (Dev Notes T4.1).
+  useRegisterTab("knowledge-base", { isDirty: false, save: async () => {}, reset: () => {} });
 
   function handleFileSelected(file: File) {
     const error = validateFile(file);

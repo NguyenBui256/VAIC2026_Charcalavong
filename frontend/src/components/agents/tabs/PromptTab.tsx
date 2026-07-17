@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button, Card, useToast } from "../../ui";
 import { useAgentProviders } from "../../../hooks/useAgentProviders";
 import { useAgentMutations } from "../../../hooks/useAgentMutations";
+import { useRegisterTab } from "../AgentBuilderContext";
 import type { Agent, ModelRef } from "../../../lib/agentsApi";
 
 export interface PromptTabProps {
@@ -66,6 +67,13 @@ export default function PromptTab({ agentId, isNew, agent, onDirtyChange }: Prom
   useEffect(() => {
     onDirtyChange(isDirty);
   }, [isDirty, onDirtyChange]);
+
+  function handleReset() {
+    setText(initial);
+    setSaveError(null);
+  }
+
+  useRegisterTab("prompt", { isDirty, save: handleSave, reset: handleReset });
 
   const model = (agent?.model ?? {}) as Partial<ModelRef>;
   const contextWindow = (providers ?? [])
@@ -181,7 +189,8 @@ export default function PromptTab({ agentId, isNew, agent, onDirtyChange }: Prom
         )}
 
         <div style={{ marginTop: "var(--space-3)" }}>
-          <Button variant="primary" onClick={handleSave} disabled={update.isPending}>
+          {/* Secondary weight — the shell's "Save All" is the single Primary CTA (UX-DR3). */}
+          <Button variant="secondary" onClick={handleSave} disabled={update.isPending}>
             Save
           </Button>
         </div>

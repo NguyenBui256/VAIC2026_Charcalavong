@@ -19,6 +19,7 @@ import {
 } from "../../ui";
 import { semanticIcons, ICON_STROKE_WIDTH } from "../../../lib/icons";
 import { useAgentTools, useAgentToolMutations } from "../../../hooks/useAgentTools";
+import { useRegisterTab } from "../AgentBuilderContext";
 import ToolEditor from "../ToolEditor";
 import type { Tool } from "../../../lib/toolsApi";
 
@@ -35,6 +36,9 @@ export default function ToolsTab({ agentId, isNew }: ToolsTabProps) {
   const { query, tools, isLoading, isError } = useAgentTools(isNew ? undefined : agentId);
   const { remove } = useAgentToolMutations(agentId);
   const { show } = useToast();
+
+  // List-style tab — mutations are immediate, never form-buffered (Dev Notes T4.1).
+  useRegisterTab("tools", { isDirty: false, save: async () => {}, reset: () => {} });
 
   function confirmDelete() {
     if (!pendingDeleteId) return;

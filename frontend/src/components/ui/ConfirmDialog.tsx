@@ -8,6 +8,11 @@ import { useEffect, useRef } from "react";
 import { durations, easings } from "../../lib/motion";
 import Button from "./Button";
 
+export interface ConfirmDialogTertiaryAction {
+  label: string;
+  onClick: () => void;
+}
+
 export interface ConfirmDialogProps {
   open: boolean;
   title: string;
@@ -16,6 +21,12 @@ export interface ConfirmDialogProps {
   cancelLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
+  /** Story 2.8 T5.2 — optional third action (e.g. "Discard") for the
+   * Save/Discard/Cancel switch-with-unsaved-changes confirmation (AC #4).
+   * Rendered as a destructive-styled button between Cancel and Confirm. */
+  tertiaryAction?: ConfirmDialogTertiaryAction;
+  /** Inline error shown above the actions (e.g. Save failed — stay open). */
+  error?: string | null;
 }
 
 export default function ConfirmDialog({
@@ -26,6 +37,8 @@ export default function ConfirmDialog({
   cancelLabel = "Cancel",
   onConfirm,
   onCancel,
+  tertiaryAction,
+  error,
 }: ConfirmDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -82,11 +95,25 @@ export default function ConfirmDialog({
             {body}
           </p>
         )}
+        {error && (
+          <div className="vaic-inline-alert" role="alert" data-testid="vaic-confirm-dialog-error">
+            {error}
+          </div>
+        )}
         <div className="vaic-confirm-actions">
           <Button variant="secondary" onClick={onCancel}>
             {cancelLabel}
           </Button>
-          <Button variant="destructive" onClick={onConfirm}>
+          {tertiaryAction && (
+            <Button variant="destructive" onClick={tertiaryAction.onClick}>
+              {tertiaryAction.label}
+            </Button>
+          )}
+          {/* Two-button dialogs (e.g. Delete confirmations) keep the
+              original destructive-styled confirm action; the three-button
+              Save/Discard/Cancel variant (AC #4) promotes Save to Primary
+              since Discard already carries the destructive styling. */}
+          <Button variant={tertiaryAction ? "primary" : "destructive"} onClick={onConfirm}>
             {confirmLabel}
           </Button>
         </div>

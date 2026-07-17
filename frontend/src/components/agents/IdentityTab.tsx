@@ -15,6 +15,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Button, useToast } from "../ui";
 import { useDepartments } from "../../hooks/useDepartments";
 import { useAgentMutations } from "../../hooks/useAgentMutations";
+import { useRegisterTab } from "./AgentBuilderContext";
 import type { Agent, AgentStatus } from "../../lib/agentsApi";
 
 export interface IdentityTabProps {
@@ -111,6 +112,15 @@ export default function IdentityTab({
   useEffect(() => {
     onDirtyChange(isDirty);
   }, [isDirty, onDirtyChange]);
+
+  function handleReset() {
+    setForm(initial);
+    setErrors({});
+    setTouched({});
+    setSaveError(null);
+  }
+
+  useRegisterTab("identity", { isDirty, save: handleSave, reset: handleReset });
 
   function handleBlur(field: "name" | "departmentId" | "systemPrompt", label: string) {
     setTouched((t) => ({ ...t, [field]: true }));
@@ -226,7 +236,9 @@ export default function IdentityTab({
         </div>
       )}
 
-      <Button variant="primary" onClick={handleSave} disabled={isSaving}>
+      {/* Secondary weight — the shell's "Save All" (AgentDetailHeader) is the
+          single Primary CTA per UX-DR3 when both would co-render. */}
+      <Button variant="secondary" onClick={handleSave} disabled={isSaving}>
         Save
       </Button>
     </div>

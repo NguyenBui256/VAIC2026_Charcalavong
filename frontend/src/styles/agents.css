@@ -195,6 +195,58 @@
   background: var(--color-destructive);
 }
 
+/* Story 2.8 — count badge, disabled tabs, detail header, Save All. */
+
+.vaic-tab-count-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--space-2);
+  border-radius: 9999px;
+  background: var(--color-surface-muted);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-caption);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.vaic-tab[aria-disabled="true"] {
+  color: var(--color-text-tertiary);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.vaic-agent-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.vaic-agent-detail-header-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.vaic-agent-detail-shell {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.vaic-agent-detail-main {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 1279px) {
+  .vaic-agent-inspector {
+    display: none;
+  }
+}
+
 .vaic-status-toggle {
   display: inline-flex;
   gap: var(--space-2);

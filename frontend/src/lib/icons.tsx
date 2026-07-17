@@ -26,6 +26,7 @@ import {
   LayoutGrid,
   Landmark,
   Loader,
+  MessageSquare,
   Pencil,
   Play,
   Plug,
@@ -73,6 +74,8 @@ export const semanticIcons = {
   Webhook: Webhook,
   /** LLM Model. */
   Model: Cpu,
+  /** System Prompt editor (Story 2.8 — new concept, does not reassign any locked entry). */
+  Prompt: MessageSquare,
   /** Department (org unit). */
   Department: Building2,
   /** Tenant (bank). */

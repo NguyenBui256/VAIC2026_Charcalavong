@@ -1,29 +1,35 @@
-/* Story 2.2 — Agent detail shell: 6-tab nav (AC #5, #6, #10, #11). */
+/* Story 2.8 — Agent Builder surface: upgrades the Story 2.2 6-tab scaffold
+ * into one cohesive shell driven by `tabRegistry` (AC #1), with count
+ * badges (AC #2), per-tab dirty dots (AC #3), switch-with-unsaved
+ * confirmation (AC #4), new-Agent tab gating (AC #7), a header with
+ * Department badge/status pill/Save All (AC #8), and roving-tabindex
+ * keyboard nav (AC #9). See Dev Notes "Scope Boundaries" — this file
+ * ORCHESTRATES the six tabs; it does not re-implement their feature logic.
+ */
 
-import { useState } from "react";
+import { useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Button, Skeleton, ErrorState, ConfirmDialog } from "../ui";
-import { semanticIcons, ICON_STROKE_WIDTH } from "../../lib/icons";
+import { ErrorState, Skeleton, Button, ConfirmDialog } from "../ui";
 import { useAgent } from "../../hooks/useAgent";
+import { useDepartments } from "../../hooks/useDepartments";
 import { useUnsavedChangesGuard } from "./useUnsavedChangesGuard";
+import { AgentBuilderProvider, useAgentBuilder } from "./AgentBuilderContext";
+import { useTabSwitchGuard } from "./TabSwitchGuard";
+import { useTabCounts } from "./useTabCounts";
+import { tabRegistry } from "./tabRegistry";
+import AgentTabNav from "./AgentTabNav";
+import AgentDetailHeader from "./AgentDetailHeader";
 import IdentityTab from "./IdentityTab";
 import KnowledgeBaseTab from "./tabs/KnowledgeBaseTab";
 import ToolsTab from "./tabs/ToolsTab";
 import ApiIntegrationsTab from "./tabs/ApiIntegrationsTab";
 import PromptTab from "./tabs/PromptTab";
 import ModelTab from "./tabs/ModelTab";
+import type { TabKey } from "./agentBuilderTypes";
+import type { Agent } from "../../lib/agentsApi";
 
-const TABS = [
-  { key: "identity", label: "Identity" },
-  { key: "knowledge-base", label: "Knowledge Base" },
-  { key: "tools", label: "Tools" },
-  { key: "api-integrations", label: "API Integrations" },
-  { key: "prompt", label: "Prompt" },
-  { key: "model", label: "Model" },
-] as const;
-
-type TabKey = (typeof TABS)[number]["key"];
 const DEFAULT_TAB: TabKey = "identity";
+const ALL_TAB_KEYS = tabRegistry.map((t) => t.key);
 
 export interface AgentDetailShellProps {
   agentId: string;
@@ -32,68 +38,110 @@ export interface AgentDetailShellProps {
 export default function AgentDetailShell({ agentId }: AgentDetailShellProps) {
   const isNew = agentId === "new";
   const navigate = useNavigate();
+  const { query, data: agent, isLoading, isError } = useAgent(isNew ? undefined : agentId);
+
+  function handleSaved(saved: { id: string }) {
+    if (isNew) {
+      navigate(`/agents/${saved.id}?tab=identity`, { replace: true });
+    }
+  }
+
+  return (
+    <div data-testid="vaic-agent-detail-shell" className="vaic-agent-detail-shell">
+      <div className="vaic-agent-detail-main">
+        <AgentBuilderProvider>
+          <AgentDetailShellBody
+            agentId={agentId}
+            isNew={isNew}
+            agent={agent}
+            isLoading={isLoading}
+            isError={isError}
+            errorMessage={query.error?.message}
+            onRetry={() => query.refetch()}
+            onSaved={handleSaved}
+            navigate={navigate}
+          />
+        </AgentBuilderProvider>
+      </div>
+    </div>
+  );
+}
+
+interface AgentDetailShellBodyProps {
+  agentId: string;
+  isNew: boolean;
+  agent: Agent | undefined;
+  isLoading: boolean;
+  isError: boolean;
+  errorMessage: string | undefined;
+  onRetry: () => void;
+  onSaved: (saved: { id: string }) => void;
+  navigate: ReturnType<typeof useNavigate>;
+}
+
+function AgentDetailShellBody({
+  agentId,
+  isNew,
+  agent,
+  isLoading,
+  isError,
+  errorMessage,
+  onRetry,
+  onSaved,
+  navigate,
+}: AgentDetailShellBodyProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab");
-  const activeTab: TabKey = TABS.some((t) => t.key === requestedTab)
+  const activeTab: TabKey = ALL_TAB_KEYS.includes(requestedTab as TabKey)
     ? (requestedTab as TabKey)
     : DEFAULT_TAB;
 
-  const [isIdentityDirty, setIsIdentityDirty] = useState(false);
-  const [isModelDirty, setIsModelDirty] = useState(false);
-  const [isPromptDirty, setIsPromptDirty] = useState(false);
-  const isAnyTabDirty = isIdentityDirty || isModelDirty || isPromptDirty;
-  const { guardedNavigate, confirmProps } = useUnsavedChangesGuard(isAnyTabDirty);
+  const { dirtyTabs, anyDirty } = useAgentBuilder();
+  const { data: departments } = useDepartments();
+  const counts = useTabCounts(isNew ? undefined : agentId);
 
-  const { query, data: agent, isLoading, isError } = useAgent(isNew ? undefined : agentId);
+  const { guardedNavigate, confirmProps } = useUnsavedChangesGuard(anyDirty);
+  const {
+    guardedTabChange,
+    dialog: switchDialog,
+    isOpen: switchDialogOpen,
+  } = useTabSwitchGuard((tab) => setSearchParams({ tab }));
 
-  const AgentIcon = semanticIcons.Agent;
+  // AC #7 — new-Agent gating: only Identity is enabled until the record exists.
+  const disabledTabs = useMemo(
+    () => new Set<TabKey>(isNew ? ALL_TAB_KEYS.filter((k) => k !== "identity") : []),
+    [isNew],
+  );
+
+  const departmentName = agent
+    ? departments?.find((d) => d.id === agent.department_id)?.name
+    : undefined;
 
   function handleTabChange(tab: TabKey) {
-    guardedNavigate(() => setSearchParams({ tab }));
+    guardedTabChange(activeTab, tab);
   }
 
   function handleBack() {
     guardedNavigate(() => navigate("/agents"));
   }
 
-  function handleSaved(saved: { id: string }) {
-    if (isNew) {
-      navigate(`/agents/${saved.id}`, { replace: true });
-    }
-  }
-
   const showTabs = isNew || (!isError && !isLoading);
 
   return (
-    <div data-testid="vaic-agent-detail-shell">
-      <header
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "var(--space-3)",
-          marginBottom: "var(--space-4)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-          <Button variant="ghost" onClick={handleBack}>
-            Back to Agents
-          </Button>
-        </div>
-        <h1
-          className="text-h1"
-          style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}
-        >
-          <AgentIcon size={20} strokeWidth={ICON_STROKE_WIDTH} aria-hidden="true" />
-          {isNew ? "New Agent" : agent?.name ?? "Agent"}
-        </h1>
-      </header>
+    <>
+      <AgentDetailHeader
+        isNew={isNew}
+        agent={agent}
+        departmentName={departmentName}
+        onBack={handleBack}
+        suppressSaveAll={switchDialogOpen}
+      />
 
       {isError && (
         <ErrorState
-          message={query.error?.message ?? "Failed to load Agent"}
+          message={errorMessage ?? "Failed to load Agent"}
           retry={
-            <Button variant="secondary" onClick={() => query.refetch()}>
+            <Button variant="secondary" onClick={onRetry}>
               Retry
             </Button>
           }
@@ -108,43 +156,22 @@ export default function AgentDetailShell({ agentId }: AgentDetailShellProps) {
 
       {showTabs && (
         <>
-          <nav
-            className="vaic-tabs"
-            role="tablist"
-            aria-label="Agent configuration"
-          >
-            {TABS.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                role="tab"
-                aria-selected={activeTab === tab.key}
-                className={`vaic-tab vaic-focusable ${activeTab === tab.key ? "vaic-tab-active" : ""}`}
-                onClick={() => handleTabChange(tab.key)}
-                data-testid={`vaic-tab-${tab.key}`}
-              >
-                {tab.label}
-                {((tab.key === "identity" && isIdentityDirty) ||
-                  (tab.key === "model" && isModelDirty) ||
-                  (tab.key === "prompt" && isPromptDirty)) && (
-                  <span
-                    className="vaic-dirty-dot"
-                    aria-label="Unsaved changes"
-                    data-testid="vaic-dirty-dot"
-                  />
-                )}
-              </button>
-            ))}
-          </nav>
+          <AgentTabNav
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            disabledTabs={disabledTabs}
+            dirtyTabs={dirtyTabs}
+            counts={counts}
+          />
 
-          <div className="vaic-tab-panel" role="tabpanel">
+          <div className="vaic-tab-panel" role="tabpanel" aria-labelledby={`vaic-tab-${activeTab}`}>
             {activeTab === "identity" && (
               <IdentityTab
                 agentId={agentId}
                 isNew={isNew}
                 agent={agent}
-                onDirtyChange={setIsIdentityDirty}
-                onSaved={handleSaved}
+                onDirtyChange={() => {}}
+                onSaved={onSaved}
               />
             )}
             {activeTab === "knowledge-base" && <KnowledgeBaseTab agentId={agentId} isNew={isNew} />}
@@ -153,25 +180,21 @@ export default function AgentDetailShell({ agentId }: AgentDetailShellProps) {
               <ApiIntegrationsTab agentId={agentId} isNew={isNew} />
             )}
             {activeTab === "prompt" && (
-              <PromptTab
-                agentId={agentId}
-                isNew={isNew}
-                agent={agent}
-                onDirtyChange={setIsPromptDirty}
-              />
+              <PromptTab agentId={agentId} isNew={isNew} agent={agent} onDirtyChange={() => {}} />
             )}
             {activeTab === "model" && (
-              <ModelTab
-                agentId={agentId}
-                isNew={isNew}
-                agent={agent}
-                onDirtyChange={setIsModelDirty}
-              />
+              <ModelTab agentId={agentId} isNew={isNew} agent={agent} onDirtyChange={() => {}} />
             )}
           </div>
         </>
       )}
 
+      {switchDialog}
+
+      {/* Full-page nav (Back to Agents / browser back) uses the simpler
+          two-button Discard/Keep-editing dialog — the three-button
+          Save/Discard/Cancel variant is reserved for in-surface tab
+          switches (AC #4), which have a specific tab to save/discard. */}
       <ConfirmDialog
         {...confirmProps}
         title="Discard unsaved changes?"
@@ -179,6 +202,6 @@ export default function AgentDetailShell({ agentId }: AgentDetailShellProps) {
         confirmLabel="Discard"
         cancelLabel="Keep editing"
       />
-    </div>
+    </>
   );
 }

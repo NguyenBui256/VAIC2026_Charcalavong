@@ -67,4 +67,43 @@ describe("ConfirmDialog", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
+
+  it("renders a three-button Save/Discard/Cancel variant via tertiaryAction (Story 2.8 AC #4)", async () => {
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    const onTertiary = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ConfirmDialog
+        open
+        title="Save changes before leaving?"
+        confirmLabel="Save"
+        cancelLabel="Cancel"
+        tertiaryAction={{ label: "Discard", onClick: onTertiary }}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />,
+    );
+    expect(screen.getByText("Save")).toBeInTheDocument();
+    expect(screen.getByText("Discard")).toBeInTheDocument();
+    expect(screen.getByText("Cancel")).toBeInTheDocument();
+
+    await user.click(screen.getByText("Discard"));
+    expect(onTertiary).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows an inline error above the actions when `error` is set", () => {
+    render(
+      <ConfirmDialog
+        open
+        title="Save changes before leaving?"
+        error="Failed to save Agent"
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("vaic-confirm-dialog-error")).toHaveTextContent(
+      "Failed to save Agent",
+    );
+  });
 });
