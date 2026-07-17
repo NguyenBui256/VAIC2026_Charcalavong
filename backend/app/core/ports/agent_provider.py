@@ -16,11 +16,11 @@ scope from the Agent record on every call (FR-2).
 from __future__ import annotations
 
 import uuid
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-__all__ = ["AgentProviderPort", "RetrievalPassage"]
+__all__ = ["AgentProviderPort", "RetrievalPassage", "TaskExecutionResult"]
 
 
 class RetrievalPassage(BaseModel):
@@ -36,12 +36,29 @@ class RetrievalPassage(BaseModel):
     score: float
 
 
+class TaskExecutionResult(BaseModel):
+    """Result of dispatching one Orchestrator Task to a Specialist Agent.
+
+    Produced by `AgentProviderPort.execute_task` (Story 3.3/3.4 concrete
+    implementation: `app/modules/agent_builder/agent_executor.py`).
+    """
+
+    output: dict[str, Any] = Field(default_factory=dict)
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    kb_citations: list[str] = Field(default_factory=list)
+    confidence: float = 1.0
+    rationale: str = ""
+    success: bool = True
+    error: str = ""
+
+
 @runtime_checkable
 class AgentProviderPort(Protocol):
     """Hexagonal port for Agent-internal capabilities dispatched at runtime.
 
     Implementation: `app/modules/agent_builder/kb_retrieval.py` (`kb_search`
-    wired behind `retrieve`).
+    wired behind `retrieve`); `app/modules/agent_builder/agent_executor.py`
+    (`execute_task`, Story 3.3/3.4).
     """
 
     async def retrieve(
@@ -59,4 +76,15 @@ class AgentProviderPort(Protocol):
         caller-supplied. A wrong-department retrieval returns `[]`, never
         another Department's documents (AD-11).
         """
+        ...
+
+    async def execute_task(
+        self,
+        agent_id: uuid.UUID,
+        task_payload: dict[str, Any],
+        *,
+        tenant_id: uuid.UUID,
+        department_id: uuid.UUID,
+    ) -> TaskExecutionResult:
+        """Run the Specialist Agent's prompt+model (+KB, +Tool) for one Task."""
         ...
