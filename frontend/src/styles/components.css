@@ -1,0 +1,406 @@
+/* Story 1.9 — Component-level CSS using design tokens.
+ *
+ * All component visual states are defined here using CSS custom properties
+ * from tokens.css. Components apply className hooks; this file provides the
+ * concrete visual rules.
+ *
+ * No hardcoded hex — every color references a semantic token.
+ */
+
+/* ────────────────────────────────────────────────────────────────────
+ * UX-DR3 — Buttons
+ * ──────────────────────────────────────────────────────────────────── */
+
+/* Shared button base: min-height 36px, 8px padding-y, 16px padding-x. */
+.vaic-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--duration-hover) ease-out,
+              color var(--duration-hover) ease-out,
+              border-color var(--duration-hover) ease-out,
+              box-shadow var(--duration-hover) ease-out;
+}
+
+.vaic-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Primary — bg-primary text-on-primary. The singular CTA per view. */
+.vaic-btn-primary {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  border-color: var(--color-primary);
+}
+.vaic-btn-primary:not(:disabled):hover {
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+
+/* Secondary — bg-surface border text. */
+.vaic-btn-secondary {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+.vaic-btn-secondary:not(:disabled):hover {
+  background: var(--color-surface-muted);
+}
+
+/* Ghost — bg-transparent text-secondary. */
+.vaic-btn-ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-color: transparent;
+}
+.vaic-btn-ghost:not(:disabled):hover {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+/* Destructive — bg-destructive text-white. */
+.vaic-btn-destructive {
+  background: var(--color-destructive);
+  color: #fff;
+  border-color: var(--color-destructive);
+}
+.vaic-btn-destructive:not(:disabled):hover {
+  opacity: 0.9;
+}
+
+/* Icon — 36x36 square, no padding. */
+.vaic-btn-icon {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: var(--radius-control);
+}
+.vaic-btn-secondary.vaic-btn-icon {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
+}
+.vaic-btn-secondary.vaic-btn-icon:not(:disabled):hover {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * UX-DR4 / UX-DR11 — StatusPill
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: 9999px;
+  font-size: var(--text-caption);
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * UX-DR5 — Card
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: var(--space-4);
+}
+
+/* Interactive card gets sm shadow (no default shadow on non-interactive). */
+.vaic-card-interactive {
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--duration-hover) ease-out,
+              border-color var(--duration-hover) ease-out;
+}
+.vaic-card-interactive:hover {
+  border-color: var(--color-border-strong);
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * UX-DR6 — Table
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+.vaic-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-small);
+}
+
+/* Sticky header */
+.vaic-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-surface-muted);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caption);
+  color: var(--color-text-tertiary);
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.vaic-table tbody td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.vaic-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Row hover */
+.vaic-table tbody tr {
+  transition: background var(--duration-hover) ease-out;
+}
+.vaic-table tbody tr:hover {
+  background: var(--color-surface-muted);
+}
+
+/* Selected row */
+.vaic-table-row-selected {
+  background: var(--color-primary-soft) !important;
+  box-shadow: inset 2px 0 0 var(--color-primary);
+}
+
+/* Bulk action bar */
+.vaic-table-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-primary-soft);
+  border-top: 1px solid var(--color-border);
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
+  font-size: var(--text-small);
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * UX-DR7 — CodeBlock
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-code-block {
+  position: relative;
+  background: var(--color-surface-inset);
+  border-radius: var(--radius-card);
+  padding: var(--space-3);
+  overflow-x: auto;
+}
+
+.vaic-code-block pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-small);
+  line-height: 18px;
+}
+
+.vaic-code-copy-btn {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background var(--duration-hover) ease-out,
+              color var(--duration-hover) ease-out;
+}
+.vaic-code-copy-btn:hover {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * UX-DR8 — FormField
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+}
+
+.vaic-form-label {
+  font-size: var(--text-small);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.vaic-form-required {
+  color: var(--color-destructive);
+  margin-left: 2px;
+}
+
+.vaic-form-input {
+  padding: 8px var(--space-3);
+  min-height: 36px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-body);
+  font-family: inherit;
+  transition: border-color var(--duration-hover) ease-out,
+              box-shadow var(--duration-hover) ease-out;
+}
+
+.vaic-form-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
+}
+
+.vaic-form-input.vaic-form-input-error {
+  border-color: var(--color-destructive);
+}
+
+.vaic-form-helper {
+  font-size: var(--text-caption);
+  color: var(--color-text-tertiary);
+}
+
+.vaic-form-error-text {
+  font-size: var(--text-caption);
+  color: var(--color-destructive);
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * UX-DR12 — Focus ring (visible on any background)
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-focusable:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * Tooltip (shared)
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-tooltip-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.vaic-tooltip {
+  position: absolute;
+  bottom: calc(100% + var(--space-1));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--space-1) var(--space-2);
+  background: var(--slate-900);
+  color: #fff;
+  font-size: var(--text-caption);
+  font-weight: 500;
+  border-radius: var(--radius-control);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration-hover) ease-out;
+  z-index: 100;
+}
+
+[data-theme="dark"] .vaic-tooltip {
+  background: var(--slate-700);
+}
+
+.vaic-tooltip.vaic-tooltip-visible {
+  opacity: 1;
+}
+
+.vaic-tooltip-bottom {
+  top: calc(100% + var(--space-1));
+  bottom: auto;
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * EmptyState (UX-DR23)
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-12) var(--space-6);
+  gap: var(--space-3);
+}
+
+.vaic-empty-state-icon {
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-2);
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * Skeleton
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-skeleton {
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-control);
+  animation: vaic-skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes vaic-skeleton-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * ErrorState
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-12) var(--space-6);
+  gap: var(--space-3);
+}

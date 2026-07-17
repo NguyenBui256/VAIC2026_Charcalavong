@@ -1,0 +1,113 @@
+/* Story 1.9 — Motion system CSS (UX-DR9).
+ *
+ * This file is imported after components.css so it can freeze all animations
+ * when the user has `prefers-reduced-motion: reduce`.
+ *
+ * Rules (UX-DR9):
+ *  - `prefers-reduced-motion` freezes ALL animations, replacing them with
+ *    instant transitions.
+ *  - Trace timeline updates are interruptible (handled in JS via AbortController;
+ *    this file ensures the CSS side also freezes).
+ *  - No animation touches `width / height / top / left` — only `transform` and
+ *    `opacity`. This is enforced by design review, not by CSS, but the keyframe
+ *    definitions below all follow the rule.
+ */
+
+/* ── Keyframe definitions ─────────────────────────────────────────── */
+
+/* Trace step appears: 180ms fade + 4px slide-up (UX-DR9).
+ * Only `transform` and `opacity` are animated. */
+@keyframes vaic-step-appear {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Run status transition: 240ms fade (UX-DR9). */
+@keyframes vaic-status-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Escalation toast: 280ms slide-in from top-right (UX-DR9).
+ * Only `transform` and `opacity`. */
+@keyframes vaic-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Page / route transition: 160ms cross-fade (UX-DR9). */
+@keyframes vaic-route-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Spinner for Running state icon (uses transform only). */
+@keyframes vaic-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Animation utility classes ────────────────────────────────────── */
+
+.vaic-anim-step {
+  animation: vaic-step-appear var(--duration-step) var(--ease-out);
+}
+
+.vaic-anim-status {
+  animation: vaic-status-fade var(--duration-status) var(--ease-out);
+}
+
+.vaic-anim-toast {
+  animation: vaic-toast-in var(--duration-toast) var(--ease-out);
+}
+
+.vaic-anim-route {
+  animation: vaic-route-fade var(--duration-route) var(--ease-in-out);
+}
+
+.vaic-anim-spin {
+  animation: vaic-spin 1s linear infinite;
+}
+
+/* ── prefers-reduced-motion: freeze ALL animations ────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Replace spin with a static icon (no rotation). */
+  .vaic-anim-spin {
+    animation: none !important;
+  }
+}
