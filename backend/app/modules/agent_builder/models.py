@@ -79,6 +79,56 @@ class Agent(Base):
     )
 
 
+class ApiIntegration(Base):
+    """A reusable named HTTP connection registered against an Agent (Story 2.7).
+
+    `auth_header_encrypted` is CIPHERTEXT ONLY (Fernet, `app.core.crypto`) —
+    there is no plaintext column, ever (AC2, NFR-6). Serialization exposes a
+    masked value only (`service.serialize_integration`).
+    """
+
+    __tablename__ = "api_integrations"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid7,
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    base_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    auth_header_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    schema_: Mapped[dict[str, Any] | None] = mapped_column(
+        "schema", JSONB, nullable=True
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", default=False
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class Tool(Base):
     """A Tool registered against an Agent (Story 2.6).
 

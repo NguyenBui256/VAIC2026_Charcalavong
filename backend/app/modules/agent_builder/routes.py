@@ -20,6 +20,14 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_tenant_session
 from app.core.model_catalog import get_provider_catalog
 from app.core.settings import get_settings
+from app.modules.agent_builder.integration_client import test_integration as run_test_integration
+from app.modules.agent_builder.integration_service import (
+    create_integration,
+    list_integrations,
+    serialize_integration,
+    soft_delete_integration,
+    update_integration,
+)
 from app.modules.agent_builder.kb_service import (
     delete_document as delete_kb_document,
 )
@@ -86,6 +94,24 @@ class UpdateToolRequest(BaseModel):
 
 class TestToolRequest(BaseModel):
     sample_input: dict[str, Any] = Field(default_factory=dict)
+
+
+class CreateIntegrationRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    base_url: str = Field(..., min_length=1, max_length=2048)
+    auth_header: str = Field(..., min_length=1)
+    schema_: dict[str, Any] | None = Field(default=None, alias="schema")
+
+    model_config = {"populate_by_name": True}
+
+
+class UpdateIntegrationRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    base_url: str | None = Field(default=None, min_length=1, max_length=2048)
+    auth_header: str | None = Field(default=None, min_length=1)
+    schema_: dict[str, Any] | None = Field(default=None, alias="schema")
+
+    model_config = {"populate_by_name": True}
 
 
 # ---------------------------------------------------------------------------
@@ -339,3 +365,90 @@ def test_tool_route(
         department_id=tool.department_id,
     )
     return JSONResponse(status_code=200, content=_ok(result.model_dump()))
+
+
+# ---------------------------------------------------------------------------
+# API Integration routes (Story 2.7)
+# ---------------------------------------------------------------------------
+
+@router.post("/{agent_id}/integrations")
+def create_integration_route(
+    agent_id: uuid.UUID,
+    body: CreateIntegrationRequest,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """POST /agents/{id}/integrations — register an Integration (AC1, AC2)."""
+    principal = _principal(request)
+    integration = create_integration(
+        session,
+        agent_id=agent_id,
+        principal=principal,
+        name=body.name,
+        base_url=body.base_url,
+        auth_header=body.auth_header,
+        schema=body.schema_,
+    )
+    return JSONResponse(status_code=201, content=_ok(serialize_integration(integration)))
+
+
+@router.get("/{agent_id}/integrations")
+def list_integrations_route(
+    agent_id: uuid.UUID,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """GET /agents/{id}/integrations — list, RLS-scoped, header masked (AC8)."""
+    integrations = list_integrations(session, agent_id=agent_id)
+    return JSONResponse(
+        status_code=200, content=_ok([serialize_integration(i) for i in integrations])
+    )
+
+
+@router.patch("/{agent_id}/integrations/{integration_id}")
+def update_integration_route(
+    agent_id: uuid.UUID,
+    integration_id: uuid.UUID,
+    body: UpdateIntegrationRequest,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """PATCH /agents/{id}/integrations/{integration_id} — owner-or-same-department only."""
+    principal = _principal(request)
+    integration = update_integration(
+        session,
+        agent_id=agent_id,
+        integration_id=integration_id,
+        principal=principal,
+        **body.model_dump(exclude_unset=True, by_alias=True),
+    )
+    return JSONResponse(status_code=200, content=_ok(serialize_integration(integration)))
+
+
+@router.delete("/{agent_id}/integrations/{integration_id}")
+def delete_integration_route(
+    agent_id: uuid.UUID,
+    integration_id: uuid.UUID,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """DELETE /agents/{id}/integrations/{integration_id} — soft-delete only, symmetric authz."""
+    principal = _principal(request)
+    soft_delete_integration(
+        session, agent_id=agent_id, integration_id=integration_id, principal=principal
+    )
+    return JSONResponse(status_code=200, content=_ok({"id": str(integration_id)}))
+
+
+@router.post("/{agent_id}/integrations/{integration_id}/test")
+def test_integration_route(
+    agent_id: uuid.UUID,
+    integration_id: uuid.UUID,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """POST /agents/{id}/integrations/{integration_id}/test — Test Integration (AC9).
+
+    Pings `GET {base_url}/health` with the decrypted header; NEVER returns
+    the header, only `{status, status_code, latency_ms}`.
+    """
+    result = run_test_integration(session, agent_id=agent_id, integration_id=integration_id)
+    return JSONResponse(status_code=200, content=_ok(result))

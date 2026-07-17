@@ -58,6 +58,14 @@ class Settings(BaseSettings):
         description="Ollama HTTP base URL for local models",
     )
 
+    # Story 2.7 (AR-14 stored credentials / NFR-6) — Fernet key for
+    # encrypting stored Integration auth headers at rest. A missing/blank
+    # key surfaces as a clear error only when encrypt/decrypt is CALLED
+    # (app.core.crypto), not at import time.
+    encryption_key: str = Field(
+        default="", description="Fernet key (urlsafe base64, 32 bytes) for stored credentials"
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
