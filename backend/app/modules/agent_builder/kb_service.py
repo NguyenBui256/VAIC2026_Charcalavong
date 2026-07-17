@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import logging
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -58,6 +59,8 @@ KB_ALLOWED_CONTENT_TYPES = {
 }
 
 McpFactory = Callable[..., McpClientPort]
+
+logger = logging.getLogger(__name__)
 
 
 def _validate_upload(content_type: str, data: bytes) -> None:
@@ -105,9 +108,12 @@ def _run_ingest(
     except TimeoutError:
         doc.status = "failed"
         doc.failure_reason = "Timeout"
-    except Exception as exc:  # noqa: BLE001 -- captured as failure_reason, never swallowed
+    except Exception as exc:  # noqa: BLE001 -- logged in full, sanitized reason exposed via API
+        logger.exception(
+            "KB ingest failed for document %s (agent %s): %s", doc.id, agent.id, exc
+        )
         doc.status = "failed"
-        doc.failure_reason = str(exc)
+        doc.failure_reason = "Ingestion failed"
     finally:
         doc.updated_at = datetime.now(UTC)
         session.commit()
@@ -126,8 +132,8 @@ def upload_document(
     audit: AuditPort | None = None,
 ) -> KbDocument:
     """Validate, persist, and ingest a KB document (AC1, AC2, AC3, AC4, AC6)."""
-    _ = principal  # any authenticated tenant member may upload (no role gate)
     agent = get_agent_row(session, agent_id)
+    _authorize_mutation(agent, principal)
     _validate_upload(content_type, data)
 
     doc = KbDocument(

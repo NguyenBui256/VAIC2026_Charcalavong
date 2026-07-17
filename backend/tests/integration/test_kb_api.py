@@ -168,6 +168,49 @@ def test_ingest_timeout_sets_failed_status(
     assert doc.failure_reason == "Timeout"
 
 
+class _RaisingMcpClient:
+    """Fake McpClientPort whose call_tool raises with sensitive internal detail."""
+
+    async def call_tool(self, tool_name: str, arguments: dict, *, tenant_id, department_id):
+        _ = (tool_name, arguments, tenant_id, department_id)
+        raise RuntimeError("psql connection to 10.0.0.5:5432 failed: password authentication error")
+
+    async def list_tools(self, *, tenant_id, department_id):
+        _ = (tenant_id, department_id)
+        return []
+
+
+def test_ingest_failure_sanitizes_failure_reason(
+    app_session: Session, seeded_agent: dict[str, Any]
+) -> None:
+    """Raw exception text must NOT leak into the API-visible failure_reason (security finding)."""
+    from app.core.tenant_context import set_tenant_session_var, tenant_context
+
+    tenant_context.set(seeded_agent["tenant_agents_id"])
+    set_tenant_session_var(app_session, seeded_agent["tenant_agents_id"])
+    app_session.execute(text("SET LOCAL ROLE vaic_app"))
+
+    principal = Principal(
+        user_id=seeded_agent["builder_user_id"],
+        tenant_id=seeded_agent["tenant_agents_id"],
+        department_id=seeded_agent["dept_agents_id"],
+        role="builder",
+    )
+    doc = kb_service.upload_document(
+        app_session,
+        agent_id=seeded_agent["agent_a_id"],
+        principal=principal,
+        filename="broken.pdf",
+        content_type="application/pdf",
+        data=b"hello world",
+        mcp_factory=lambda **_: _RaisingMcpClient(),
+    )
+    assert doc.status == "failed"
+    assert doc.failure_reason == "Ingestion failed"
+    assert "psql" not in doc.failure_reason
+    assert "10.0.0.5" not in doc.failure_reason
+
+
 # ---------------------------------------------------------------------------
 # AC5 — delete removes the row + calls rag.delete
 # ---------------------------------------------------------------------------
@@ -215,6 +258,56 @@ def test_delete_removes_row_and_calls_rag_delete(
         f"/agents/{agent['id']}/kb/documents", headers=_auth_headers(token)
     )
     assert r_list.json()["data"] == []
+
+
+def test_upload_non_owner_non_builder_dept_returns_403(
+    agent_client: TestClient, agent_seed_data: dict[str, Any]
+) -> None:
+    token = login_token(agent_client, "builder@tenantc.example")
+    agent = _create_agent(
+        agent_client, token, department_id=str(agent_seed_data["dept_agents_id"])
+    )
+
+    other_token = login_token(agent_client, "builder2@tenantc.example")
+    r = agent_client.post(
+        f"/agents/{agent['id']}/kb/documents",
+        files={"file": ("protected.txt", b"content", "text/plain")},
+        headers=_auth_headers(other_token),
+    )
+    assert r.status_code == 403
+
+
+def test_upload_owner_succeeds(
+    agent_client: TestClient, agent_seed_data: dict[str, Any]
+) -> None:
+    """Owner (builder role) upload still succeeds after the authz gate is applied (AC6 parity)."""
+    token = login_token(agent_client, "builder@tenantc.example")
+    agent = _create_agent(
+        agent_client, token, department_id=str(agent_seed_data["dept_agents_id"])
+    )
+    r = agent_client.post(
+        f"/agents/{agent['id']}/kb/documents",
+        files={"file": ("ok.txt", b"content", "text/plain")},
+        headers=_auth_headers(token),
+    )
+    assert r.status_code == 201, r.text
+
+
+def test_upload_same_department_non_owner_operator_returns_403(
+    agent_client: TestClient, agent_seed_data: dict[str, Any]
+) -> None:
+    """Same department but wrong role (operator) is still forbidden -- role gate, not just dept."""
+    token = login_token(agent_client, "builder@tenantc.example")
+    agent = _create_agent(
+        agent_client, token, department_id=str(agent_seed_data["dept_agents_id"])
+    )
+    operator_token = login_token(agent_client, "operator@tenantc.example")
+    r = agent_client.post(
+        f"/agents/{agent['id']}/kb/documents",
+        files={"file": ("ok.txt", b"content", "text/plain")},
+        headers=_auth_headers(operator_token),
+    )
+    assert r.status_code == 403
 
 
 def test_delete_non_owner_non_builder_dept_returns_403(
