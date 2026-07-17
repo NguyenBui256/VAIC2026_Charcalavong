@@ -16,6 +16,7 @@ from sqlalchemy import text
 from app.core.auth import AuthMiddleware
 from app.core.db import SessionLocal
 from app.core.errors import register_error_handlers
+from app.modules.agent_builder.routes import router as agents_router
 from app.modules.tenant.routes import router as tenant_router
 
 app = FastAPI(
@@ -29,6 +30,9 @@ app.add_middleware(AuthMiddleware)
 
 # Story 1.3 — tenant module routes (login, refresh, me, users).
 app.include_router(tenant_router)
+
+# Story 2.1 — Agent Builder CRUD routes.
+app.include_router(agents_router)
 
 # Story 1.4 — wire the error envelope exception handlers.
 register_error_handlers(app)
