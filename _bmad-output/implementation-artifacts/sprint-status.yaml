@@ -58,7 +58,7 @@ development_status:
   1-4-core-ports-api-error-envelope: review
   1-5-audit-sink-append-only-trail: backlog
   1-6-model-layer-port-anthropic-adapter: backlog
-  1-7-arq-background-job-foundation: backlog
+  1-7-arq-background-job-foundation: review
   1-8-frontend-shell-design-tokens-login: backlog
   1-9-component-primitives-state-system: backlog
   1-10-dashboard-surface: backlog
