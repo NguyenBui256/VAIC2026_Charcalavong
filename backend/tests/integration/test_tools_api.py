@@ -248,3 +248,81 @@ def test_test_tool_embedded_python_success(
     result = r.json()["data"]
     assert result["success"] is True
     assert result["output"] == {"doubled": 42}
+
+
+# ---------------------------------------------------------------------------
+# Story 2.8 (carried item #1) — Tool <-> Integration wiring
+# ---------------------------------------------------------------------------
+
+def test_create_tool_with_integration_id_round_trips(
+    agent_client: TestClient, agent_seed_data: dict[str, Any]
+) -> None:
+    """A Tool created with `integration_id` returns it on create + list."""
+    token = login_token(agent_client, "builder@tenantc.example")
+    agent = _create_agent(agent_client, token, department_id=str(agent_seed_data["dept_agents_id"]))
+
+    integration = agent_client.post(
+        f"/agents/{agent['id']}/integrations",
+        json={
+            "name": "Demo Gmail",
+            "base_url": "https://stub.example.com/gmail",
+            "auth_header": "Bearer super-secret-token-abcd1234",
+        },
+        headers=_auth_headers(token),
+    ).json()["data"]
+
+    payload = {**MCP_SCHEMA_TOOL, "integration_id": integration["id"]}
+    r = agent_client.post(
+        f"/agents/{agent['id']}/tools", json=payload, headers=_auth_headers(token)
+    )
+    assert r.status_code == 201, r.text
+    created = r.json()["data"]
+    assert created["integration_id"] == integration["id"]
+
+    listed = agent_client.get(
+        f"/agents/{agent['id']}/tools", headers=_auth_headers(token)
+    ).json()["data"]
+    assert listed[0]["integration_id"] == integration["id"]
+
+
+def test_create_tool_without_integration_id_defaults_to_none(
+    agent_client: TestClient, agent_seed_data: dict[str, Any]
+) -> None:
+    token = login_token(agent_client, "builder@tenantc.example")
+    agent = _create_agent(agent_client, token, department_id=str(agent_seed_data["dept_agents_id"]))
+
+    r = agent_client.post(
+        f"/agents/{agent['id']}/tools", json=MCP_SCHEMA_TOOL, headers=_auth_headers(token)
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["data"]["integration_id"] is None
+
+
+def test_patch_tool_updates_integration_id(
+    agent_client: TestClient, agent_seed_data: dict[str, Any]
+) -> None:
+    token = login_token(agent_client, "builder@tenantc.example")
+    agent = _create_agent(agent_client, token, department_id=str(agent_seed_data["dept_agents_id"]))
+
+    integration = agent_client.post(
+        f"/agents/{agent['id']}/integrations",
+        json={
+            "name": "Demo Gmail",
+            "base_url": "https://stub.example.com/gmail",
+            "auth_header": "Bearer super-secret-token-abcd1234",
+        },
+        headers=_auth_headers(token),
+    ).json()["data"]
+
+    created = agent_client.post(
+        f"/agents/{agent['id']}/tools", json=MCP_SCHEMA_TOOL, headers=_auth_headers(token)
+    ).json()["data"]
+    assert created["integration_id"] is None
+
+    r = agent_client.patch(
+        f"/agents/{agent['id']}/tools/{created['id']}",
+        json={"integration_id": integration["id"]},
+        headers=_auth_headers(token),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["integration_id"] == integration["id"]

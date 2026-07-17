@@ -167,6 +167,14 @@ class Tool(Base):
     input_schema: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     output_schema: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     embedded_python: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Story 2.8 (carried item #1) — optional link to a registered
+    # ApiIntegration this Tool calls through. NULL => the Tool doesn't use a
+    # registered Integration (e.g. embedded_python or a standalone MCP call).
+    integration_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("api_integrations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     is_deleted: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false", default=False

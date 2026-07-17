@@ -29,6 +29,18 @@ vi.mock("../../../lib/toolsApi", async () => {
   };
 });
 
+// ToolEditor (mounted when "New Tool"/Edit is clicked) now renders
+// IntegrationSelect (Story 2.8 item #1) — stub its list call.
+vi.mock("../../../lib/integrationsApi", async () => {
+  const actual = await vi.importActual<typeof import("../../../lib/integrationsApi")>(
+    "../../../lib/integrationsApi",
+  );
+  return {
+    ...actual,
+    listIntegrations: vi.fn().mockResolvedValue([]),
+  };
+});
+
 function makeTool(overrides: Partial<Tool> = {}): Tool {
   return {
     id: "tool-1",
@@ -39,6 +51,7 @@ function makeTool(overrides: Partial<Tool> = {}): Tool {
     output_schema: { type: "object", properties: { passages: { type: "array" } } },
     has_embedded_python: false,
     kind: "mcp",
+    integration_id: null,
     created_at: "2026-01-01T00:00:00.000Z",
     updated_at: "2026-01-01T00:00:00.000Z",
     ...overrides,

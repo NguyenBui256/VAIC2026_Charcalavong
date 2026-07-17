@@ -82,6 +82,8 @@ class CreateToolRequest(BaseModel):
     input_schema: dict[str, Any]
     output_schema: dict[str, Any]
     embedded_python: str | None = None
+    # Story 2.8 (carried item #1) — optional link to a registered Integration.
+    integration_id: uuid.UUID | None = None
 
 
 class UpdateToolRequest(BaseModel):
@@ -90,6 +92,7 @@ class UpdateToolRequest(BaseModel):
     input_schema: dict[str, Any] | None = None
     output_schema: dict[str, Any] | None = None
     embedded_python: str | None = None
+    integration_id: uuid.UUID | None = None
 
 
 class TestToolRequest(BaseModel):
@@ -295,6 +298,7 @@ def create_tool_route(
         input_schema=body.input_schema,
         output_schema=body.output_schema,
         embedded_python=body.embedded_python,
+        integration_id=body.integration_id,
     )
     return JSONResponse(status_code=201, content=_ok(serialize_tool(tool)))
 

@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { Button, useToast } from "../ui";
 import { lintJsonSchema } from "../../lib/jsonSchemaLint";
 import { useAgentToolMutations } from "../../hooks/useAgentTools";
+import IntegrationSelect from "./IntegrationSelect";
 import ToolTestPanel from "./ToolTestPanel";
 import type { Tool } from "../../lib/toolsApi";
 
@@ -35,6 +36,7 @@ export default function ToolEditor({ agentId, tool, onClose }: ToolEditorProps) 
   const [outputSchemaText, setOutputSchemaText] = useState(stringifySchema(tool?.output_schema));
   const [useEmbeddedPython, setUseEmbeddedPython] = useState(tool?.kind === "embedded_python");
   const [embeddedPython, setEmbeddedPython] = useState("");
+  const [integrationId, setIntegrationId] = useState(tool?.integration_id ?? "");
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const { create, update, test } = useAgentToolMutations(agentId);
@@ -46,6 +48,7 @@ export default function ToolEditor({ agentId, tool, onClose }: ToolEditorProps) 
     setInputSchemaText(stringifySchema(tool?.input_schema));
     setOutputSchemaText(stringifySchema(tool?.output_schema));
     setUseEmbeddedPython(tool?.kind === "embedded_python");
+    setIntegrationId(tool?.integration_id ?? "");
   }, [tool]);
 
   const inputLint = lintJsonSchema(inputSchemaText);
@@ -62,6 +65,7 @@ export default function ToolEditor({ agentId, tool, onClose }: ToolEditorProps) 
       input_schema: inputLint.parsed,
       output_schema: outputLint.parsed,
       embedded_python: useEmbeddedPython ? embeddedPython : null,
+      integration_id: integrationId || null,
     };
     try {
       if (isNew) {
@@ -112,6 +116,8 @@ export default function ToolEditor({ agentId, tool, onClose }: ToolEditorProps) 
           Requires auth (stored, never displayed after save)
         </label>
       </div>
+
+      <IntegrationSelect agentId={agentId} value={integrationId} onChange={setIntegrationId} />
 
       <SchemaField
         id="vaic-tool-input-schema"

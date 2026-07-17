@@ -19,6 +19,8 @@ export interface Tool {
   output_schema: Record<string, unknown>;
   has_embedded_python: boolean;
   kind: ToolKind;
+  /** Registered Integration this Tool calls through, or null (Story 2.8 item #1). */
+  integration_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -29,6 +31,7 @@ export interface CreateToolInput {
   input_schema: Record<string, unknown>;
   output_schema: Record<string, unknown>;
   embedded_python?: string | null;
+  integration_id?: string | null;
 }
 
 export interface UpdateToolInput {
@@ -37,6 +40,7 @@ export interface UpdateToolInput {
   input_schema?: Record<string, unknown>;
   output_schema?: Record<string, unknown>;
   embedded_python?: string | null;
+  integration_id?: string | null;
 }
 
 /** Mirrors backend `ToolOutput` — the Test Tool affordance result (AC7). */

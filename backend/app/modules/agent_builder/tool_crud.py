@@ -68,6 +68,7 @@ def create_tool(
     input_schema: dict[str, Any],
     output_schema: dict[str, Any],
     embedded_python: str | None = None,
+    integration_id: uuid.UUID | None = None,
     audit: AuditPort | None = None,
 ) -> Tool:
     """Register a Tool against an Agent (AC1). Rejects malformed schemas."""
@@ -87,6 +88,7 @@ def create_tool(
         input_schema=input_schema,
         output_schema=output_schema,
         embedded_python=embedded_python,
+        integration_id=integration_id,
     )
     session.add(tool)
     session.commit()
@@ -121,7 +123,14 @@ def update_tool(
     agent = get_agent_row(session, agent_id)
     _authorize_mutation(agent, principal)
 
-    allowed_fields = {"display_name", "header", "input_schema", "output_schema", "embedded_python"}
+    allowed_fields = {
+        "display_name",
+        "header",
+        "input_schema",
+        "output_schema",
+        "embedded_python",
+        "integration_id",
+    }
     for key, value in changes.items():
         if key not in allowed_fields or value is None:
             continue
@@ -169,6 +178,7 @@ def serialize_tool(tool: Tool) -> dict:
         "output_schema": tool.output_schema,
         "has_embedded_python": tool.embedded_python is not None,
         "kind": "embedded_python" if tool.embedded_python else "mcp",
+        "integration_id": str(tool.integration_id) if tool.integration_id else None,
         "created_at": tool.created_at.isoformat(timespec="milliseconds"),
         "updated_at": tool.updated_at.isoformat(timespec="milliseconds"),
     }
