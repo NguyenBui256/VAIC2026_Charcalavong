@@ -47,6 +47,17 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field(default="HS256")
     jwt_ttl_minutes: int = Field(default=480)
 
+    # LLM provider keys — Story 1.6 (AD-7). Loaded at runtime; a missing key
+    # surfaces as a clear error when the adapter is *called*, not at import
+    # time (FR-5 consequence).
+    anthropic_api_key: str = Field(default="", description="Anthropic API key")
+    openai_api_key: str = Field(default="", description="OpenAI API key")
+    google_api_key: str = Field(default="", description="Google Gemini API key")
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        description="Ollama HTTP base URL for local models",
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
