@@ -1,8 +1,12 @@
-"""Minimal demo-tenant seed script (Story 1.12 — Bootstrap Lite).
+"""Minimal demo-tenant seed script (Story 1.12 — Bootstrap Lite + Epic 7-thin).
 
 Idempotently provisions one demo Tenant ("SHB Demo") with:
-- 2 Departments (Credit, Operations)
+- 3 Departments (Credit, Compliance, Operations)
 - 3 Users across roles (builder, manager, operator) with Argon2-hashed passwords
+- 3 Specialist Agents (one per Department) each with a KB doc + a Tool
+  (Epic 7-thin, roadmap §2 — see `demo_seed_agents.py`)
+- The demo "Business Loan Pre-Screen" Workflow when the `workflows` table
+  exists (defensive hook — see `demo_seed_workflow.py`)
 - A 32-byte hex audit_key_id on the Tenant
 
 Usage::
@@ -52,6 +56,9 @@ from app.core.auth import hash_password  # noqa: E402
 from app.core.db import AdminSessionLocal  # noqa: E402
 from app.modules.tenant.models import Department, Tenant, User  # noqa: E402
 
+from scripts.demo_seed_agents import seed_agents_kb_tools  # noqa: E402
+from scripts.demo_seed_workflow import seed_workflow_if_ready  # noqa: E402
+
 __all__ = [
     "DEFAULT_PASSWORD",
     "DEMO_TENANT_NAME",
@@ -74,7 +81,10 @@ _SEED_USERS: tuple[tuple[str, str, str], ...] = (
     ("ops_agent@shbdemo.vaic", "operator", "Operations"),
 )
 
-DEPARTMENTS: tuple[str, ...] = ("Credit", "Operations")
+# Compliance added for the Epic-7 demo: the "Business Loan Pre-Screen" workflow
+# dispatches to a Credit, a Compliance, and an Operations Agent (rubric bar 1 —
+# ≥2 specialists collaborate).
+DEPARTMENTS: tuple[str, ...] = ("Credit", "Compliance", "Operations")
 
 
 # ---------------------------------------------------------------------------
@@ -99,12 +109,16 @@ def bootstrap_demo_tenant() -> dict[str, Any]:
         departments, depts_created = _upsert_departments(session, tenant)
         users, users_created = _upsert_users(session, tenant, departments)
 
+        owner = _builder_user(users)
+        agent_counts = seed_agents_kb_tools(session, tenant, departments, owner)
+        workflow_status = seed_workflow_if_ready(session, tenant, owner)
+
         session.commit()
 
     _print_summary(
         tenant, departments, users, tenant_created, depts_created, users_created
     )
-    _print_workflow_deferral()
+    _print_agent_summary(agent_counts, workflow_status)
 
     return {
         "tenant": tenant,
@@ -114,8 +128,23 @@ def bootstrap_demo_tenant() -> dict[str, Any]:
             "tenant": tenant_created,
             "departments": depts_created,
             "users": users_created,
+            "agents": agent_counts["agents"],
+            "kb": agent_counts["kb"],
+            "tools": agent_counts["tools"],
         },
+        "workflow": workflow_status,
     }
+
+
+def _builder_user(users: list[User]) -> User:
+    """Return the seeded builder user (Agent/Workflow owner). Falls back to the
+    first user so seeding never crashes if roles change."""
+    for user in users:
+        if user.role == "builder":
+            return user
+    if not users:
+        raise RuntimeError("no users seeded — cannot assign Agent owner")
+    return users[0]
 
 
 # ---------------------------------------------------------------------------
@@ -258,19 +287,15 @@ def _print_summary(
     print("=" * 72)
 
 
-def _print_workflow_deferral() -> None:
-    """Log that workflow seeding is deferred to Story 3.1.
-
-    FR-28 / §A8 require at least one pre-configured Workflow ready to Run.
-    The `workflows` table does not exist yet — Story 3.1 creates it. This
-    script logs the deferral so the demo operator knows the gap.
-    """
+def _print_agent_summary(agent_counts: dict[str, int], workflow_status: str) -> None:
+    """Log the Agent/KB/Tool + Workflow seed outcome (Epic 7-thin)."""
     print()
     print(
-        "[bootstrap] NOTE: Workflow seeding deferred — the `workflows` table "
-        "is created by Story 3.1. Re-run this script after Story 3.1 lands "
-        "to seed the pre-configured 'Business Loan Pre-Screen' workflow."
+        f"  Agents:       {agent_counts['agents']} new "
+        f"(KB docs: {agent_counts['kb']} new, Tools: {agent_counts['tools']} new)"
     )
+    print(f"  Workflow:     {workflow_status}")
+    print("=" * 72)
 
 
 # ---------------------------------------------------------------------------
