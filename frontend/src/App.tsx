@@ -11,6 +11,8 @@ import LoginPage from "./routes/login";
 import DashboardPage from "./routes/dashboard";
 import AgentsPage from "./routes/agents";
 import AgentDetailPage from "./routes/agent-detail";
+import WorkflowsPage from "./routes/workflows";
+import WorkflowDetailPage from "./routes/workflow-detail";
 import { isAuthenticated } from "./lib/auth";
 import { CommandPaletteProvider } from "./components/CommandPalette/CommandPaletteContext";
 import CommandPalette from "./components/CommandPalette/CommandPalette";
@@ -55,8 +57,10 @@ export function AppRoutes() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/agents" element={<AgentsPage />} />
         <Route path="/agents/:id" element={<AgentDetailPage />} />
+        {/* Story 3.1 — Workflow list + Definition tab detail. */}
+        <Route path="/workflows" element={<WorkflowsPage />} />
+        <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
         {/* Placeholder routes for nav — real surfaces arrive in later stories */}
-        <Route path="/workflows" element={<ComingSoon title="Workflows" />} />
         <Route path="/mini-apps" element={<ComingSoon title="Mini-Apps" />} />
         <Route path="/actions" element={<ComingSoon title="Actions" />} />
         <Route path="/audit" element={<ComingSoon title="Audit" />} />
