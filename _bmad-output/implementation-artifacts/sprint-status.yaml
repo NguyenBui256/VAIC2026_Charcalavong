@@ -56,7 +56,7 @@ development_status:
   1-2-multi-tenant-data-layer-postgres-rls: review
   1-3-auth-tenant-context-middleware: review
   1-4-core-ports-api-error-envelope: review
-  1-5-audit-sink-append-only-trail: backlog
+  1-5-audit-sink-append-only-trail: review
   1-6-model-layer-port-anthropic-adapter: backlog
   1-7-arq-background-job-foundation: review
   1-8-frontend-shell-design-tokens-login: backlog
