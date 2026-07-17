@@ -10,7 +10,15 @@ import { apiFetch } from "./api";
 
 export type AgentStatus = "draft" | "active";
 
-/** Mirrors the Story 2.1 Agent record shape. */
+/** Story 2.3 (AD-7) — provider + model + free-form parameter overrides,
+ * persisted as data on the Agent record. Empty object means "not configured". */
+export interface ModelRef {
+  provider: string;
+  model_name: string;
+  parameters: Record<string, unknown>;
+}
+
+/** Mirrors the Story 2.1/2.3 Agent record shape. */
 export interface Agent {
   id: string;
   tenant_id: string;
@@ -18,6 +26,7 @@ export interface Agent {
   owner_id: string;
   name: string;
   system_prompt: string;
+  model: ModelRef | Record<string, never>;
   status: AgentStatus;
   version: number;
   created_at: string;
@@ -41,6 +50,7 @@ export interface UpdateAgentInput {
   department_id?: string;
   system_prompt?: string;
   status?: AgentStatus;
+  model?: ModelRef;
 }
 
 function buildQuery(params: Record<string, string | undefined>): string {
@@ -73,4 +83,22 @@ export function updateAgent(id: string, patch: UpdateAgentInput): Promise<Agent>
     method: "PATCH",
     body: JSON.stringify(patch),
   });
+}
+
+/** Story 2.3 T1 — runtime provider/model catalog (`GET /agents/providers`).
+ * The frontend never hard-codes providers/models; it renders this (AD-7, FR-5). */
+export interface ProviderModel {
+  name: string;
+  context_window: number;
+}
+
+export interface ProviderCatalogEntry {
+  id: string;
+  label: string;
+  configured: boolean;
+  models: ProviderModel[];
+}
+
+export function listProviders(): Promise<ProviderCatalogEntry[]> {
+  return apiFetch<ProviderCatalogEntry[]>("/agents/providers");
 }

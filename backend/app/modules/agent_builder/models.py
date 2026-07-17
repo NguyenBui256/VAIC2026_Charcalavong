@@ -16,9 +16,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -53,6 +54,12 @@ class Agent(Base):
 
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     system_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    # Story 2.3 (AD-7): ModelRef {provider, model_name, parameters} as data.
+    # Empty dict means "not yet configured" -- never validated at write time
+    # beyond `provider` being a known id (AC9: unconfigured providers OK).
+    model: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default="{}"
+    )
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="draft", server_default="draft"
     )

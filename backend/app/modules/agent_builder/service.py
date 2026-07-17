@@ -12,17 +12,22 @@ never direct SQL/ORM to `audit_trail` (AC8).
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.adapters.audit_postgres import PostgresAuditSink
+from app.core.adapters.registry import select_llm_adapter
 from app.core.deps import crud_audit_ids
-from app.core.errors import AuthorizationError, NotFoundError
+from app.core.errors import AuthorizationError, NotFoundError, ValidationError
 from app.core.ids import utcnow_iso_ms, uuid7
+from app.core.model_catalog import KNOWN_PROVIDER_IDS
 from app.core.ports.audit import AuditEntry, AuditPort
+from app.core.ports.llm import CompletionResult, LlmPort, Message, ModelRef
 from app.core.tenant_context import tenant_context
 from app.modules.agent_builder.models import Agent
 
@@ -34,6 +39,7 @@ __all__ = [
     "update_agent",
     "soft_delete_agent",
     "serialize_agent",
+    "invoke_agent_model",
 ]
 
 
@@ -140,6 +146,27 @@ def _authorize_mutation(agent: Agent, principal: Principal) -> None:
     )
 
 
+def _validate_model_ref(value: dict[str, Any]) -> dict[str, Any]:
+    """Validate a `model` PATCH payload shape (T2.2, AC4).
+
+    `provider` must be a KNOWN provider id, but is NOT required to be
+    *configured* -- an unconfigured/placeholder provider is accepted at
+    config time (AC9); the failure surfaces at run time instead.
+    """
+    provider = value.get("provider")
+    if not isinstance(provider, str) or provider not in KNOWN_PROVIDER_IDS:
+        raise ValidationError(
+            f"Unknown provider '{provider}'", code="unknown_provider"
+        )
+    model_name = value.get("model_name")
+    if not isinstance(model_name, str) or not model_name.strip():
+        raise ValidationError("model_name is required", code="validation_error")
+    parameters = value.get("parameters", {})
+    if not isinstance(parameters, dict):
+        raise ValidationError("parameters must be an object", code="validation_error")
+    return {"provider": provider, "model_name": model_name, "parameters": parameters}
+
+
 def update_agent(
     session: Session,
     agent_id: uuid.UUID,
@@ -152,12 +179,15 @@ def update_agent(
     agent = get_agent(session, agent_id)
     _authorize_mutation(agent, principal)
 
-    allowed_fields = {"name", "system_prompt", "status", "department_id"}
+    allowed_fields = {"name", "system_prompt", "status", "department_id", "model"}
     applied: dict[str, object] = {}
     for key, value in changes.items():
-        if key in allowed_fields and value is not None:
-            setattr(agent, key, value)
-            applied[key] = value
+        if key not in allowed_fields or value is None:
+            continue
+        if key == "model":
+            value = _validate_model_ref(value)  # type: ignore[arg-type]
+        setattr(agent, key, value)
+        applied[key] = value
 
     agent.version += 1
     agent.updated_at = datetime.now(UTC)
@@ -198,8 +228,76 @@ def serialize_agent(agent: Agent) -> dict:
         "owner_id": str(agent.owner_id),
         "name": agent.name,
         "system_prompt": agent.system_prompt,
+        "model": agent.model or {},
         "status": agent.status,
         "version": agent.version,
         "created_at": agent.created_at.isoformat(timespec="milliseconds"),
         "updated_at": agent.updated_at.isoformat(timespec="milliseconds"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Run-time model invocation (Story 2.3 T3) — observable + isolated failures.
+#
+# Full Orchestrator run wiring is Epic 3; this only needs the run-time
+# failure path to be observable (audited) and isolated (AC9, AC10). Provider
+# selection goes through `select_llm_adapter` (core/adapters/registry.py) --
+# this module never imports a concrete adapter (Dev Notes anti-pattern #2).
+# ---------------------------------------------------------------------------
+
+
+def invoke_agent_model(
+    agent: Agent,
+    prompt: str,
+    *,
+    audit: AuditPort | None = None,
+    adapter_factory: Callable[[str], LlmPort] | None = None,
+) -> CompletionResult:
+    """Run the Agent's configured model on `prompt`.
+
+    On provider failure (missing key, NotImplementedError, etc.) this emits
+    one `model_invocation_failed` audit entry with a clear remediation
+    message (AC9) and RE-RAISES (AD-4: never swallow). Each call is
+    independently scoped -- one Agent's bad provider cannot affect another
+    Agent's invocation (AC10, FR-26).
+    """
+    factory = adapter_factory or select_llm_adapter
+    model_data = agent.model or {}
+    model_ref = ModelRef(
+        provider=model_data.get("provider", ""),
+        model_name=model_data.get("model_name", ""),
+        parameters=model_data.get("parameters", {}),
+    )
+    audit_port = audit or PostgresAuditSink()
+
+    try:
+        adapter = factory(model_ref.provider)
+        messages = [
+            Message(role="system", content=agent.system_prompt),
+            Message(role="user", content=prompt),
+        ]
+        return adapter.complete(messages, model_ref)
+    except Exception as exc:
+        run_id, step_id = crud_audit_ids(str(agent.id))
+        audit_port.log(
+            AuditEntry(
+                run_id=run_id,
+                step_id=step_id,
+                agent_id=str(agent.id),
+                ts=utcnow_iso_ms(),
+                type="model_invocation_failed",
+                input={"provider": model_ref.provider, "model": model_ref.model_name},
+                output={
+                    "error": str(exc),
+                    "message": (
+                        f"Provider '{model_ref.provider}' is unavailable: {exc} "
+                        f"Configure the '{model_ref.provider}' provider (API key "
+                        "/ adapter) or switch this Agent to a configured "
+                        "provider."
+                    ),
+                },
+                latency_ms=0,
+                model=model_ref.model_name,
+            )
+        )
+        raise

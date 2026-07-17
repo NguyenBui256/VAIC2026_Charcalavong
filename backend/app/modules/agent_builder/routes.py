@@ -18,6 +18,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_tenant_session
+from app.core.model_catalog import get_provider_catalog
+from app.core.settings import get_settings
 from app.modules.agent_builder.service import (
     Principal,
     create_agent,
@@ -46,6 +48,8 @@ class UpdateAgentRequest(BaseModel):
     system_prompt: str | None = Field(default=None, min_length=1)
     status: str | None = Field(default=None, min_length=1, max_length=32)
     department_id: uuid.UUID | None = None
+    # Story 2.3 (AD-7): ModelRef {provider, model_name, parameters} as data.
+    model: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +92,20 @@ def create_agent_route(
         system_prompt=body.system_prompt,
     )
     return JSONResponse(status_code=201, content=_ok(serialize_agent(agent)))
+
+
+@router.get("/providers")
+def list_providers_route() -> JSONResponse:
+    """GET /agents/providers — runtime provider/model catalog (T1, AC1, AC2).
+
+    Registered before `/{agent_id}` so "providers" is never parsed as an
+    agent id. `configured` reflects `Settings` only -- no live API calls.
+    """
+    catalog = get_provider_catalog(get_settings())
+    return JSONResponse(
+        status_code=200,
+        content=_ok([p.model_dump() for p in catalog]),
+    )
 
 
 @router.get("/{agent_id}")

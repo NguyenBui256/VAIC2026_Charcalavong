@@ -39,7 +39,10 @@ export default function AgentDetailShell({ agentId }: AgentDetailShellProps) {
     : DEFAULT_TAB;
 
   const [isIdentityDirty, setIsIdentityDirty] = useState(false);
-  const { guardedNavigate, confirmProps } = useUnsavedChangesGuard(isIdentityDirty);
+  const [isModelDirty, setIsModelDirty] = useState(false);
+  const [isPromptDirty, setIsPromptDirty] = useState(false);
+  const isAnyTabDirty = isIdentityDirty || isModelDirty || isPromptDirty;
+  const { guardedNavigate, confirmProps } = useUnsavedChangesGuard(isAnyTabDirty);
 
   const { query, data: agent, isLoading, isError } = useAgent(isNew ? undefined : agentId);
 
@@ -121,7 +124,9 @@ export default function AgentDetailShell({ agentId }: AgentDetailShellProps) {
                 data-testid={`vaic-tab-${tab.key}`}
               >
                 {tab.label}
-                {tab.key === "identity" && isIdentityDirty && (
+                {((tab.key === "identity" && isIdentityDirty) ||
+                  (tab.key === "model" && isModelDirty) ||
+                  (tab.key === "prompt" && isPromptDirty)) && (
                   <span
                     className="vaic-dirty-dot"
                     aria-label="Unsaved changes"
@@ -145,8 +150,22 @@ export default function AgentDetailShell({ agentId }: AgentDetailShellProps) {
             {activeTab === "knowledge-base" && <KnowledgeBaseTab />}
             {activeTab === "tools" && <ToolsTab />}
             {activeTab === "api-integrations" && <ApiIntegrationsTab />}
-            {activeTab === "prompt" && <PromptTab />}
-            {activeTab === "model" && <ModelTab />}
+            {activeTab === "prompt" && (
+              <PromptTab
+                agentId={agentId}
+                isNew={isNew}
+                agent={agent}
+                onDirtyChange={setIsPromptDirty}
+              />
+            )}
+            {activeTab === "model" && (
+              <ModelTab
+                agentId={agentId}
+                isNew={isNew}
+                agent={agent}
+                onDirtyChange={setIsModelDirty}
+              />
+            )}
           </div>
         </>
       )}
@@ -154,7 +173,7 @@ export default function AgentDetailShell({ agentId }: AgentDetailShellProps) {
       <ConfirmDialog
         {...confirmProps}
         title="Discard unsaved changes?"
-        body="You have unsaved changes on the Identity tab. Leaving now will discard them."
+        body="You have unsaved changes. Leaving now will discard them."
         confirmLabel="Discard"
         cancelLabel="Keep editing"
       />

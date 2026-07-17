@@ -214,3 +214,24 @@
   font-size: var(--text-small);
   margin-bottom: var(--space-3);
 }
+
+/* ────────────────────────────────────────────────────────────────────
+ * Prompt tab — directive highlight overlay + context-window warning
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-inline-alert-warning {
+  background: var(--color-pending-soft);
+  color: var(--color-pending);
+}
+
+.vaic-prompt-directive {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  border-radius: 3px;
+}
+
+.vaic-prompt-highlight-overlay {
+  font-size: var(--text-body);
+  line-height: 1.5;
+}
+
