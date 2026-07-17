@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from app.core.adapters.audit_postgres import PostgresAuditSink
 from app.core.crypto import decrypt_secret, encrypt_secret, mask_secret
 from app.core.deps import crud_audit_ids
-from app.core.errors import NotFoundError
+from app.core.errors import NotFoundError, ValidationError
 from app.core.ids import utcnow_iso_ms, uuid7
 from app.core.ports.audit import AuditEntry, AuditPort
 from app.core.tenant_context import tenant_context
@@ -181,7 +181,14 @@ def serialize_integration(integration: ApiIntegration) -> dict:
     try:
         plaintext = decrypt_secret(integration.auth_header_encrypted)
         masked = mask_secret(plaintext)
-    except Exception:  # noqa: BLE001 -- never let a decrypt failure leak into a 500 here
+    except ValidationError as exc:
+        # Only the ciphertext-specific decrypt failure gets the masked
+        # fallback (a legitimately undecryptable stored value should still
+        # render a row). A misconfigured/missing VAIC_ENCRYPTION_KEY is a
+        # deployment error, not a per-row data issue — it must fail loud
+        # rather than silently rendering "••••" for every integration.
+        if exc.code != "decryption_failed":
+            raise
         masked = "••••"
     return {
         "id": str(integration.id),
