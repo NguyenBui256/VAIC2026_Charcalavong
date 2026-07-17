@@ -1,0 +1,172 @@
+/* UX-DR2 — Global typography + base styles.
+ * Imports fonts, sets base typography scale, establishes reset conventions.
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
+@import "./tokens.css";
+
+/* ── Reset ────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 14px; /* pro-tool density (design-system.md §3) */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* ── Typography classes ───────────────────────────────────────────── */
+.text-display {
+  font-size: var(--text-display);
+  line-height: var(--leading-display);
+  font-weight: 700;
+  letter-spacing: var(--tracking-display);
+}
+
+.text-h1 {
+  font-size: var(--text-h1);
+  line-height: var(--leading-h1);
+  font-weight: 700;
+  letter-spacing: var(--tracking-h1);
+}
+
+.text-h2 {
+  font-size: var(--text-h2);
+  line-height: var(--leading-h2);
+  font-weight: 600;
+  letter-spacing: var(--tracking-h2);
+}
+
+.text-h3 {
+  font-size: var(--text-h3);
+  line-height: var(--leading-h3);
+  font-weight: 600;
+}
+
+.text-body {
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  font-weight: 400;
+}
+
+.text-body-strong {
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  font-weight: 600;
+}
+
+.text-small {
+  font-size: var(--text-small);
+  line-height: var(--leading-small);
+  font-weight: 400;
+}
+
+.text-caption {
+  font-size: var(--text-caption);
+  line-height: var(--leading-caption);
+  font-weight: 500;
+  letter-spacing: var(--tracking-caption);
+}
+
+.font-mono,
+.text-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  line-height: var(--leading-small);
+  font-weight: 400;
+}
+
+.text-mono-small {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-small);
+  line-height: 18px;
+  font-weight: 400;
+}
+
+/* ── Tabular figures for all numeric data ─────────────────────────── */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Focus visibility ─────────────────────────────────────────────── */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ── Links ────────────────────────────────────────────────────────── */
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--color-primary-hover);
+}
+
+/* ── Buttons base ─────────────────────────────────────────────────── */
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ── Form elements ────────────────────────────────────────────────── */
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: var(--text-body);
+}
+
+/* ── Reduced motion ───────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Scrollbar (subtle, desktop-pro) ──────────────────────────────── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-tertiary);
+}
