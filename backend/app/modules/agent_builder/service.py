@@ -36,6 +36,7 @@ __all__ = [
     "create_agent",
     "get_agent",
     "list_agents",
+    "list_routable_agents",
     "update_agent",
     "soft_delete_agent",
     "serialize_agent",
@@ -129,6 +130,19 @@ def list_agents(
     if department_id is not None:
         stmt = stmt.where(Agent.department_id == department_id)
     return list(session.execute(stmt).scalars().all())
+
+
+def list_routable_agents(session: Session) -> list[dict]:
+    """Public routing candidates for the Orchestrator (AD-1: service, not model access)."""
+    return [
+        {
+            "id": str(a.id),
+            "name": a.name,
+            "department_id": str(a.department_id),
+            "system_prompt": a.system_prompt,
+        }
+        for a in list_agents(session)
+    ]
 
 
 def _authorize_mutation(agent: Agent, principal: Principal) -> None:
