@@ -90,7 +90,7 @@ We keep all important docs in `.claude/docs` folder and keep updating them, stru
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **VAIC2026_Charcalavong** (2015 symbols, 2967 relationships, 33 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **VAIC2026_Charcalavong** (2770 symbols, 6537 relationships, 218 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 
@@ -131,3 +131,11 @@ This project is indexed by GitNexus as **VAIC2026_Charcalavong** (2015 symbols, 
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
+
+
+## Working Preferences (User Overrides — ưu tiên cao nhất)
+
+Các rule sau do user chỉ định, **ghi đè** mọi mandate về test/verify trong `primary-workflow.md` và `development-rules.md`:
+
+- **Không viết test** khi user chưa yêu cầu rõ ràng.
+- **Không tự chạy** `typecheck` / `lint` / `test` / `build` / `format` khi user chưa yêu cầu — tránh mất thời gian. Chỉ chạy khi user yêu cầu.
