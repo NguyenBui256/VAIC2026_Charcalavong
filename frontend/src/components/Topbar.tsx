@@ -10,9 +10,11 @@ import {
   Bell,
   LogOut,
   User as UserIcon,
+  Search,
 } from "lucide-react";
 import type { AuthUser } from "../lib/auth";
 import ThemeToggle from "./ThemeToggle";
+import { useCommandPalette } from "../hooks/useCommandPalette";
 
 interface TopbarProps {
   user: AuthUser | null;
@@ -140,6 +142,13 @@ const menuItemStyle: React.CSSProperties = {
 export default function Topbar({ user, onLogout }: TopbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { openPalette } = useCommandPalette();
+
+  // Detect platform to render the right shortcut hint (Cmd vs Ctrl).
+  const isMac =
+    typeof navigator !== "undefined" &&
+    /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
+  const shortcutLabel = isMac ? "Cmd K" : "Ctrl K";
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -174,6 +183,28 @@ export default function Topbar({ user, onLogout }: TopbarProps) {
 
       {/* Right: Run + Bell + Theme + Avatar */}
       <div style={rightSection}>
+        <button
+          type="button"
+          onClick={openPalette}
+          aria-label="Open command palette"
+          title="Open command palette (Cmd+K)"
+          data-testid="vaic-cmdk-hint"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "var(--space-2)",
+            padding: "6px var(--space-3)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-control)",
+            background: "var(--color-surface-muted)",
+            color: "var(--color-text-tertiary)",
+            fontSize: "var(--text-small)",
+          }}
+        >
+          <Search size={14} strokeWidth={1.5} />
+          <span style={{ fontWeight: 500 }}>{shortcutLabel}</span>
+        </button>
+
         <button type="button" className="vaic-run-button" style={runButtonStyle}>
           <Play size={14} strokeWidth={2} fill="currentColor" />
           <span>Run</span>

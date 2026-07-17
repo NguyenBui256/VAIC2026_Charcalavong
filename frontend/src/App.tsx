@@ -1,13 +1,18 @@
 /* Story 1.8 — App router with auth guard.
  * Unauthenticated users → /login. Authenticated → AppShell with nested routes.
+ *
+ * Story 1.11 — Cmd+K command palette wired at root via CommandPaletteProvider.
  */
 
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import type { ReactNode } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { useEffect, type ReactNode } from "react";
 import AppShell from "./components/AppShell";
 import LoginPage from "./routes/login";
 import DashboardPage from "./routes/dashboard";
 import { isAuthenticated } from "./lib/auth";
+import { CommandPaletteProvider } from "./components/CommandPalette/CommandPaletteContext";
+import CommandPalette from "./components/CommandPalette/CommandPalette";
+import { registerNavigationCommands } from "./components/CommandPalette/navigationCommands";
 
 /** Auth guard: redirects to /login if no token. */
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -59,10 +64,27 @@ export function AppRoutes() {
   );
 }
 
+/**
+ * Invisible component that registers navigation commands into the
+ * command-registry on mount. Must be inside Router context.
+ */
+function CommandPaletteRegistrations() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const unregister = registerNavigationCommands((path) => navigate(path));
+    return unregister;
+  }, [navigate]);
+  return null;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
-      <AppRoutes />
+      <CommandPaletteProvider>
+        <AppRoutes />
+        <CommandPaletteRegistrations />
+        <CommandPalette />
+      </CommandPaletteProvider>
     </BrowserRouter>
   );
 }
