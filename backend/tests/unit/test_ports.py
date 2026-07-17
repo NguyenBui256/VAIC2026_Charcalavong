@@ -230,6 +230,53 @@ def test_sandbox_port_structural_compliance() -> None:
     assert isinstance(FakeSandbox(), SandboxPort)
 
 
+# -- AgentProviderPort (Story 2.5, deferred from 1.4) ------------------------
+
+def test_agent_provider_port_is_protocol() -> None:
+    """AgentProviderPort is a Protocol."""
+    from app.core.ports.agent_provider import AgentProviderPort
+
+    assert _is_protocol(AgentProviderPort)
+
+
+def test_agent_provider_port_has_retrieve_method() -> None:
+    """AgentProviderPort declares `retrieve`."""
+    from app.core.ports.agent_provider import AgentProviderPort
+
+    assert hasattr(AgentProviderPort, "retrieve")
+    assert callable(AgentProviderPort.retrieve)
+
+
+def test_agent_provider_port_retrieve_requires_tenant_and_department() -> None:
+    """`retrieve` carries the AD-11 keyword-only tenant_id + department_id."""
+    from app.core.ports.agent_provider import AgentProviderPort
+
+    sig = inspect.signature(AgentProviderPort.retrieve)
+    params = set(sig.parameters.keys())
+    assert "tenant_id" in params
+    assert "department_id" in params
+
+
+def test_agent_provider_port_structural_compliance() -> None:
+    """A fake implementing `retrieve()` satisfies `isinstance(fake, AgentProviderPort)`."""
+    from app.core.ports.agent_provider import AgentProviderPort
+
+    class FakeAgentProvider:
+        async def retrieve(  # noqa: ANN001
+            self, agent_id, query, *, tenant_id, department_id, top_k=5
+        ): ...
+
+    assert isinstance(FakeAgentProvider(), AgentProviderPort)
+
+
+def test_retrieval_passage_model_has_exact_fields() -> None:
+    """RetrievalPassage exposes exactly {passage, document_name, chunk_reference, score} (AC3)."""
+    from app.core.ports.agent_provider import RetrievalPassage
+
+    fields = RetrievalPassage.model_fields
+    assert set(fields.keys()) == {"passage", "document_name", "chunk_reference", "score"}
+
+
 # -- Protocol models ---------------------------------------------------------
 
 def test_llm_message_model_exists() -> None:
