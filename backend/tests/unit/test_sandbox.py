@@ -174,3 +174,79 @@ def test_ctypes_import_blocked() -> None:
     result = SubprocessSandbox().run(code, timeout_s=5, memory_mb=64)
     assert not result.timed_out
     assert result.output.get("blocked") is True
+
+
+def test_harness_globals_not_leaked_to_user_code() -> None:
+    """User code's globals() contains NO `__vaic_*` harness internals.
+
+    The prelude runs in a separate namespace; user code is exec'd in a fresh
+    globals dict, so harness internals (esp. the trusted `__vaic_socket`
+    module) are unreachable by plain global-name reference (bypass #6).
+    """
+    code = (
+        "import json\n"
+        "leaked = sorted(n for n in globals() if n.startswith('__vaic'))\n"
+        "print(json.dumps({'leaked': leaked}))\n"
+    )
+    result = SubprocessSandbox().run(code, timeout_s=5, memory_mb=64)
+    assert not result.timed_out
+    assert result.output.get("leaked") == []
+
+
+def test_trusted_socket_global_leak_is_dead() -> None:
+    """The exact live-egress repro via `__vaic_socket._socket` must NameError.
+
+    Previously the harness's trusted pre-patch `socket` module leaked as the
+    global `__vaic_socket`, and `__vaic_socket._socket` was the real unpatched
+    C-extension -- a confirmed live network escape. With namespace isolation
+    there is no such name to reach (bypass #6).
+    """
+    code = (
+        "import json\n"
+        "try:\n"
+        "    raw = __vaic_socket._socket\n"
+        "    s = raw.socket(raw.AF_INET, raw.SOCK_STREAM)\n"
+        "    s.connect(('127.0.0.1', 9))\n"
+        "    print(json.dumps({'blocked': False}))\n"
+        "except NameError as exc:\n"
+        "    print(json.dumps({'blocked': True, 'kind': 'NameError', 'error': str(exc)}))\n"
+        "except Exception as exc:\n"
+        "    print(json.dumps({'blocked': True, 'kind': type(exc).__name__, 'error': str(exc)}))\n"
+    )
+    result = SubprocessSandbox().run(code, timeout_s=5, memory_mb=64)
+    assert not result.timed_out
+    assert result.output.get("blocked") is True
+    assert result.output.get("kind") == "NameError"
+
+
+def test_socket_dunder_underscore_via_import_blocked() -> None:
+    """Reaching `socket._socket` via any import path is blocked (bypass #6)."""
+    code = (
+        "import json\n"
+        "try:\n"
+        "    socket = __import__('socket')\n"
+        "    raw = socket._socket\n"
+        "    s = raw.socket(raw.AF_INET, raw.SOCK_STREAM)\n"
+        "    s.connect(('127.0.0.1', 9))\n"
+        "    print(json.dumps({'blocked': False}))\n"
+        "except Exception as exc:\n"
+        "    print(json.dumps({'blocked': True, 'error': str(exc)}))\n"
+    )
+    result = SubprocessSandbox().run(code, timeout_s=5, memory_mb=64)
+    assert not result.timed_out
+    assert result.output.get("blocked") is True
+
+
+def test_gc_import_blocked() -> None:
+    """`import gc` is blocked (belt-and-suspenders vs object-graph resurrection)."""
+    code = (
+        "import json\n"
+        "try:\n"
+        "    import gc\n"
+        "    print(json.dumps({'blocked': False}))\n"
+        "except Exception as exc:\n"
+        "    print(json.dumps({'blocked': True, 'error': str(exc)}))\n"
+    )
+    result = SubprocessSandbox().run(code, timeout_s=5, memory_mb=64)
+    assert not result.timed_out
+    assert result.output.get("blocked") is True

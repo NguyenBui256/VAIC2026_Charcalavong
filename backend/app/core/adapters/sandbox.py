@@ -45,10 +45,28 @@ What this harness DOES do, best-effort:
        on Windows and a secondary belt-and-suspenders check on POSIX.
 - **stdin in / stdout out only** — the Tool's input is written to the
   child's stdin; `SandboxResult.output` is parsed from stdout as JSON.
+- **Harness/user namespace isolation** — the harness prelude runs in its own
+  scope; the Tool's source is exec'd in a FRESH globals dict holding only a
+  locked-down `__builtins__` and `__name__`. No `__vaic_*` harness internal
+  (and no trusted pre-patch module object — e.g. the `socket` module and its
+  real `_socket` C-extension) is reachable from user code by global name.
+  This closes a confirmed live-egress escape where those internals leaked as
+  plain globals when prelude + user code shared one `__main__` namespace.
+
+RESIDUAL RISK (still real — this is best-effort, NOT a hard boundary):
+Namespace isolation and import blocking remove the *easy* named-reference
+escapes, but a determined author can still attempt to reach blocked
+functionality through pure-Python object-graph introspection — e.g. walking
+`object.__subclasses__()` / frame or traceback objects to rediscover an
+already-loaded dangerous class. `gc` is now blocked to raise the bar against
+object resurrection, but such introspection is not fully preventable at the
+language level. Genuinely untrusted code REQUIRES OS-level isolation (see
+below); treat embedded-Python Tools as semi-trusted, builder-authored code.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import subprocess
@@ -86,6 +104,7 @@ _BLOCKED_MODULES = frozenset(
         "subprocess", "multiprocessing", "os", "shutil", "ctypes", "_ctypes",
         "socketserver", "xmlrpc", "webbrowser",
         "importlib", "pkgutil", "runpy", "zipimport",
+        "gc",
     }
 )
 
@@ -158,14 +177,40 @@ __vaic_builtins.open = __vaic_blocked
 # filesystem read/write remains reachable via `io.open(...)`.
 import io as __vaic_io
 __vaic_io.open = __vaic_blocked
+"""
 
-# --- Tool source begins ---
+
+# Isolated-execution footer. Runs the Tool's source in a FRESH globals dict
+# that contains ONLY a locked-down `__builtins__` (the same in-place-patched
+# `builtins` module the prelude hardened) and `__name__`. None of the
+# `__vaic_*` harness internals -- crucially the trusted pre-patch `socket`
+# module bound to `__vaic_socket`, whose `._socket` was the real unpatched
+# C-extension -- are reachable from user code by any global name. This closes
+# the global-leak network escape that existed when prelude + user code shared
+# one `__main__` namespace.
+#
+# The user source is carried as a base64 blob (assigned by `_build_script`
+# between prelude and footer) so no user content is interpolated into any
+# f-string. Not an f-string here -> `{}` are literal dict syntax.
+_HARNESS_EXEC_FOOTER = """
+__vaic_user_source = __vaic_base64.b64decode(__vaic_user_code_b64).decode("utf-8")
+__vaic_user_globals = {"__name__": "__main__", "__builtins__": __vaic_builtins}
+exec(compile(__vaic_user_source, "<tool>", "exec"), __vaic_user_globals)
 """
 
 
 def _build_script(code: str) -> str:
-    """Wrap the Tool's embedded Python with the restricted-builtins harness."""
-    return _HARNESS_PRELUDE + "\n" + code
+    """Wrap the Tool's embedded Python with the restricted-builtins harness.
+
+    The Tool's source is base64-encoded and exec'd in a separate globals dict
+    (see `_HARNESS_EXEC_FOOTER`) so harness internals never leak to user code.
+    """
+    encoded = base64.b64encode(code.encode("utf-8")).decode("ascii")
+    user_code_line = (
+        "\nimport base64 as __vaic_base64\n"
+        f"__vaic_user_code_b64 = {encoded!r}\n"
+    )
+    return _HARNESS_PRELUDE + user_code_line + _HARNESS_EXEC_FOOTER
 
 
 def _posix_preexec(memory_mb: int, timeout_s: int):  # noqa: ANN202
