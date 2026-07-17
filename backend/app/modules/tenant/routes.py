@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import AuthError, create_access_token, decode_access_token
 from app.core.db import AdminSessionLocal, SessionLocal
+from app.core.deps import get_tenant_session
 from app.core.settings import get_settings
 from app.core.tenant_context import set_tenant_session_var, tenant_context
 from app.modules.tenant.models import User
@@ -96,24 +97,6 @@ def _assume_app_role(session: Session) -> None:
     app_role = get_settings().app_db_role
     if app_role:
         session.execute(text(f"SET LOCAL ROLE {app_role}"))
-
-
-def get_tenant_session() -> Session:
-    """Protected-endpoint dependency.
-
-    Opens a runtime-engine session and sets `app.tenant_id` from the
-    contextvar that AuthMiddleware populated. Downstream ORM/raw SQL
-    queries are then subject to RLS automatically.
-
-    Raises AuthError if no tenant context is set — defensive guard.
-    """
-    tenant_id = tenant_context.get()
-    if tenant_id is None:
-        raise AuthError("No tenant context on protected path")
-    with SessionLocal() as s:
-        _assume_app_role(s)
-        set_tenant_session_var(s, tenant_id)
-        yield s
 
 
 # ---------------------------------------------------------------------------
