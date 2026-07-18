@@ -20,6 +20,9 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_tenant_session
 from app.core.model_catalog import get_provider_catalog
 from app.core.settings import get_settings
+from app.modules.agent_builder.agent_kb_service import (
+    attach_agent_document, detach_agent_document, list_agent_documents,
+)
 from app.modules.agent_builder.integration_client import test_integration as run_test_integration
 from app.modules.agent_builder.integration_service import (
     create_integration,
@@ -28,6 +31,8 @@ from app.modules.agent_builder.integration_service import (
     soft_delete_integration,
     update_integration,
 )
+from app.modules.agent_builder.kb_grants_service import effective_role as kb_effective_role
+from app.modules.agent_builder.kb_service import serialize_document as serialize_kb_document
 from app.modules.agent_builder.service import (
     Principal,
     create_agent,
@@ -232,6 +237,50 @@ def detach_agent_tool_route(
     """DELETE /agents/{id}/tools/{tool_id} — remove a tool reference."""
     detach_agent_tool(session, agent_id=agent_id, tool_id=tool_id, principal=_principal(request))
     return JSONResponse(status_code=200, content=_ok({"agent_id": str(agent_id), "tool_id": str(tool_id)}))
+
+
+# ---------------------------------------------------------------------------
+# Agent -> KB document grants (the tick) (Sub-project A)
+# ---------------------------------------------------------------------------
+
+class AttachDocRequest(BaseModel):
+    document_id: uuid.UUID
+
+
+@router.get("/{agent_id}/kb-documents")
+def list_agent_kb_docs_route(
+    agent_id: uuid.UUID,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    principal = _principal(request)
+    docs = list_agent_documents(session, agent_id=agent_id)
+    return JSONResponse(status_code=200, content=_ok([
+        serialize_kb_document(d, effective_role=kb_effective_role(session, d, principal.user_id))
+        for d in docs
+    ]))
+
+
+@router.post("/{agent_id}/kb-documents")
+def attach_agent_kb_doc_route(
+    agent_id: uuid.UUID,
+    body: AttachDocRequest,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    attach_agent_document(session, agent_id=agent_id, document_id=body.document_id, principal=_principal(request))
+    return JSONResponse(status_code=201, content=_ok({"agent_id": str(agent_id), "document_id": str(body.document_id)}))
+
+
+@router.delete("/{agent_id}/kb-documents/{document_id}")
+def detach_agent_kb_doc_route(
+    agent_id: uuid.UUID,
+    document_id: uuid.UUID,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    detach_agent_document(session, agent_id=agent_id, document_id=document_id, principal=_principal(request))
+    return JSONResponse(status_code=200, content=_ok({"agent_id": str(agent_id), "document_id": str(document_id)}))
 
 
 # ---------------------------------------------------------------------------
