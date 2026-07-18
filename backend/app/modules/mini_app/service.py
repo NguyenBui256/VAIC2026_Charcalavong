@@ -29,9 +29,27 @@ from app.modules.mini_app.schemas import EntitySchema, UiSpec
 from app.modules.mini_app.visibility import MiniAppPrincipal
 
 
-def _emit_row_change(app_id: uuid.UUID, event_type: str, payload: dict[str, Any]) -> None:
-    """Seam for FR-17 App Event emission (Epic 5). Intentional no-op now."""
-    return None
+def _emit_row_change(
+    session: Session, app: MiniApp, event_type: str, payload: dict[str, Any]
+) -> None:
+    """FR-17 App Event emission — write the action-event outbox (Actions/Events).
+
+    Best-effort: the row is already committed by the caller; we append an
+    `action_events` row (its own short commit). Import is function-local to keep
+    the mini_app module decoupled from the action module at import time.
+    """
+    from app.modules.action.emit import emit_action_event
+
+    row_id = payload.get("row_id")
+    emit_action_event(
+        session,
+        tenant_id=app.tenant_id,
+        app_id=app.id,
+        database_id=app.database_id,
+        event_type=event_type,
+        row_id=uuid.UUID(row_id) if row_id else None,
+        payload=payload,
+    )
 
 
 def _audit(entity_id: uuid.UUID, event_type: str, detail: dict[str, Any]) -> None:
@@ -110,7 +128,7 @@ def create_row(session: Session, app: MiniApp, principal: MiniAppPrincipal, data
     session.add(row)
     session.commit()
     session.refresh(row)
-    _emit_row_change(app.id, "row.created", {"row_id": str(row.id)})
+    _emit_row_change(session, app, "row.created", {"row_id": str(row.id), "data": coerced})
     return row
 
 
@@ -152,7 +170,7 @@ def update_row(
         raise ConflictError("row was modified concurrently (updated_at mismatch)")
     session.commit()
     row = session.get(MiniAppRow, row_id)
-    _emit_row_change(app.id, "row.updated", {"row_id": str(row_id)})
+    _emit_row_change(session, app, "row.updated", {"row_id": str(row_id), "data": coerced})
     return row
 
 
@@ -160,7 +178,7 @@ def delete_row(session: Session, app: MiniApp, row_id: uuid.UUID) -> None:
     row = get_row(session, app, row_id)
     session.delete(row)
     session.commit()
-    _emit_row_change(app.id, "row.deleted", {"row_id": str(row_id)})
+    _emit_row_change(session, app, "row.deleted", {"row_id": str(row_id)})
 
 
 def datetime_now() -> datetime:
