@@ -1,9 +1,9 @@
 /* 3D — custom React Flow node: label + bound-agent name + gated badge + approvers. */
-import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import type { RFNodeData } from "../../../lib/graphEditorState";
+import { Handle, Position, type NodeProps } from "@xyflow/react";
+import type { RFNode } from "../../../lib/graphEditorState";
 import ApproverAvatars from "./ApproverAvatars";
 
-export default function AgentNode({ data, selected }: NodeProps<Node<RFNodeData>>) {
+export default function AgentNode({ data, selected }: NodeProps<RFNode>) {
   const approvers = data.approverUserIds ?? [];
   const gated = approvers.length > 0;
   return (
