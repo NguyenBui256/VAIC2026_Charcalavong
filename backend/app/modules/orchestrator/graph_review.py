@@ -53,6 +53,11 @@ def _get_node(
             RunNodeExecution.run_id == uuid.UUID(str(run_id)),
             RunNodeExecution.node_key == node_key,
         )
+        # Session uses expire_on_commit=False and mutations here are raw-SQL
+        # CAS commits that never expire the identity map, so without this the
+        # row would come back stale after a decision commits (mirrors
+        # graph_engine._load_node_execs).
+        .execution_options(populate_existing=True)
         .first()
     )
     if row is None:
@@ -155,7 +160,12 @@ def _cas_or_conflict(
     cols.pop("decided_at", None)
     _reassert_rls(session)
     won = transition_node_status(
-        session, node_id, from_status=from_status, to_status=to_status, extra_cols=cols
+        session,
+        node_id,
+        from_status=from_status,
+        to_status=to_status,
+        extra_cols=cols,
+        extra_where="decision IS NULL",
     )
     if not won:
         raise ReviewError(409, "node already decided")
@@ -216,6 +226,7 @@ def _do_reject(
     _audit_decision(session, run_id, row.node_key, "reject", actor_user_id)
 
     # Auto target parent (no approvers) -> auto-accept inline.
+    _reassert_rls(session)
     target_row = _get_node(session, run_id, target_node_key)
     if not (target_row.approver_user_ids or []):
         _reassert_rls(session)
@@ -375,11 +386,13 @@ def list_run_nodes(session: Session, run_id: uuid.UUID | str) -> dict[str, Any]:
     rows = (
         session.query(RunNodeExecution)
         .filter(RunNodeExecution.run_id == uuid.UUID(str(run_id)))
+        .execution_options(populate_existing=True)
         .all()
     )
     reqs = (
         session.query(RunRollbackRequest)
         .filter(RunRollbackRequest.run_id == uuid.UUID(str(run_id)))
+        .execution_options(populate_existing=True)
         .all()
     )
 
