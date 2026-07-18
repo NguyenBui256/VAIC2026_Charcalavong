@@ -1,9 +1,13 @@
-"""Minimal demo-tenant seed script (Story 1.12 — Bootstrap Lite).
+"""Demo-tenant seed script (Story 1.12 "Bootstrap Lite" + Epic 7 extension).
 
 Idempotently provisions one demo Tenant ("SHB Demo") with:
-- 2 Departments (Credit, Operations)
+- 3 Departments (Credit, Legal/Compliance, Operations)
 - 3 Users across roles (builder, manager, operator) with Argon2-hashed passwords
 - A 32-byte hex audit_key_id on the Tenant
+- 3 Specialist Agents (Credit/Compliance/Operations Analyst), each with a
+  Model selection + 1 embedded-Python Tool (§A6/§A8) — see
+  `bootstrap_demo_agents_workflow.py` / `demo_agent_specs.py`
+- 1 Workflow ("Business Loan Pre-Screen") ready to Run
 
 Usage::
 
@@ -14,16 +18,15 @@ Usage::
 
 The script connects via `AdminSessionLocal` (BYPASSRLS-capable) because it runs
 before any tenant context exists. It uses a find-or-create pattern keyed on the
-Tenant name and user email so that repeated runs produce no duplicate rows.
+Tenant name, user email, Agent/Tool/Workflow name so that repeated runs
+produce no duplicate rows.
 
-Scope note (FR-28 / §A8): the full demo tenant spec also calls for ≥1
-pre-configured Workflow. The `workflows` table does not exist yet — Story 3.1
-creates it. This script logs a deferred-work message at the end instead of
-attempting to seed a non-existent table. When Story 3.1 lands, extend
-`_seed_workflow()` (or add a new step) to insert the pre-configured workflow.
+KB seeding (§A8 "seeded from sample policy PDFs") is intentionally SKIPPED —
+see `bootstrap_demo_agents_workflow.py` module docstring for why.
 
 References:
-- PRD §A8 (Bootstrapping the Demo Tenant)
+- PRD §A6 (Orchestrator Decomposition example), §A8 (Bootstrapping the Demo
+  Tenant)
 - FR-28 (Tenant bootstrapping — demo-ready)
 - epics.md Story 1.12 ACs
 """
@@ -51,6 +54,7 @@ from sqlalchemy import select  # noqa: E402
 from app.core.auth import hash_password  # noqa: E402
 from app.core.db import AdminSessionLocal  # noqa: E402
 from app.modules.tenant.models import Department, Tenant, User  # noqa: E402
+from scripts.bootstrap_demo_agents_workflow import seed_agents_tools_workflow  # noqa: E402
 
 __all__ = [
     "DEFAULT_PASSWORD",
@@ -74,7 +78,7 @@ _SEED_USERS: tuple[tuple[str, str, str], ...] = (
     ("ops_agent@shbdemo.vaic", "operator", "Operations"),
 )
 
-DEPARTMENTS: tuple[str, ...] = ("Credit", "Operations")
+DEPARTMENTS: tuple[str, ...] = ("Credit", "Legal/Compliance", "Operations")
 
 
 # ---------------------------------------------------------------------------
@@ -98,22 +102,31 @@ def bootstrap_demo_tenant() -> dict[str, Any]:
         tenant, tenant_created = _upsert_tenant(session)
         departments, depts_created = _upsert_departments(session, tenant)
         users, users_created = _upsert_users(session, tenant, departments)
-
         session.commit()
+
+        builder_user = next(u for u in users if u.role == "builder")
+        awt_result = seed_agents_tools_workflow(
+            session,
+            tenant_id=tenant.id,
+            departments=departments,
+            builder_user=builder_user,
+        )
 
     _print_summary(
         tenant, departments, users, tenant_created, depts_created, users_created
     )
-    _print_workflow_deferral()
 
     return {
         "tenant": tenant,
         "departments": departments,
         "users": users,
+        "agents": awt_result["agents"],
+        "workflow": awt_result["workflow"],
         "created": {
             "tenant": tenant_created,
             "departments": depts_created,
             "users": users_created,
+            **awt_result["created"],
         },
     }
 
@@ -256,21 +269,6 @@ def _print_summary(
     for u in users:
         print(f"    email: {u.email}")
     print("=" * 72)
-
-
-def _print_workflow_deferral() -> None:
-    """Log that workflow seeding is deferred to Story 3.1.
-
-    FR-28 / §A8 require at least one pre-configured Workflow ready to Run.
-    The `workflows` table does not exist yet — Story 3.1 creates it. This
-    script logs the deferral so the demo operator knows the gap.
-    """
-    print()
-    print(
-        "[bootstrap] NOTE: Workflow seeding deferred — the `workflows` table "
-        "is created by Story 3.1. Re-run this script after Story 3.1 lands "
-        "to seed the pre-configured 'Business Loan Pre-Screen' workflow."
-    )
 
 
 # ---------------------------------------------------------------------------
