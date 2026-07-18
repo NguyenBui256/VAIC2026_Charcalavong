@@ -233,6 +233,24 @@ class AuthMiddleware(BaseHTTPMiddleware):
         request.state.scope = claims.get("scope")
         request.state.miniapp_id = claims.get("miniapp_id")
 
+        # Global deny-by-default for scoped Mini-App tokens (story 4-6 /
+        # security review Task 13). A `miniapp:rows` token is a valid
+        # platform JWT (carries user_id/tenant_id/role), so without this
+        # check it would be accepted on every protected route. Restrict it
+        # to only its own app's rows endpoints; everything else is 403.
+        # Normal tokens (`scope` is None) are completely unaffected.
+        scope = claims.get("scope")
+        if scope == "miniapp:rows":
+            miniapp_id = claims.get("miniapp_id")
+            allowed_prefix = f"/apps/{miniapp_id}/rows"
+            if not miniapp_id or not (
+                path == allowed_prefix or path.startswith(allowed_prefix + "/")
+            ):
+                reset_tenant_context()
+                return _forbidden(
+                    trace_id, "scoped mini-app token is not authorized for this path"
+                )
+
         try:
             response = await call_next(request)
         finally:
@@ -250,5 +268,18 @@ def _unauthenticated(
     """Return a 401 JSONResponse carrying the standard error envelope."""
     return JSONResponse(
         status_code=401,
+        content=_envelope(code, message, trace_id, details),
+    )
+
+
+def _forbidden(
+    trace_id: uuid.UUID,
+    message: str,
+    code: str = "FORBIDDEN",
+    details: dict[str, Any] | None = None,
+) -> JSONResponse:
+    """Return a 403 JSONResponse carrying the standard error envelope."""
+    return JSONResponse(
+        status_code=403,
         content=_envelope(code, message, trace_id, details),
     )
