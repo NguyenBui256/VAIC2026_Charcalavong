@@ -49,6 +49,7 @@ class DecisionRequest(BaseModel):
 
 class ConfirmRequest(BaseModel):
     accept: bool
+    reason: str | None = None
 
 
 @router.get("/runs/{run_id}/nodes")
@@ -102,6 +103,7 @@ async def rollback_confirm_route(
             rollback_id,
             accept=body.accept,
             actor_user_id=_actor_user_id(request),
+            refuse_reason=body.reason,
         )
     except ReviewError as exc:
         return JSONResponse(status_code=exc.status_code, content=_err(exc.message))

@@ -161,6 +161,16 @@ class Settings(BaseSettings):
         "`backend/.miniapp-bundles`)",
     )
 
+    # 3E — root directory for uploaded workflow files (typed node/run I/O of
+    # type "file"). Bytes land at `{workflow_files_root}/{tenant_id}/{id}_{name}`.
+    # Repo-relative default under `backend/` (resolves to `backend/.workflow-files`).
+    # Served ONLY via the authenticated GET /workflows/files/{id} route (never a
+    # public StaticFiles mount) — run data is tenant-private.
+    workflow_files_root: str = Field(
+        default=".workflow-files",
+        description="Root directory for uploaded workflow files (relative to cwd `backend/`)."
+    )
+      
     # vaic_tools integration — real MCP tool server (retrieve/gmail/calendar
     # via MCP /mcp/, KB ingest/delete via REST /api/v1/documents). When
     # disabled the McpClientStub is used, so dev/test without a running

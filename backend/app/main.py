@@ -33,6 +33,7 @@ from app.modules.agent_builder.routes import router as agents_router
 from app.modules.agent_builder.tool_routes import router as tools_router
 from app.modules.audit.routes import router as audit_router
 from app.modules.mini_app.routes import mini_app_rows_router, mini_apps_router
+from app.modules.orchestrator.file_routes import router as workflows_files_router
 from app.modules.orchestrator.graph_routes import router as workflows_graph_router
 from app.modules.orchestrator.routes import router as workflows_router
 from app.modules.tenant.routes import departments_router
@@ -109,6 +110,7 @@ app.include_router(workflows_router)
 
 # Sub-project 3B (Task 7) — graph run review/rollback endpoints.
 app.include_router(workflows_graph_router)
+app.include_router(workflows_files_router)
 
 # Epic 6 (FR-22) — Trace Dashboard read API (/audit).
 app.include_router(audit_router)
@@ -124,6 +126,9 @@ app.include_router(mini_app_rows_router)
 # boots — `StaticFiles` raises at mount time if `directory` doesn't exist.
 _mini_app_bundle_root = Path(get_settings().mini_app_bundle_root)
 _mini_app_bundle_root.mkdir(parents=True, exist_ok=True)
+
+# 3E — ensure the uploaded-workflow-files root exists at boot.
+Path(get_settings().workflow_files_root).mkdir(parents=True, exist_ok=True)
 app.mount(
     "/mini-app-runtime",
     StaticFiles(directory=str(_mini_app_bundle_root), html=True),

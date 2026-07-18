@@ -246,6 +246,7 @@ def confirm_rollback(
     *,
     accept: bool,
     actor_user_id: uuid.UUID | str,
+    refuse_reason: str | None = None,
 ) -> dict[str, Any]:
     req = session.get(RunRollbackRequest, uuid.UUID(str(rollback_id)))
     if req is None or str(req.run_id) != str(run_id):
@@ -258,7 +259,9 @@ def confirm_rollback(
     if accept:
         _accept_rollback(session, run_id, req, decided_by=actor_user_id)
     else:
-        _refuse_rollback(session, run_id, req, decided_by=actor_user_id)
+        _refuse_rollback(
+            session, run_id, req, decided_by=actor_user_id, refuse_reason=refuse_reason
+        )
     _reassert_rls(session)
     return {"id": str(req.id), "status": "accepted" if accept else "refused"}
 
@@ -340,14 +343,15 @@ def _refuse_rollback(
     req: RunRollbackRequest,
     *,
     decided_by: uuid.UUID | str,
+    refuse_reason: str | None = None,
 ) -> None:
     _reassert_rls(session)
     session.execute(
         text(
             "UPDATE run_rollback_requests SET status='refused', decided_by=:by, "
-            "decided_at=now() WHERE id=:id"
+            "refuse_reason=:refuse_reason, decided_at=now() WHERE id=:id"
         ),
-        {"by": str(decided_by), "id": str(req.id)},
+        {"by": str(decided_by), "refuse_reason": refuse_reason, "id": str(req.id)},
     )
     session.commit()
     # Return the rejecting node to a fresh awaiting_approval decision state:
@@ -402,6 +406,7 @@ def list_run_nodes(session: Session, run_id: uuid.UUID | str) -> dict[str, Any]:
             "requester_node_key": r.requester_node_key,
             "target_node_key": r.target_node_key,
             "reason": r.reason,
+            "refuse_reason": r.refuse_reason,
             "status": r.status,
         }
 

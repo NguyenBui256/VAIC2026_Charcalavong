@@ -7,8 +7,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button, Table, EmptyState, ErrorState, Skeleton, useToast } from "../ui";
 import type { TableColumn } from "../ui";
 import RunStatusBadge from "./runs/RunStatusBadge";
+import TypedValueInput from "./runs/TypedValueInput";
 import { useRuns } from "../../hooks/useRuns";
 import { createRun, type Run } from "../../lib/runsApi";
+import { emptyDraft, resolveDraft } from "../../lib/typedValue";
 
 export interface RunsTabProps {
   workflowId: string;
@@ -19,24 +21,18 @@ export default function RunsTab({ workflowId }: RunsTabProps) {
   const toast = useToast();
   const queryClient = useQueryClient();
   const { data: runs, isLoading, isError, error, refetch } = useRuns(workflowId);
-  const [inputText, setInputText] = useState("{}");
+  const [draft, setDraft] = useState(emptyDraft());
   const [creating, setCreating] = useState(false);
 
   async function onCreate() {
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(inputText);
-    } catch {
-      toast.show("Input must be valid JSON", "error");
-      return;
-    }
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      toast.show("Input must be a JSON object", "error");
+    const resolved = resolveDraft(draft);
+    if (!resolved.ok) {
+      toast.show(resolved.error, "error");
       return;
     }
     setCreating(true);
     try {
-      const run = await createRun(workflowId, parsed);
+      const run = await createRun(workflowId, resolved.value as Record<string, unknown>);
       queryClient.invalidateQueries({ queryKey: ["runs", workflowId] });
       navigate(`/workflows/${workflowId}/runs/${run.id}`);
     } catch (e) {
@@ -67,13 +63,8 @@ export default function RunsTab({ workflowId }: RunsTabProps) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
-        <label className="text-body">New run input (JSON)</label>
-        <textarea
-          className="vaic-form-input vaic-focusable"
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          rows={3}
-        />
+        <label className="text-body">New run input</label>
+        <TypedValueInput value={draft} onChange={setDraft} />
         <div>
           <Button variant="primary" disabled={creating} onClick={onCreate}>
             Run

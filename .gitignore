@@ -124,3 +124,11 @@ _bmad-output/planning-artifacts/architecture/architecture-VAIC-2026-07-17/review
 .superpowers/
 .agents/
 skills-lock.json
+
+.playwright-mcp
+
+# 3E — runtime uploaded workflow files (local disk store, tenant-scoped); never commit
+backend/.workflow-files/
+# E2E scratch screenshots
+/3c-e2e-*.png
+/3e-e2e-*.png
