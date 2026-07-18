@@ -1,25 +1,25 @@
-/* Story 2.6 — Tool API layer.
+/* Shared pool — tenant-level Tool catalog API layer.
  *
- * Typed wrappers around apiFetch for the Tool endpoints: POST/GET/PATCH/DELETE
- * /agents/{id}/tools[/{toolId}], POST .../tools/{toolId}/test. apiFetch
+ * Typed wrappers around apiFetch for the pool Tool endpoints: POST/GET/
+ * PATCH/DELETE /tools[/{toolId}], POST .../tools/{toolId}/test. apiFetch
  * injects JWT + tenant headers and unwraps the {data,error,meta} envelope.
  */
 
 import { apiFetch } from "./api";
 
-export type ToolKind = "mcp" | "embedded_python";
+export type ToolKind = "builtin" | "integration";
 
-/** Mirrors the Story 2.6 `serialize_tool` response shape — `header` masked. */
+/** Mirrors the backend `serialize_tool` response shape. */
 export interface Tool {
   id: string;
-  agent_id: string;
+  tool_type: string;
   display_name: string;
-  header: { auth?: boolean };
-  input_schema: Record<string, unknown>;
+  description: string;
+  params_schema: Record<string, unknown>;
   output_schema: Record<string, unknown>;
-  has_embedded_python: boolean;
+  config: Record<string, unknown> | null;
   kind: ToolKind;
-  /** Registered Integration this Tool calls through, or null (Story 2.8 item #1). */
+  /** Registered Integration this Tool calls through, or null. */
   integration_id: string | null;
   created_at: string;
   updated_at: string;
@@ -27,23 +27,21 @@ export interface Tool {
 
 export interface CreateToolInput {
   display_name: string;
-  header?: Record<string, unknown>;
-  input_schema: Record<string, unknown>;
+  description: string;
+  params_schema: Record<string, unknown>;
   output_schema: Record<string, unknown>;
-  embedded_python?: string | null;
-  integration_id?: string | null;
+  integration_id: string;
 }
 
 export interface UpdateToolInput {
   display_name?: string;
-  header?: Record<string, unknown>;
-  input_schema?: Record<string, unknown>;
+  description?: string;
+  params_schema?: Record<string, unknown>;
   output_schema?: Record<string, unknown>;
-  embedded_python?: string | null;
-  integration_id?: string | null;
+  integration_id?: string;
 }
 
-/** Mirrors backend `ToolOutput` — the Test Tool affordance result (AC7). */
+/** Mirrors backend `ToolOutput` — the Test Tool affordance result. */
 export interface ToolTestResult {
   tool_name: string;
   output: Record<string, unknown>;
@@ -52,40 +50,35 @@ export interface ToolTestResult {
   latency_ms: number;
 }
 
-export function listTools(agentId: string): Promise<Tool[]> {
-  return apiFetch<Tool[]>(`/agents/${agentId}/tools`);
+export function listCatalogTools(): Promise<Tool[]> {
+  return apiFetch<Tool[]>(`/tools`);
 }
 
-export function createTool(agentId: string, input: CreateToolInput): Promise<Tool> {
-  return apiFetch<Tool>(`/agents/${agentId}/tools`, {
+export function createTool(input: CreateToolInput): Promise<Tool> {
+  return apiFetch<Tool>(`/tools`, {
     method: "POST",
     body: JSON.stringify(input),
   });
 }
 
-export function updateTool(
-  agentId: string,
-  toolId: string,
-  patch: UpdateToolInput,
-): Promise<Tool> {
-  return apiFetch<Tool>(`/agents/${agentId}/tools/${toolId}`, {
+export function updateTool(id: string, patch: UpdateToolInput): Promise<Tool> {
+  return apiFetch<Tool>(`/tools/${id}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
   });
 }
 
-export function deleteTool(agentId: string, toolId: string): Promise<{ id: string }> {
-  return apiFetch<{ id: string }>(`/agents/${agentId}/tools/${toolId}`, {
+export function deleteTool(id: string): Promise<{ id: string }> {
+  return apiFetch<{ id: string }>(`/tools/${id}`, {
     method: "DELETE",
   });
 }
 
 export function testTool(
-  agentId: string,
-  toolId: string,
+  id: string,
   sampleInput: Record<string, unknown>,
 ): Promise<ToolTestResult> {
-  return apiFetch<ToolTestResult>(`/agents/${agentId}/tools/${toolId}/test`, {
+  return apiFetch<ToolTestResult>(`/tools/${id}/test`, {
     method: "POST",
     body: JSON.stringify({ sample_input: sampleInput }),
   });

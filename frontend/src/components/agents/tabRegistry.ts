@@ -22,12 +22,6 @@ export const tabRegistry: TabRegistryEntry[] = [
   { key: "identity", label: "Identity", icon: "Agent" },
   { key: "knowledge-base", label: "Knowledge Base", icon: "KnowledgeBase", countKey: "documents" },
   { key: "tools", label: "Tools", icon: "Tool", countKey: "tools" },
-  {
-    key: "api-integrations",
-    label: "API Integrations",
-    icon: "ApiIntegration",
-    countKey: "integrations",
-  },
   { key: "prompt", label: "Prompt", icon: "Prompt" },
   { key: "model", label: "Model", icon: "Model" },
 ];

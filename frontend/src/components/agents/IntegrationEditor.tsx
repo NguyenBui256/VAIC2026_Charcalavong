@@ -5,6 +5,9 @@
  * save via `auth_header_masked`), Schema (JSON textarea, optional). Mirrors
  * `ToolEditor.tsx` structure (Story 2.6) and reuses Story 2.2 toast/dirty
  * machinery.
+ *
+ * Shared-pool version (Plan 2026-07-18 Task 6): tenant-level, no `agentId` —
+ * mutations come from `useIntegrationMutations()` (pool CRUD, `/integrations`).
  */
 
 import { useEffect, useState } from "react";
@@ -13,7 +16,6 @@ import { useIntegrationMutations } from "../../hooks/useIntegrationMutations";
 import type { ApiIntegration } from "../../lib/integrationsApi";
 
 export interface IntegrationEditorProps {
-  agentId: string;
   integration: ApiIntegration | null;
   onClose: () => void;
 }
@@ -31,7 +33,7 @@ function parseSchema(text: string): { valid: boolean; parsed: Record<string, unk
   }
 }
 
-export default function IntegrationEditor({ agentId, integration, onClose }: IntegrationEditorProps) {
+export default function IntegrationEditor({ integration, onClose }: IntegrationEditorProps) {
   const isNew = integration === null;
   const [name, setName] = useState(integration?.name ?? "");
   const [baseUrl, setBaseUrl] = useState(integration?.base_url ?? "");
@@ -40,7 +42,7 @@ export default function IntegrationEditor({ agentId, integration, onClose }: Int
   const [touched, setTouched] = useState({ name: false, baseUrl: false, authHeader: false });
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const { create, update } = useIntegrationMutations(agentId);
+  const { create, update } = useIntegrationMutations();
   const { show } = useToast();
 
   useEffect(() => {

@@ -1,22 +1,26 @@
-"""Tenant-wide Tool catalog service (Sub-project A).
+"""Tenant-wide Tool catalog service (Sub-project A / Shared Pool).
 
-Tools are shared catalog rows (`rag`/`gmail`/`calendar`), seeded per tenant.
-Agents reference them via `agent_tools`. No user-authored tools yet (spec D4);
-there is no create/update/delete of catalog rows through the API — only the
-seed builds them. Attach/detach of an agent reference requires the same
-builder-or-owner mutation guard as other agent mutations (`_authorize_mutation`).
+Built-in tools (`rag`/`gmail`/`calendar`, `kind="builtin"`) are seeded per
+tenant and are NEVER user-editable via the API. `kind="integration"` tools
+wrap a tenant `ApiIntegration` (Sub-project A shared pool) and are fully
+CRUD-managed by `builder`-role principals (`require_builder`, Task 1).
+Agents reference catalog tools via `agent_tools`; attach/detach of that
+grant keeps the existing builder-or-owner mutation guard (`_authorize_mutation`).
 """
 
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.errors import NotFoundError, ValidationError
+from app.core.perms import require_builder
 from app.core.tenant_context import tenant_context
-from app.modules.agent_builder.models import AgentTool, Tool
+from app.modules.agent_builder.models import AgentTool, ApiIntegration, Tool
 from app.modules.agent_builder.service import Principal, _authorize_mutation, get_agent
 
 __all__ = [
@@ -28,6 +32,9 @@ __all__ = [
     "attach_agent_tool",
     "detach_agent_tool",
     "seed_default_tools",
+    "create_catalog_tool",
+    "update_catalog_tool",
+    "delete_catalog_tool",
 ]
 
 # The built-in catalog. `params_schema` is the LLM call interface (spec D5).
@@ -105,8 +112,6 @@ def list_catalog_tools(session: Session) -> list[Tool]:
 
 
 def get_catalog_tool(session: Session, tool_id: uuid.UUID) -> Tool:
-    from app.core.errors import NotFoundError
-
     tool = session.execute(
         select(Tool).where(Tool.id == tool_id, Tool.is_deleted.is_(False))
     ).scalar_one_or_none()
@@ -125,6 +130,8 @@ def serialize_tool(tool: Tool) -> dict:
         "params_schema": tool.params_schema,
         "output_schema": tool.output_schema,
         "config": tool.config,
+        "kind": tool.kind,
+        "integration_id": str(tool.integration_id) if tool.integration_id else None,
         "created_at": tool.created_at.isoformat(timespec="milliseconds"),
         "updated_at": tool.updated_at.isoformat(timespec="milliseconds"),
     }
@@ -170,6 +177,98 @@ def detach_agent_tool(
         session.commit()
 
 
+def _get_active_integration(session: Session, integration_id: uuid.UUID) -> ApiIntegration:
+    """Verify the integration exists (tenant-scoped via RLS) and is not deleted."""
+    integ = session.get(ApiIntegration, integration_id)
+    if integ is None or integ.is_deleted:
+        raise NotFoundError("Integration not found")
+    return integ
+
+
+def create_catalog_tool(
+    session: Session,
+    *,
+    principal: Principal,
+    display_name: str,
+    description: str,
+    params_schema: dict[str, Any],
+    output_schema: dict[str, Any],
+    integration_id: uuid.UUID,
+) -> Tool:
+    """Create a `kind="integration"` catalog tool. Builder role required."""
+    from app.core.ids import uuid7
+
+    require_builder(principal)
+    _get_active_integration(session, integration_id)
+
+    tool = Tool(
+        id=uuid7(),
+        tenant_id=tenant_context.get(),
+        owner_id=principal.user_id,
+        tool_type="integration",
+        kind="integration",
+        display_name=display_name,
+        description=description,
+        params_schema=params_schema,
+        output_schema=output_schema,
+        config={},
+        integration_id=integration_id,
+    )
+    session.add(tool)
+    session.commit()
+    session.refresh(tool)
+    return tool
+
+
+def update_catalog_tool(
+    session: Session,
+    tool_id: uuid.UUID,
+    *,
+    principal: Principal,
+    **changes: object,
+) -> Tool:
+    """Update a `kind="integration"` catalog tool. Builder role required.
+
+    Built-in tools (`kind="builtin"`) can never be mutated through the API.
+    """
+    require_builder(principal)
+    tool = get_catalog_tool(session, tool_id)
+    if tool.kind == "builtin":
+        raise ValidationError("Built-in tools cannot be modified", code="builtin_tool_immutable")
+
+    if (display_name := changes.get("display_name")) is not None:
+        tool.display_name = display_name  # type: ignore[assignment]
+    if (description := changes.get("description")) is not None:
+        tool.description = description  # type: ignore[assignment]
+    if "params_schema" in changes and changes["params_schema"] is not None:
+        tool.params_schema = changes["params_schema"]  # type: ignore[assignment]
+    if "output_schema" in changes and changes["output_schema"] is not None:
+        tool.output_schema = changes["output_schema"]  # type: ignore[assignment]
+    if (integration_id := changes.get("integration_id")) is not None:
+        _get_active_integration(session, integration_id)  # type: ignore[arg-type]
+        tool.integration_id = integration_id  # type: ignore[assignment]
+
+    tool.updated_at = datetime.now(UTC)
+    session.commit()
+    session.refresh(tool)
+    return tool
+
+
+def delete_catalog_tool(session: Session, tool_id: uuid.UUID, *, principal: Principal) -> None:
+    """Soft-delete a `kind="integration"` catalog tool. Builder role required.
+
+    Built-in tools (`kind="builtin"`) can never be deleted through the API.
+    """
+    require_builder(principal)
+    tool = get_catalog_tool(session, tool_id)
+    if tool.kind == "builtin":
+        raise ValidationError("Built-in tools cannot be deleted", code="builtin_tool_immutable")
+
+    tool.is_deleted = True
+    tool.deleted_at = datetime.now(UTC)
+    session.commit()
+
+
 def seed_default_tools(
     session: Session, *, tenant_id: uuid.UUID, owner_id: uuid.UUID
 ) -> dict[str, Tool]:
@@ -191,6 +290,7 @@ def seed_default_tools(
             tenant_id=tenant_id,
             owner_id=owner_id,
             tool_type=spec["tool_type"],
+            kind="builtin",
             display_name=spec["display_name"],
             description=spec["description"],
             params_schema=spec["params_schema"],

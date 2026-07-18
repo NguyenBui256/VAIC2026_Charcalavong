@@ -1,10 +1,8 @@
-"""API Integration CRUD service (Story 2.7 T4).
+"""API Integration CRUD service — tenant-scoped shared pool (Sub-project A).
 
-Mirrors the Story 2.6 `tool_crud.py` conventions verbatim: `tenant_context`
-via RLS (never accept `tenant_id` as an argument), builder-role +
-owner-or-same-department authz reused from `service._authorize_mutation`
-applied SYMMETRICALLY to create and delete, soft-delete only, and one
-`audit.log()` per CRUD write (AD-4).
+Integrations are no longer agent-owned; they live at tenant level and are
+managed exclusively by `builder`-role principals (`require_builder`, Task 1).
+Tools reference an integration via `Tool.integration_id` (kind="integration").
 
 `auth_header` is ENCRYPTED before it ever touches the DB (`app.core.crypto`,
 AC2) and is NEVER included in `serialize_integration` output or any audit
@@ -17,6 +15,7 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.adapters.audit_postgres import PostgresAuditSink
@@ -24,18 +23,18 @@ from app.core.crypto import decrypt_secret, encrypt_secret, mask_secret
 from app.core.deps import crud_audit_ids
 from app.core.errors import NotFoundError, ValidationError
 from app.core.ids import utcnow_iso_ms, uuid7
+from app.core.perms import require_builder
 from app.core.ports.audit import AuditEntry, AuditPort
 from app.core.tenant_context import tenant_context
-from app.modules.agent_builder.models import ApiIntegration
-from app.modules.agent_builder.service import Principal, _authorize_mutation
-from app.modules.agent_builder.service import get_agent as get_agent_row
+from app.modules.agent_builder.models import ApiIntegration, Tool
+from app.modules.agent_builder.service import Principal
 
 __all__ = [
     "create_integration",
     "list_integrations",
     "get_integration",
     "update_integration",
-    "soft_delete_integration",
+    "delete_integration",
     "serialize_integration",
 ]
 
@@ -45,14 +44,14 @@ def _emit_integration_audit(audit: AuditPort, integration: ApiIntegration, entry
     run_id, step_id = crud_audit_ids(str(integration.id))
     payload = {
         "integration_id": str(integration.id),
-        "agent_id": str(integration.agent_id),
+        "tenant_id": str(integration.tenant_id),
         "name": integration.name,
     }
     audit.log(
         AuditEntry(
             run_id=run_id,
             step_id=step_id,
-            agent_id=str(integration.agent_id),
+            agent_id=str(integration.tenant_id),
             ts=utcnow_iso_ms(),
             type=entry_type,
             input=payload,
@@ -66,7 +65,6 @@ def _emit_integration_audit(audit: AuditPort, integration: ApiIntegration, entry
 def create_integration(
     session: Session,
     *,
-    agent_id: uuid.UUID,
     principal: Principal,
     name: str,
     base_url: str,
@@ -74,14 +72,12 @@ def create_integration(
     schema: dict | None = None,
     audit: AuditPort | None = None,
 ) -> ApiIntegration:
-    """Register an Integration against an Agent (AC1, AC2). Builder role required."""
-    agent = get_agent_row(session, agent_id)
-    _authorize_mutation(agent, principal)
+    """Register a tenant-level Integration (shared pool). Builder role required."""
+    require_builder(principal)
 
     integration = ApiIntegration(
         id=uuid7(),
         tenant_id=tenant_context.get(),
-        agent_id=agent.id,
         name=name,
         base_url=base_url,
         auth_header_encrypted=encrypt_secret(auth_header),
@@ -95,27 +91,22 @@ def create_integration(
     return integration
 
 
-def list_integrations(session: Session, *, agent_id: uuid.UUID) -> list[ApiIntegration]:
-    """List non-deleted Integrations for an Agent. Tenant scoping is RLS-only."""
+def list_integrations(session: Session) -> list[ApiIntegration]:
+    """List non-deleted Integrations in the tenant. Tenant scoping is RLS-only."""
     return list(
         session.execute(
-            select(ApiIntegration).where(
-                ApiIntegration.agent_id == agent_id, ApiIntegration.is_deleted.is_(False)
-            )
+            select(ApiIntegration).where(ApiIntegration.is_deleted.is_(False))
         )
         .scalars()
         .all()
     )
 
 
-def get_integration(
-    session: Session, *, agent_id: uuid.UUID, integration_id: uuid.UUID
-) -> ApiIntegration:
+def get_integration(session: Session, integration_id: uuid.UUID) -> ApiIntegration:
     """Fetch a single non-deleted Integration. RLS hides cross-tenant rows."""
     integration = session.execute(
         select(ApiIntegration).where(
             ApiIntegration.id == integration_id,
-            ApiIntegration.agent_id == agent_id,
             ApiIntegration.is_deleted.is_(False),
         )
     ).scalar_one_or_none()
@@ -126,17 +117,15 @@ def get_integration(
 
 def update_integration(
     session: Session,
-    *,
-    agent_id: uuid.UUID,
     integration_id: uuid.UUID,
+    *,
     principal: Principal,
     audit: AuditPort | None = None,
     **changes: object,
 ) -> ApiIntegration:
-    """Update mutable fields on an Integration (mirrors `tool_crud.update_tool`)."""
-    integration = get_integration(session, agent_id=agent_id, integration_id=integration_id)
-    agent = get_agent_row(session, agent_id)
-    _authorize_mutation(agent, principal)
+    """Update mutable fields on an Integration. Builder role required."""
+    require_builder(principal)
+    integration = get_integration(session, integration_id)
 
     if (name := changes.get("name")) is not None:
         integration.name = name  # type: ignore[assignment]
@@ -155,22 +144,43 @@ def update_integration(
     return integration
 
 
-def soft_delete_integration(
+def delete_integration(
     session: Session,
-    *,
-    agent_id: uuid.UUID,
     integration_id: uuid.UUID,
+    *,
     principal: Principal,
     audit: AuditPort | None = None,
 ) -> None:
-    """Soft-delete an Integration — never hard-deletes. Symmetric authz with create."""
-    integration = get_integration(session, agent_id=agent_id, integration_id=integration_id)
-    agent = get_agent_row(session, agent_id)
-    _authorize_mutation(agent, principal)
+    """Soft-delete an Integration — never hard-deletes. Builder role required.
+
+    Blocked (`integration_in_use`) if any non-deleted catalog tool still
+    references this integration (mirrors the `tools_integration_id_fkey`
+    RESTRICT FK for the soft-delete path, which the FK itself never sees).
+    """
+    require_builder(principal)
+    integration = get_integration(session, integration_id)
+
+    in_use = session.execute(
+        select(Tool.id).where(
+            Tool.integration_id == integration_id, Tool.is_deleted.is_(False)
+        )
+    ).first()
+    if in_use is not None:
+        raise ValidationError(
+            "Integration is still referenced by one or more tools",
+            code="integration_in_use",
+        )
 
     integration.is_deleted = True
     integration.deleted_at = datetime.now(UTC)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise ValidationError(
+            "Integration is still referenced by one or more tools",
+            code="integration_in_use",
+        ) from None
     session.refresh(integration)
 
     _emit_integration_audit(audit or PostgresAuditSink(), integration, "integration.deleted")
@@ -192,7 +202,6 @@ def serialize_integration(integration: ApiIntegration) -> dict:
         masked = "••••"
     return {
         "id": str(integration.id),
-        "agent_id": str(integration.agent_id),
         "name": integration.name,
         "base_url": integration.base_url,
         "auth_header_masked": masked,

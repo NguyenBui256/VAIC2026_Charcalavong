@@ -80,7 +80,7 @@ class Agent(Base):
 
 
 class ApiIntegration(Base):
-    """A reusable named HTTP connection registered against an Agent (Story 2.7).
+    """A reusable named HTTP connection registered at tenant level (shared pool) (Story 2.7).
 
     `auth_header_encrypted` is CIPHERTEXT ONLY (Fernet, `app.core.crypto`) —
     there is no plaintext column, ever (AC2, NFR-6). Serialization exposes a
@@ -97,11 +97,6 @@ class ApiIntegration(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("tenants.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    agent_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("agents.id", ondelete="CASCADE"),
         nullable=False,
     )
 
@@ -167,6 +162,14 @@ class Tool(Base):
         JSONB, nullable=False, default=dict, server_default="{}"
     )
     credential_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="builtin", server_default="builtin"
+    )
+    integration_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("api_integrations.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
 
     is_deleted: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false", default=False

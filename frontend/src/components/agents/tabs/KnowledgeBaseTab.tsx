@@ -1,35 +1,19 @@
-/* Story 2.4 — Knowledge Base tab: upload, status-aware list, delete.
+/* Plan 2026-07-18 Task 8 — Knowledge Base tab as a grant picker.
  *
- * Replaces the Story 2.2 "Coming soon" placeholder. UX-DR23 branch order
- * (error -> loading -> empty -> data) follows components/dashboard/RecentRuns.tsx.
+ * Upload/delete moved to the tenant-level `/knowledge-base` page (Task 7).
+ * This tab only lets a Builder attach/detach pool documents to THIS agent
+ * (checkbox = granted). Read-only for non-builders.
  */
 
-import { useRef, useState, type ChangeEvent } from "react";
-import { Trash2 } from "lucide-react";
-import {
-  Button,
-  Card,
-  ConfirmDialog,
-  EmptyState,
-  ErrorState,
-  Skeleton,
-  Table,
-  useToast,
-  type TableColumn,
-} from "../../ui";
+import { Link } from "react-router-dom";
+import { Button, Card, EmptyState, ErrorState, Skeleton, Table, useToast, type TableColumn } from "../../ui";
 import { semanticIcons, ICON_STROKE_WIDTH } from "../../../lib/icons";
-import { useKbDocuments } from "../../../hooks/useKbDocuments";
-import { useKbMutations } from "../../../hooks/useKbMutations";
+import { useKbPool } from "../../../hooks/useKbPool";
+import { useAgentGrants } from "../../../hooks/useAgentGrants";
+import { useIsBuilder } from "../../../hooks/useIsBuilder";
 import { useRegisterTab } from "../AgentBuilderContext";
-import { useEditMode } from "../useEditMode";
-import { ListEditActions } from "../TabEditBar";
 import KbStatusPill from "../KbStatusPill";
-import {
-  KB_MAX_BYTES,
-  KB_ACCEPTED_EXTENSIONS,
-  KB_ACCEPTED_MIME_TYPES,
-  type KbDocument,
-} from "../../../lib/kbApi";
+import type { KbDocument } from "../../../lib/kbApi";
 
 export interface KnowledgeBaseTabProps {
   agentId: string;
@@ -42,64 +26,41 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function hasAcceptedExtension(filename: string): boolean {
-  const lower = filename.toLowerCase();
-  return KB_ACCEPTED_EXTENSIONS.some((ext) => lower.endsWith(ext));
-}
-
-/** AC3 — client-side 20MB + type gate. Returns an error message, or null. */
-function validateFile(file: File): string | null {
-  if (file.size > KB_MAX_BYTES) {
-    return `"${file.name}" exceeds the 20MB limit`;
-  }
-  if (!KB_ACCEPTED_MIME_TYPES.has(file.type) && !hasAcceptedExtension(file.name)) {
-    return `"${file.name}" is not a supported file type (PDF, TXT, Markdown, DOCX only)`;
-  }
-  return null;
-}
-
 export default function KnowledgeBaseTab({ agentId, isNew }: KnowledgeBaseTabProps) {
   const Icon = semanticIcons.KnowledgeBase;
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const { query, documents, isLoading, isError } = useKbDocuments(isNew ? undefined : agentId);
-  const { upload, remove } = useKbMutations(agentId);
+  const isBuilder = useIsBuilder();
+  const { query, documents, isLoading, isError } = useKbPool();
+  const { kb: grantedKb, attachKb, detachKb } = useAgentGrants(isNew ? undefined : agentId);
   const { show } = useToast();
-  const { editing, startEdit, stopEdit } = useEditMode(false);
 
-  // List-style tab — mutations (upload/delete) are immediate, not
-  // form-buffered, so this tab never contributes to the shell's "unsaved
-  // changes" dirty state (Dev Notes T4.1).
+  // Grant toggles are immediate mutations — never form-buffered (Dev Notes T4.1).
   useRegisterTab("knowledge-base", { isDirty: false, save: async () => {}, reset: () => {} });
 
-  function handleFileSelected(file: File) {
-    const error = validateFile(file);
-    if (error) {
-      show(error, "error");
-      return;
+  const grantedIds = new Set(grantedKb.map((d) => d.id));
+
+  function toggle(doc: KbDocument) {
+    if (!isBuilder) return;
+    if (grantedIds.has(doc.id)) {
+      detachKb.mutate(doc.id, { onError: (err) => show(err.message, "error") });
+    } else {
+      attachKb.mutate(doc.id, { onError: (err) => show(err.message, "error") });
     }
-    upload.mutate(file, {
-      onSuccess: () => show(`"${file.name}" uploaded`),
-      onError: (err) => show(err.message, "error"),
-    });
-  }
-
-  function handleInputChange(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (file) handleFileSelected(file);
-  }
-
-  function confirmDelete() {
-    if (!pendingDeleteId) return;
-    remove.mutate(pendingDeleteId, {
-      onSuccess: () => show("Document deleted"),
-      onError: (err) => show(err.message, "error"),
-    });
-    setPendingDeleteId(null);
   }
 
   const columns: TableColumn<KbDocument>[] = [
+    {
+      key: "granted",
+      header: "",
+      render: (d) => (
+        <input
+          type="checkbox"
+          checked={grantedIds.has(d.id)}
+          disabled={!isBuilder || attachKb.isPending || detachKb.isPending}
+          aria-label={`Grant ${d.filename} to this agent`}
+          onChange={() => toggle(d)}
+        />
+      ),
+    },
     { key: "filename", header: "Name" },
     { key: "content_type", header: "Type" },
     { key: "size_bytes", header: "Size", render: (d) => formatBytes(d.size_bytes) },
@@ -108,36 +69,13 @@ export default function KnowledgeBaseTab({ agentId, isNew }: KnowledgeBaseTabPro
       header: "Status",
       render: (d) => <KbStatusPill status={d.status} failureReason={d.failure_reason} />,
     },
-    {
-      key: "created_at",
-      header: "Uploaded",
-      render: (d) => new Date(d.created_at).toLocaleString(),
-    },
-    // Row actions surface only in edit mode — the list is read-only otherwise.
-    ...(editing
-      ? [
-          {
-            key: "actions",
-            header: "",
-            render: (d: KbDocument) => (
-              <Button
-                variant="icon"
-                aria-label={`Delete ${d.filename}`}
-                onClick={() => setPendingDeleteId(d.id)}
-              >
-                <Trash2 size={16} strokeWidth={ICON_STROKE_WIDTH} aria-hidden="true" />
-              </Button>
-            ),
-          } as TableColumn<KbDocument>,
-        ]
-      : []),
   ];
 
   function renderBody() {
     if (isNew) {
       return (
         <p className="text-body" style={{ color: "var(--color-text-tertiary)" }}>
-          Save the Agent first to start uploading Knowledge Base documents.
+          Save the Agent first to start granting Knowledge Base documents.
         </p>
       );
     }
@@ -160,12 +98,8 @@ export default function KnowledgeBaseTab({ agentId, isNew }: KnowledgeBaseTabPro
       return (
         <EmptyState
           icon={<Icon size={48} strokeWidth={ICON_STROKE_WIDTH} />}
-          title="No documents yet"
-          description={
-            editing
-              ? "Upload policy, regulation, or SOP documents to ground this Agent's responses."
-              : "Click Edit to upload policy, regulation, or SOP documents."
-          }
+          title="No documents in the catalog yet"
+          description="Upload documents from the Knowledge Base page, then grant them to this Agent here."
         />
       );
     }
@@ -191,50 +125,15 @@ export default function KnowledgeBaseTab({ agentId, isNew }: KnowledgeBaseTabPro
         />
       }
     >
-      <div
-        className="vaic-inline-alert vaic-inline-alert-warning"
-        role="note"
-        data-testid="vaic-kb-nfr9-advisory"
-        style={{ marginBottom: "var(--space-3)" }}
-      >
-        Policy / regulation / SOP documents only. Do not upload documents containing
-        real customer PII.
-      </div>
-
-      <input
-        ref={inputRef}
-        type="file"
-        accept={KB_ACCEPTED_EXTENSIONS.join(",")}
-        style={{ display: "none" }}
-        onChange={handleInputChange}
-        data-testid="vaic-kb-file-input"
-      />
-
       {renderBody()}
 
       {!isNew && (
-        <ListEditActions editing={editing} onEdit={startEdit} onDone={stopEdit}>
-          {editing && (
-            <Button
-              variant="primary"
-              onClick={() => inputRef.current?.click()}
-              disabled={upload.isPending}
-            >
-              Upload document
-            </Button>
-          )}
-        </ListEditActions>
+        <div style={{ marginTop: "var(--space-3)" }}>
+          <Link to="/knowledge-base" className="text-body" style={{ color: "var(--color-accent)" }}>
+            Manage KB
+          </Link>
+        </div>
       )}
-
-      <ConfirmDialog
-        open={pendingDeleteId !== null}
-        title="Delete this document?"
-        body="This removes the document and all its indexed chunks/embeddings. This cannot be undone."
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
-        onConfirm={confirmDelete}
-        onCancel={() => setPendingDeleteId(null)}
-      />
     </Card>
   );
 }

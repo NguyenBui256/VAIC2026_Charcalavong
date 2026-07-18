@@ -50,14 +50,7 @@ const AgentBuilderContext = createContext<AgentBuilderContextValue>({
 
 // Identity first — it creates the Agent record on first save (AC #7); the
 // rest are ordered to match the tab registry for a predictable Save All.
-const SAVE_ORDER: TabKey[] = [
-  "identity",
-  "knowledge-base",
-  "tools",
-  "api-integrations",
-  "prompt",
-  "model",
-];
+const SAVE_ORDER: TabKey[] = ["identity", "knowledge-base", "tools", "prompt", "model"];
 
 export function AgentBuilderProvider({ children }: { children: ReactNode }) {
   const registrationsRef = useRef<Partial<Record<TabKey, TabRegistration>>>({});

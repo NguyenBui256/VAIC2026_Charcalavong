@@ -23,15 +23,14 @@ from app.core.settings import get_settings
 from app.modules.agent_builder.agent_kb_service import (
     attach_agent_document, detach_agent_document, list_agent_documents,
 )
-from app.modules.agent_builder.integration_client import test_integration as run_test_integration
 from app.modules.agent_builder.integration_service import (
     create_integration,
+    delete_integration,
+    get_integration,
     list_integrations,
     serialize_integration,
-    soft_delete_integration,
     update_integration,
 )
-from app.modules.agent_builder.kb_grants_service import effective_role as kb_effective_role
 from app.modules.agent_builder.kb_service import serialize_document as serialize_kb_document
 from app.modules.agent_builder.service import (
     Principal,
@@ -250,15 +249,10 @@ class AttachDocRequest(BaseModel):
 @router.get("/{agent_id}/kb-documents")
 def list_agent_kb_docs_route(
     agent_id: uuid.UUID,
-    request: Request,
     session: Session = Depends(get_tenant_session),  # noqa: B008
 ) -> JSONResponse:
-    principal = _principal(request)
     docs = list_agent_documents(session, agent_id=agent_id)
-    return JSONResponse(status_code=200, content=_ok([
-        serialize_kb_document(d, effective_role=kb_effective_role(session, d, principal.user_id))
-        for d in docs
-    ]))
+    return JSONResponse(status_code=200, content=_ok([serialize_kb_document(d) for d in docs]))
 
 
 @router.post("/{agent_id}/kb-documents")
@@ -284,22 +278,27 @@ def detach_agent_kb_doc_route(
 
 
 # ---------------------------------------------------------------------------
-# API Integration routes (Story 2.7)
+# API Integration routes — tenant-level shared pool (builder-managed).
+#
+# Integrations no longer belong to a single Agent (Shared Pool reshape); they
+# are CRUD-managed by `builder`-role principals and referenced by catalog
+# tools (`Tool.integration_id`). Mounted separately from `router` (which
+# keeps its `/agents` prefix) — see `integrations_router` below.
 # ---------------------------------------------------------------------------
 
-@router.post("/{agent_id}/integrations")
+integrations_router = APIRouter(prefix="/integrations", tags=["integrations"])
+
+
+@integrations_router.post("")
 def create_integration_route(
-    agent_id: uuid.UUID,
     body: CreateIntegrationRequest,
     request: Request,
     session: Session = Depends(get_tenant_session),  # noqa: B008
 ) -> JSONResponse:
-    """POST /agents/{id}/integrations — register an Integration (AC1, AC2)."""
-    principal = _principal(request)
+    """POST /integrations — register a tenant-level Integration. Builder role required."""
     integration = create_integration(
         session,
-        agent_id=agent_id,
-        principal=principal,
+        principal=_principal(request),
         name=body.name,
         base_url=body.base_url,
         auth_header=body.auth_header,
@@ -308,63 +307,50 @@ def create_integration_route(
     return JSONResponse(status_code=201, content=_ok(serialize_integration(integration)))
 
 
-@router.get("/{agent_id}/integrations")
+@integrations_router.get("")
 def list_integrations_route(
-    agent_id: uuid.UUID,
     session: Session = Depends(get_tenant_session),  # noqa: B008
 ) -> JSONResponse:
-    """GET /agents/{id}/integrations — list, RLS-scoped, header masked (AC8)."""
-    integrations = list_integrations(session, agent_id=agent_id)
+    """GET /integrations — list, RLS-scoped, header masked."""
+    integrations = list_integrations(session)
     return JSONResponse(
         status_code=200, content=_ok([serialize_integration(i) for i in integrations])
     )
 
 
-@router.patch("/{agent_id}/integrations/{integration_id}")
+@integrations_router.get("/{integration_id}")
+def get_integration_route(
+    integration_id: uuid.UUID,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """GET /integrations/{id} — single Integration, header masked."""
+    integration = get_integration(session, integration_id)
+    return JSONResponse(status_code=200, content=_ok(serialize_integration(integration)))
+
+
+@integrations_router.patch("/{integration_id}")
 def update_integration_route(
-    agent_id: uuid.UUID,
     integration_id: uuid.UUID,
     body: UpdateIntegrationRequest,
     request: Request,
     session: Session = Depends(get_tenant_session),  # noqa: B008
 ) -> JSONResponse:
-    """PATCH /agents/{id}/integrations/{integration_id} — owner-or-same-department only."""
-    principal = _principal(request)
+    """PATCH /integrations/{id} — builder role required."""
     integration = update_integration(
         session,
-        agent_id=agent_id,
-        integration_id=integration_id,
-        principal=principal,
+        integration_id,
+        principal=_principal(request),
         **body.model_dump(exclude_unset=True, by_alias=True),
     )
     return JSONResponse(status_code=200, content=_ok(serialize_integration(integration)))
 
 
-@router.delete("/{agent_id}/integrations/{integration_id}")
+@integrations_router.delete("/{integration_id}")
 def delete_integration_route(
-    agent_id: uuid.UUID,
     integration_id: uuid.UUID,
     request: Request,
     session: Session = Depends(get_tenant_session),  # noqa: B008
 ) -> JSONResponse:
-    """DELETE /agents/{id}/integrations/{integration_id} — soft-delete only, symmetric authz."""
-    principal = _principal(request)
-    soft_delete_integration(
-        session, agent_id=agent_id, integration_id=integration_id, principal=principal
-    )
+    """DELETE /integrations/{id} — soft-delete only, builder role required."""
+    delete_integration(session, integration_id, principal=_principal(request))
     return JSONResponse(status_code=200, content=_ok({"id": str(integration_id)}))
-
-
-@router.post("/{agent_id}/integrations/{integration_id}/test")
-def test_integration_route(
-    agent_id: uuid.UUID,
-    integration_id: uuid.UUID,
-    session: Session = Depends(get_tenant_session),  # noqa: B008
-) -> JSONResponse:
-    """POST /agents/{id}/integrations/{integration_id}/test — Test Integration (AC9).
-
-    Pings `GET {base_url}/health` with the decrypted header; NEVER returns
-    the header, only `{status, status_code, latency_ms}`.
-    """
-    result = run_test_integration(session, agent_id=agent_id, integration_id=integration_id)
-    return JSONResponse(status_code=200, content=_ok(result))

@@ -1,18 +1,17 @@
-/* Story 2.7 — API Integration API layer.
+/* Shared pool — tenant-level Integration API layer.
  *
- * Typed wrappers around apiFetch for the Integration endpoints: POST/GET/
- * PATCH/DELETE /agents/{id}/integrations[/{integrationId}], POST
+ * Typed wrappers around apiFetch for the pool Integration endpoints: POST/GET/
+ * PATCH/DELETE /integrations[/{integrationId}], POST
  * .../integrations/{integrationId}/test. apiFetch injects JWT + tenant
  * headers and unwraps the {data,error,meta} envelope. `auth_header_masked`
- * is the only header representation the backend ever returns (AC2).
+ * is the only header representation the backend ever returns.
  */
 
 import { apiFetch } from "./api";
 
-/** Mirrors the Story 2.7 `serialize_integration` response shape — header masked. */
+/** Mirrors the `serialize_integration` response shape — header masked. */
 export interface ApiIntegration {
   id: string;
-  agent_id: string;
   name: string;
   base_url: string;
   auth_header_masked: string;
@@ -36,53 +35,42 @@ export interface UpdateIntegrationInput {
   schema?: Record<string, unknown> | null;
 }
 
-/** The Test Integration affordance result (AC9) — never includes the header. */
+/** The Test Integration affordance result — never includes the header. */
 export interface IntegrationTestResult {
   status: "connected" | "disconnected";
   status_code: number;
   latency_ms: number;
 }
 
-export function listIntegrations(agentId: string): Promise<ApiIntegration[]> {
-  return apiFetch<ApiIntegration[]>(`/agents/${agentId}/integrations`);
+export function listIntegrations(): Promise<ApiIntegration[]> {
+  return apiFetch<ApiIntegration[]>(`/integrations`);
 }
 
-export function createIntegration(
-  agentId: string,
-  input: CreateIntegrationInput,
-): Promise<ApiIntegration> {
-  return apiFetch<ApiIntegration>(`/agents/${agentId}/integrations`, {
+export function createIntegration(input: CreateIntegrationInput): Promise<ApiIntegration> {
+  return apiFetch<ApiIntegration>(`/integrations`, {
     method: "POST",
     body: JSON.stringify(input),
   });
 }
 
 export function updateIntegration(
-  agentId: string,
-  integrationId: string,
+  id: string,
   patch: UpdateIntegrationInput,
 ): Promise<ApiIntegration> {
-  return apiFetch<ApiIntegration>(`/agents/${agentId}/integrations/${integrationId}`, {
+  return apiFetch<ApiIntegration>(`/integrations/${id}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
   });
 }
 
-export function deleteIntegration(
-  agentId: string,
-  integrationId: string,
-): Promise<{ id: string }> {
-  return apiFetch<{ id: string }>(`/agents/${agentId}/integrations/${integrationId}`, {
+export function deleteIntegration(id: string): Promise<{ id: string }> {
+  return apiFetch<{ id: string }>(`/integrations/${id}`, {
     method: "DELETE",
   });
 }
 
-export function testIntegration(
-  agentId: string,
-  integrationId: string,
-): Promise<IntegrationTestResult> {
-  return apiFetch<IntegrationTestResult>(
-    `/agents/${agentId}/integrations/${integrationId}/test`,
-    { method: "POST" },
-  );
+export function testIntegration(id: string): Promise<IntegrationTestResult> {
+  return apiFetch<IntegrationTestResult>(`/integrations/${id}/test`, {
+    method: "POST",
+  });
 }

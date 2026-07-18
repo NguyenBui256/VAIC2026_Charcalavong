@@ -21,6 +21,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.adapters.audit_postgres import PostgresAuditSink
@@ -101,12 +102,30 @@ async def kb_search(
 
     agent = agent_loader(session, agent_id)
 
+    from app.modules.agent_builder.kb_models import KbDocument
+
     has_rag = any(t.tool_type == "rag" for t in list_agent_tool_refs(session, agent_id=agent_id))
     if not has_rag:
         return []
-    doc_ids = [str(d) for d in list_agent_document_ids(session, agent_id)]
-    if not doc_ids:
+    platform_ids = list(list_agent_document_ids(session, agent_id))
+    if not platform_ids:
         return []
+    # vaic_tools filters retrieval by ITS OWN document id (stored at ingest as
+    # external_document_id), not the platform UUID. Translate; fall back to the
+    # platform ids when no external id exists yet (stub/test path).
+    # LIMITATION: vaic_tools RetrieveRequest.document_ids caps at 100. An agent
+    # granted >100 KB docs would make retrieve_knowledge reject the whole call.
+    # Not truncated here — silently dropping docs would break per-agent scope;
+    # resolving large-KB isolation needs a product decision (see spec unresolved).
+    external_ids = list(
+        session.execute(
+            select(KbDocument.external_document_id).where(
+                KbDocument.id.in_(platform_ids),
+                KbDocument.external_document_id.is_not(None),
+            )
+        ).scalars().all()
+    )
+    doc_ids = external_ids or [str(d) for d in platform_ids]
 
     mcp = mcp_factory(agent_department_id=agent.department_id)
     result = await mcp.call_tool(

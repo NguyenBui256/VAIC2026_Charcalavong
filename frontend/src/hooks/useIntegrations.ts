@@ -1,4 +1,4 @@
-/* Story 2.7 — TanStack Query hook for the API Integrations tab list. */
+/* Shared pool — TanStack Query hook for the tenant-level Integrations list. */
 
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { listIntegrations, type ApiIntegration } from "../lib/integrationsApi";
@@ -10,11 +10,10 @@ export interface UseIntegrationsResult {
   isError: boolean;
 }
 
-export function useIntegrations(agentId: string | undefined): UseIntegrationsResult {
+export function useIntegrations(): UseIntegrationsResult {
   const query = useQuery<ApiIntegration[], Error>({
-    queryKey: ["integrations", agentId],
-    queryFn: () => listIntegrations(agentId as string),
-    enabled: Boolean(agentId) && agentId !== "new",
+    queryKey: ["integrations"],
+    queryFn: listIntegrations,
   });
 
   return {

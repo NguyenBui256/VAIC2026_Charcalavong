@@ -24,7 +24,6 @@ import AgentDetailHeader from "./AgentDetailHeader";
 import IdentityTab from "./IdentityTab";
 import KnowledgeBaseTab from "./tabs/KnowledgeBaseTab";
 import ToolsTab from "./tabs/ToolsTab";
-import ApiIntegrationsTab from "./tabs/ApiIntegrationsTab";
 import PromptTab from "./tabs/PromptTab";
 import ModelTab from "./tabs/ModelTab";
 import type { TabKey } from "./agentBuilderTypes";
@@ -201,9 +200,6 @@ function AgentDetailShellBody({
                   <KnowledgeBaseTab agentId={agentId} isNew={isNew} />
                 )}
                 {activeTab === "tools" && <ToolsTab agentId={agentId} isNew={isNew} />}
-                {activeTab === "api-integrations" && (
-                  <ApiIntegrationsTab agentId={agentId} isNew={isNew} />
-                )}
                 {activeTab === "prompt" && (
                   <PromptTab agentId={agentId} isNew={isNew} agent={agent} onDirtyChange={() => {}} />
                 )}

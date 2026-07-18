@@ -5,13 +5,7 @@
  * tab's internal form state (Dev Notes "Dirty/save contract").
  */
 
-export type TabKey =
-  | "identity"
-  | "knowledge-base"
-  | "tools"
-  | "api-integrations"
-  | "prompt"
-  | "model";
+export type TabKey = "identity" | "knowledge-base" | "tools" | "prompt" | "model";
 
 export interface TabRegistration {
   /** Whether this tab currently has unsaved edits. */
@@ -27,5 +21,4 @@ export type TabDirtyState = Partial<Record<TabKey, boolean>>;
 export interface TabCounts {
   documents?: number;
   tools?: number;
-  integrations?: number;
 }
