@@ -1,12 +1,10 @@
 /* Story 1.8 — Topbar (56px).
  * Left: wordmark + Tenant/Department breadcrumb.
- * Right: global Run split-button + Escalation bell + theme toggle + avatar menu.
+ * Right: notifications + Escalation bell + theme toggle + avatar menu.
  */
 
 import { useState, useRef, useEffect } from "react";
 import {
-  Play,
-  ChevronDown,
   Bell,
   LogOut,
   User as UserIcon,
@@ -46,41 +44,10 @@ const wordmarkStyle: React.CSSProperties = {
   letterSpacing: "-0.02em",
 };
 
-const breadcrumbStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "var(--space-2)",
-  fontSize: "var(--text-small)",
-  color: "var(--color-text-tertiary)",
-};
-
 const rightSection: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: "var(--space-3)",
-};
-
-const runButtonStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: "var(--space-2)",
-  padding: "6px var(--space-3)",
-  border: "1px solid var(--color-primary)",
-  borderRadius: "var(--radius-control)",
-  background: "var(--color-primary)",
-  color: "var(--color-on-primary)",
-  fontSize: "var(--text-small)",
-  fontWeight: 600,
-};
-
-const runArrowStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  width: "20px",
-  height: "28px",
-  borderLeft: "1px solid var(--color-primary-hover)",
-  marginLeft: "var(--space-1)",
 };
 
 const iconBtnStyle: React.CSSProperties = {
@@ -165,24 +132,16 @@ export default function Topbar({ user, onLogout }: TopbarProps) {
     ? user.email.substring(0, 2).toUpperCase()
     : "U";
 
-  const tenantName = "SHB Demo";
-  const deptName = user?.department_id ?? "Unassigned";
-
   return (
     <header className="vaic-topbar" style={topbarStyle} data-testid="vaic-topbar">
       {/* Left: wordmark + breadcrumb */}
       <div style={leftSection}>
         <span className="vaic-wordmark" style={wordmarkStyle}>
-          VAIC&#9888;
+          Banking Agent Hub
         </span>
-        <div style={breadcrumbStyle} data-testid="vaic-breadcrumb">
-          <span>Tenant: {tenantName}</span>
-          <span>/</span>
-          <span>Dept: {deptName}</span>
-        </div>
       </div>
 
-      {/* Right: Run + Bell + Theme + Avatar */}
+      {/* Right: Notifications + Bell + Theme + Avatar */}
       <div style={rightSection}>
         <button
           type="button"
@@ -204,14 +163,6 @@ export default function Topbar({ user, onLogout }: TopbarProps) {
         >
           <Search size={14} strokeWidth={1.5} />
           <span style={{ fontWeight: 500 }}>{shortcutLabel}</span>
-        </button>
-
-        <button type="button" className="vaic-run-button" style={runButtonStyle}>
-          <Play size={14} strokeWidth={2} fill="currentColor" />
-          <span>Run</span>
-          <span style={runArrowStyle}>
-            <ChevronDown size={14} strokeWidth={1.5} />
-          </span>
         </button>
 
         <NotificationsBell />

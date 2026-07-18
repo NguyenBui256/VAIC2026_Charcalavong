@@ -14,10 +14,10 @@ import {
   Wrench,
   Workflow,
   AppWindow,
-  Zap,
+  // Zap, // tạm ẩn Actions
   Activity,
-  Settings,
-  HelpCircle,
+  // Settings, // tạm ẩn Settings
+  // HelpCircle, // tạm ẩn Help
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -41,9 +41,10 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/tools", label: "Tools", icon: Wrench },
   { to: "/workflows", label: "Workflows", icon: Workflow },
   { to: "/mini-apps", label: "Mini-Apps", icon: AppWindow },
-  { to: "/actions", label: "Actions", icon: Zap },
+  // Tạm ẩn — khôi phục khi cần:
+  // { to: "/actions", label: "Actions", icon: Zap },
   { to: "/audit", label: "Audit", icon: Activity },
-  { to: "/settings", label: "Settings", icon: Settings },
+  // { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 const sidebarStyle = {
@@ -88,10 +89,11 @@ const linkHover: React.CSSProperties = {
   background: "var(--color-surface-muted)",
 };
 
-const footerStyle = {
-  padding: "var(--space-3) var(--space-4)",
-  borderTop: "1px solid var(--color-border)",
-};
+// Tạm ẩn Help — footerStyle giữ lại để khôi phục khi cần:
+// const footerStyle = {
+//   padding: "var(--space-3) var(--space-4)",
+//   borderTop: "1px solid var(--color-border)",
+// };
 
 // Floating toggle tab pinned to the right vertical edge of the sidebar,
 // vertically centered on the border divider.
@@ -197,6 +199,7 @@ export default function Sidebar() {
           );
         })}
       </nav>
+      {/* Tạm ẩn Help — khôi phục khi cần:
       <div style={footerStyle}>
         <NavLink
           to="/help"
@@ -208,6 +211,7 @@ export default function Sidebar() {
           {!collapsed && <span>Help</span>}
         </NavLink>
       </div>
+      */}
     </aside>
   );
 }
