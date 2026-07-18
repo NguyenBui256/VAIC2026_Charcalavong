@@ -54,6 +54,7 @@ NODE_EXECUTION_STATUSES = (
     "skipped",
     "rolled_back",
 )
+ROLLBACK_STATUSES = ("pending", "accepted", "refused")
 
 
 class Workflow(Base):
@@ -361,6 +362,50 @@ class RunNodeExecution(Base):
         DateTime(timezone=True), nullable=True
     )
     completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class RunRollbackRequest(Base):
+    """A reject-driven request to roll a run back to a chosen parent node (3B).
+
+    Created `pending` when a human rejects a gated node. The target parent's
+    approver confirms (accepted) or refuses (refused); an auto target parent
+    (no approvers) is auto-accepted at reject time.
+    """
+
+    __tablename__ = "run_rollback_requests"
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN {ROLLBACK_STATUSES!r}",
+            name="ck_run_rollback_requests_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid7
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workflow_runs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    requester_node_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_node_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", server_default="pending"
+    )
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
