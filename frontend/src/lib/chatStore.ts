@@ -18,6 +18,9 @@ export interface Conversation {
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
+  targetType?: "agent" | "workflow" | null;
+  targetId?: string | null;
+  targetName?: string | null;
 }
 
 const STORAGE_KEY = "vaic:chat:conversations";
@@ -115,6 +118,24 @@ export function useChat() {
     );
   }, []);
 
+  const setTarget = useCallback(
+    (
+      convId: string,
+      targetType: "agent" | "workflow" | null,
+      targetId: string | null,
+      targetName: string | null,
+    ) => {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === convId
+            ? { ...c, targetType, targetId, targetName, updatedAt: Date.now() }
+            : c,
+        ),
+      );
+    },
+    [],
+  );
+
   // Helper: mutate messages of a conversation by id.
   const patchMessages = useCallback(
     (id: string, fn: (msgs: ChatMessage[]) => ChatMessage[]) => {
@@ -184,7 +205,11 @@ export function useChat() {
 
       // Stream the mock reply into the assistant message.
       setIsTyping(true);
-      const full = generateMockReply(trimmed);
+      const target =
+        activeConversation && activeConversation.id === id && activeConversation.targetType
+          ? { type: activeConversation.targetType, name: activeConversation.targetName ?? "" }
+          : null;
+      const full = generateMockReply(trimmed, target);
       cancelRef.current = streamText(
         full,
         (partial) => {
@@ -200,7 +225,7 @@ export function useChat() {
         },
       );
     },
-    [activeId, isTyping, patchMessages],
+    [activeId, isTyping, patchMessages, activeConversation],
   );
 
   return {
@@ -212,6 +237,7 @@ export function useChat() {
     newConversation,
     deleteConversation,
     renameConversation,
+    setTarget,
     sendMessage,
   };
 }

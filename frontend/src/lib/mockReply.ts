@@ -3,10 +3,22 @@
  * markdown rendering, code blocks, lists, etc.
  */
 
+export interface ChatTarget {
+  type: "agent" | "workflow";
+  name: string;
+}
+
 /** Build the full markdown reply text for a given user message. */
-export function generateMockReply(userText: string): string {
+export function generateMockReply(
+  userText: string,
+  target?: ChatTarget | null,
+): string {
   const trimmed = userText.trim();
+  const targetLine = target
+    ? [`> Đang chat với **${target.type === "agent" ? "agent" : "workflow"}** \`${target.name}\``, ""]
+    : [];
   return [
+    ...targetLine,
     `Bạn vừa nói: **${trimmed || "(trống)"}**`,
     "",
     "Đây là phản hồi *demo* (chưa nối backend). Mình hỗ trợ:",
