@@ -8,11 +8,14 @@ import { useWorkflows } from "../hooks/useWorkflows";
 import { useDebounce } from "../lib/useDebounce";
 import { semanticIcons, ICON_STROKE_WIDTH } from "../lib/icons";
 import type { Workflow } from "../lib/workflowsApi";
+import NewWorkflowModal from "../components/workflows/NewWorkflowModal";
+import type { CreateSeed } from "../lib/graphTemplates";
 
 export default function WorkflowsPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [ownerId, setOwnerId] = useState("");
+  const [newOpen, setNewOpen] = useState(false);
   const debouncedSearch = useDebounce(search, 200);
 
   const { query, data: workflows, isLoading, isError } = useWorkflows({
@@ -37,6 +40,11 @@ export default function WorkflowsPage() {
       render: (row) => new Date(row.updated_at).toLocaleString(),
     },
   ];
+
+  function handleNewConfirm(seed: CreateSeed) {
+    setNewOpen(false);
+    navigate("/workflows/new", { state: { seed } });
+  }
 
   function renderBody() {
     if (isError) {
@@ -75,7 +83,7 @@ export default function WorkflowsPage() {
             title="No workflows yet."
             description="Create your first Workflow to get started."
             action={
-              <Button variant="primary" onClick={() => navigate("/workflows/new")}>
+              <Button variant="primary" onClick={() => setNewOpen(true)}>
                 New Workflow
               </Button>
             }
@@ -105,7 +113,7 @@ export default function WorkflowsPage() {
           </p>
         </div>
         {!isEmpty && (
-          <Button variant="primary" onClick={() => navigate("/workflows/new")}>
+          <Button variant="primary" onClick={() => setNewOpen(true)}>
             New Workflow
           </Button>
         )}
@@ -131,6 +139,12 @@ export default function WorkflowsPage() {
       </div>
 
       {renderBody()}
+
+      <NewWorkflowModal
+        open={newOpen}
+        onCancel={() => setNewOpen(false)}
+        onConfirm={handleNewConfirm}
+      />
     </div>
   );
 }

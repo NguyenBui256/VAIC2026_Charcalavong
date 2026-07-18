@@ -10,6 +10,10 @@ export interface RFNodeData extends Record<string, unknown> {
   agentId: string;
   nodeKey: string;
   approverUserIds: string[];
+  // Display-only activity-diagram metadata, injected at render time by
+  // activityDiagram.withActivityMeta (never serialized to the API).
+  inDegree?: number;
+  outDegree?: number;
 }
 
 /* Full React Flow node type for the "agent" custom node. The string

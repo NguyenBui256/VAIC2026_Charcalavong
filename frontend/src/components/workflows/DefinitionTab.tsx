@@ -6,10 +6,13 @@
  */
 
 import { useEffect, useState, type ReactNode } from "react";
+import { useLocation } from "react-router-dom";
 import { Button, useToast } from "../ui";
 import ConstraintsEditor from "./ConstraintsEditor";
 import type { Workflow } from "../../lib/workflowsApi";
 import { useWorkflowMutations } from "../../hooks/useWorkflowMutations";
+import { getTemplate, type CreateSeed } from "../../lib/graphTemplates";
+import { putWorkflowGraph } from "../../lib/workflowGraphApi";
 
 export interface DefinitionTabProps {
   workflowId: string;
@@ -76,7 +79,13 @@ export default function DefinitionTab({
   onDirtyChange,
   onSaved,
 }: DefinitionTabProps) {
+  const location = useLocation();
+  const seed = isNew ? ((location.state as { seed?: CreateSeed } | null)?.seed ?? null) : null;
+
   const initial = toFormState(workflow);
+  if (isNew && seed && seed.kind !== "blank" && !initial.name) {
+    initial.name = seed.defaultName;
+  }
   const [form, setForm] = useState<FormState>(initial);
   const [errors, setErrors] = useState<Partial<Record<"name" | "description", string>>>({});
   const [touched, setTouched] = useState<Partial<Record<"name" | "description", boolean>>>({});
@@ -86,8 +95,10 @@ export default function DefinitionTab({
   const { show } = useToast();
 
   // Resync the form baseline whenever the underlying Workflow record changes
-  // (initial load, or after a successful save).
+  // (initial load, or after a successful save). Skip when there is no record
+  // yet (new workflow) — otherwise this would clobber the seed-prefilled name.
   useEffect(() => {
+    if (!workflow) return;
     setForm(toFormState(workflow));
     setErrors({});
     setTouched({});
@@ -130,6 +141,27 @@ export default function DefinitionTab({
       const saved = isNew
         ? await create.mutateAsync(payload)
         : await update.mutateAsync(payload);
+
+      // Seed the new workflow's graph from the chosen template / source.
+      if (isNew && seed && seed.kind !== "blank") {
+        try {
+          const def =
+            seed.kind === "template"
+              ? getTemplate(seed.templateId)?.build()
+              : seed.def;
+          if (def) await putWorkflowGraph(saved.id, def);
+        } catch (graphErr) {
+          // The record exists; surface the seeding failure but still proceed —
+          // the user can build the graph manually in the Graph tab.
+          show(
+            graphErr instanceof Error
+              ? `Workflow created, but seeding the graph failed: ${graphErr.message}`
+              : "Workflow created, but seeding the graph failed.",
+            "error",
+          );
+        }
+      }
+
       show("Workflow saved");
       onSaved?.(saved);
     } catch (err) {
