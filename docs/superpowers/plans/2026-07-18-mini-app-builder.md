@@ -751,12 +751,17 @@ def _emit_row_change(app_id: uuid.UUID, event_type: str, payload: dict[str, Any]
     return None
 
 
-def _audit(session: Session, entity_id: uuid.UUID, event_type: str, detail: dict[str, Any]) -> None:
+def _audit(entity_id: uuid.UUID, event_type: str, detail: dict[str, Any]) -> None:
+    # EXACT AuditEntry shape (verified from core/ports/audit.py) — the sink
+    # method is `.log(...)`, NOT `.write`; fields are run_id/step_id/agent_id/
+    # ts/type/input/output/latency_ms/model. Do NOT rename (Trace Dashboard
+    # depends on them). Mirrors orchestrator.service._emit_audit.
     run_id, step_id = crud_audit_ids(str(entity_id))
-    PostgresAuditSink(session).write(
+    PostgresAuditSink().log(
         AuditEntry(
-            run_id=run_id, step_id=step_id, type=event_type,
-            payload=detail, model="", latency_ms=0, timestamp=utcnow_iso_ms(),
+            run_id=run_id, step_id=step_id, agent_id=str(entity_id),
+            ts=utcnow_iso_ms(), type=event_type, input=detail, output={},
+            latency_ms=0, model="",
         )
     )
 
@@ -788,7 +793,7 @@ def create_app_from_schema(
     )
     app = plan_to_model(plan)
     session.add(app)
-    _audit(session, app.id, "mini_app.provisioned",
+    _audit(app.id, "mini_app.provisioned",
            {"slug": app.slug, "visibility_tier": app.visibility_tier})
     session.commit()
     session.refresh(app)
@@ -897,7 +902,7 @@ def serialize_row(row: MiniAppRow) -> dict[str, Any]:
     }
 ```
 
-> Note: confirm `ConflictError` exists in `core/errors.py` (409). If missing, add it beside `AuthorizationError` following the `DomainError` pattern, and ensure the handler maps it to 409. Confirm `PostgresAuditSink(session).write(AuditEntry(...))` matches the real constructor/method signature (open `core/adapters/audit_postgres.py` and `core/ports/audit.py`) and adjust field names if they differ.
+> VERIFIED (do not re-derive): `core/errors.py` already defines `ValidationError`, `NotFoundError`, `AuthorizationError`, `ConflictError` (all `DomainError` subclasses with handler status mapping) — import them, add nothing. `AuthorizationError(msg, code="FORBIDDEN")` is the existing call style (see `orchestrator.service.create_workflow`). The audit sink is `PostgresAuditSink().log(AuditEntry(...))` with NO session arg — exact `AuditEntry` fields already applied in `_audit` above.
 
 - [ ] **Step 2: Verify service imports resolve**
 
@@ -1186,7 +1191,7 @@ def _strip_fences(text: str) -> str:
     return t.strip()
 ```
 
-> The exact adapter method (`adapter.complete(...)` vs `.chat(...)`) and `Message`/`ModelRef` construction MUST be copied from `orchestrator/service.py::decompose_run`. Adjust the two marked lines to match; do not invent a signature.
+> VERIFIED: the adapter method is `llm.complete(...)` returning a `CompletionResult` (`core/ports/llm.py`), selected via `select_llm_adapter(provider)`; `Message(role=, content=)`, `ModelRef(provider=, model_name=)`. Copy the EXACT `llm.complete(...)` call (its keyword args) and the `CompletionResult` text-field name from `orchestrator/service.py::decompose_run` (around line 461, `completion = llm.complete(...)`) — replace the two marked lines with that shape. Do not invent a signature.
 
 - [ ] **Step 2: Add the emission branch to `create_mini_app_route`** — accept optional `description`+`expected_output` with no `entity_schema`; when the schema is absent, call `emit_schema(...)`, audit `mini_app.schema_emitted` (agent id + prompt) on success or `mini_app.schema_rejected` on `SchemaValidationError` (map to 422). Keep the supplied-schema path working.
 
@@ -1539,7 +1544,7 @@ git commit -m "feat(mini-app): BuildPort + esbuild adapter + iframe runtime temp
 
 **Files:**
 - Create: `backend/app/workers/mini_app_worker.py`
-- Modify: `backend/app/workers/` worker registration (add `build_mini_app` to the worker `functions` — check how `run_worker.py`/`WorkerConfig` aggregates functions; append there)
+- Modify: `backend/scripts/run_worker.py` — VERIFIED it imports `worker_config` from `orchestrator_worker` (which is `WorkerConfig(functions=[run_workflow])`). Register `build_mini_app` WITHOUT coupling modules (AD-1): import `build_mini_app` from `mini_app_worker` in `run_worker.py` and pass a combined function list to the worker (e.g. build a merged `WorkerConfig(functions=[*orchestrator fns, build_mini_app])`, or add an `extra_functions` arg). Do NOT import mini_app into orchestrator_worker.
 - Modify: `backend/app/main.py` (mount static files at `/mini-app-runtime` from the bundle root dir; add a settings key `mini_app_bundle_root`, default under a writable runtime dir)
 
 **Interfaces:**
