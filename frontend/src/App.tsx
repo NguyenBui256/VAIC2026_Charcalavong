@@ -17,6 +17,8 @@ import RunTrackingPage from "./routes/orchestrator/RunTrackingPage";
 import MiniAppsPage from "./routes/mini-apps";
 import MiniAppHostPage from "./routes/mini-app-host";
 import AuditPage from "./routes/audit";
+import ToolsPage from "./routes/tools/ToolsPage";
+import KnowledgeBasePage from "./routes/knowledge-base/KnowledgeBasePage";
 import { isAuthenticated } from "./lib/auth";
 import { CommandPaletteProvider } from "./components/CommandPalette/CommandPaletteContext";
 import CommandPalette from "./components/CommandPalette/CommandPalette";
@@ -61,9 +63,9 @@ export function AppRoutes() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/agents" element={<AgentsPage />} />
         <Route path="/agents/:id" element={<AgentDetailPage />} />
-        {/* Placeholder routes — real surfaces arrive later (Tools/KB are Agent-scoped for now). */}
-        <Route path="/knowledge-base" element={<ComingSoon title="Knowledge Base" />} />
-        <Route path="/tools" element={<ComingSoon title="Tools" />} />
+        {/* Task 9 — shared Tools + Knowledge Base pages. */}
+        <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
+        <Route path="/tools" element={<ToolsPage />} />
         {/* Story 3.1 — Workflow list + Definition tab detail. */}
         <Route path="/workflows" element={<WorkflowsPage />} />
         <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
