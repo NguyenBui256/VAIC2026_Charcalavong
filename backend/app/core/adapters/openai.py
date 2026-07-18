@@ -48,11 +48,17 @@ class OpenAiLlmAdapter:
         self,
         api_key: str | None = None,
         base_url: str | None = None,
+        *,
+        timeout: float | None = None,
         **_kwargs: Any,
     ) -> None:
         settings = get_settings()
         self._api_key = api_key or settings.llm_api_key or settings.openai_api_key
         self._base_url = base_url or settings.llm_base_url
+        # Backend-configured hard timeout enforced on the client so a hung
+        # request aborts at this mark and raises (retried upstream by
+        # `execute_task_row`). An explicit `timeout=` arg still wins.
+        self._timeout = timeout if timeout is not None else settings.llm_timeout_seconds
         # Lazily constructed; ``None`` means "not yet built / unbuildable".
         self._client_instance: OpenAI | None = None
 
@@ -78,7 +84,9 @@ class OpenAiLlmAdapter:
         # an actual call is made -- keeps test import cheap.
         from openai import OpenAI as _OpenAI
 
-        self._client_instance = _OpenAI(api_key=self._api_key, base_url=self._base_url)
+        self._client_instance = _OpenAI(
+            api_key=self._api_key, base_url=self._base_url, timeout=self._timeout
+        )
         return self._client_instance
 
     # -- LlmPort.complete ----------------------------------------------------

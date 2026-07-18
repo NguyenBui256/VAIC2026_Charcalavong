@@ -125,6 +125,20 @@ class Settings(BaseSettings):
         default="", description="Model name for orchestrator decomposition; falls back to llm_model"
     )
 
+    # Hard wall-clock timeout (seconds) enforced on every LLM request. Set on
+    # the provider SDK client so a hung call actually aborts at this mark and
+    # raises -- WITHOUT this the SDK default (~600s) applies and the
+    # orchestrator's `asyncio.wait_for` cannot interrupt a synchronous
+    # blocking call. Retried by `execute_task_row` up to `llm_max_attempts`.
+    llm_timeout_seconds: int = Field(
+        default=60, description="Per-request LLM timeout in seconds (provider-enforced)"
+    )
+    # Max total LLM request attempts per Task (the first try + retries). 3 =>
+    # first try + 2 retries. `execute_task_row` derives `retries` from this.
+    llm_max_attempts: int = Field(
+        default=3, description="Max total LLM request attempts per Task (incl. first try)"
+    )
+
     # Story 2.7 (AR-14 stored credentials / NFR-6) — Fernet key for
     # encrypting stored Integration auth headers at rest. A missing/blank
     # key surfaces as a clear error only when encrypt/decrypt is CALLED

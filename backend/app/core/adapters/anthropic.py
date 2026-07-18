@@ -37,6 +37,7 @@ from app.core.ports.llm import (
     ModelRef,
     StreamChunk,
 )
+from app.core.settings import get_settings
 
 if TYPE_CHECKING:
     from anthropic import Anthropic
@@ -98,9 +99,13 @@ class AnthropicLlmAdapter:
         # the missing-key path raise our error rather than the SDK's.
         from anthropic import Anthropic as _Anthropic
 
-        self._client_instance = _Anthropic(
-            api_key=self._api_key, **self._extra_client_kwargs
-        )
+        # Enforce the backend-configured hard timeout on the client so a hung
+        # request aborts at `llm_timeout_seconds` and raises (retried upstream
+        # by `execute_task_row`). An explicit `timeout` in `extra_client_kwargs`
+        # (e.g. from a test) still wins.
+        client_kwargs = dict(self._extra_client_kwargs)
+        client_kwargs.setdefault("timeout", get_settings().llm_timeout_seconds)
+        self._client_instance = _Anthropic(api_key=self._api_key, **client_kwargs)
         return self._client_instance
 
     # -- LlmPort.complete ----------------------------------------------------
