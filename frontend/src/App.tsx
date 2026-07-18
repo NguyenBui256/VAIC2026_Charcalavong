@@ -19,6 +19,7 @@ import MiniAppHostPage from "./routes/mini-app-host";
 import AuditPage from "./routes/audit";
 import ToolsPage from "./routes/tools/ToolsPage";
 import KnowledgeBasePage from "./routes/knowledge-base/KnowledgeBasePage";
+import ChatPage from "./routes/chat/ChatPage";
 import DatabasePage from "./routes/database";
 import ActionsPage from "./routes/actions/ActionsPage";
 import { isAuthenticated } from "./lib/auth";
@@ -63,6 +64,7 @@ export function AppRoutes() {
         }
       >
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/chat" element={<ChatPage />} />
         <Route path="/agents" element={<AgentsPage />} />
         <Route path="/agents/:id" element={<AgentDetailPage />} />
         {/* Task 9 — shared Tools + Knowledge Base pages. */}
