@@ -153,6 +153,28 @@ def test_post_runs_enqueues_run_workflow_with_tenant_id(
 # ---------------------------------------------------------------------------
 
 
+def test_post_runs_non_builder_returns_403(
+    agent_client: TestClient,
+    agent_seed_data: dict[str, Any],
+    fake_arq_pool: _FakeArqPool,
+) -> None:
+    """M-9: only a builder may trigger a Run -- mirrors Workflow CRUD's
+    builder-only gate (AC10), since a Run has real cost (LLM decomposition
+    + Agent dispatch)."""
+    builder_token = login_token(agent_client, "builder@tenantc.example")
+    workflow = _create_workflow(agent_client, builder_token, name="Gated Flow")
+
+    operator_token = login_token(agent_client, "operator@tenantc.example")
+    r = agent_client.post(
+        f"/workflows/{workflow['id']}/runs",
+        json={},
+        headers=_auth_headers(operator_token),
+    )
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "FORBIDDEN"
+    assert fake_arq_pool.enqueued == []
+
+
 def test_post_runs_unknown_workflow_returns_404(
     agent_client: TestClient,
     agent_seed_data: dict[str, Any],

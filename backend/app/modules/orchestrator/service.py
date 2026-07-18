@@ -206,15 +206,24 @@ def create_run(
     session: Session,
     workflow_id: uuid.UUID,
     *,
+    role: str,
     input: dict[str, Any] | None = None,
 ) -> WorkflowRun:
-    """Create a `pending` Run for a Workflow (AC2).
+    """Create a `pending` Run for a Workflow (AC2). Requires builder role (M-9).
 
     `get_workflow` 404s on a missing/cross-tenant `workflow_id` (RLS-backed)
     before any Run row is created. No arq enqueue happens here — that is
     the route's responsibility (AC3), since only the route has access to
     the arq pool dependency (AD-1: service stays transport-agnostic).
+
+    Mirrors `create_workflow`'s builder-only gate (AC10) — triggering a Run
+    is a mutation with real cost (LLM decomposition + Agent dispatch), so
+    the same role restriction applies.
     """
+    if role != "builder":
+        raise AuthorizationError(
+            "builder role required to create a Run", code="FORBIDDEN"
+        )
     workflow = get_workflow(session, workflow_id)
     tenant_id = tenant_context.get()
     run = WorkflowRun(
@@ -462,9 +471,19 @@ async def execute_task_row(
 
 
 def aggregate_run(session: Session, run_id: uuid.UUID | str) -> dict:
-    """Merge all Task results for `run_id` into the Run's aggregate shape."""
+    """Merge all Task results for `run_id` into the Run's aggregate shape.
+
+    `populate_existing()` is required here (M-3): the identity-mapped
+    `Task` objects `execute_task_row` mutated via raw-SQL CAS commits get
+    expired-then-silently-repopulated-then-re-expired across the audit
+    commit right after each CAS (per-attribute expiry ordering quirk) --
+    without it, this SELECT can return a stale cached `status` (e.g.
+    `pending`) even though the row's `result` column reads fresh, corrupting
+    the succeeded-task count `orchestrate_run` relies on.
+    """
     _reassert_rls(session)
-    rows = session.execute(select(Task).where(Task.run_id == run_id)).scalars().all()
+    stmt = select(Task).where(Task.run_id == run_id).execution_options(populate_existing=True)
+    rows = session.execute(stmt).scalars().all()
     return {
         "tasks": [
             {
@@ -474,6 +493,20 @@ def aggregate_run(session: Session, run_id: uuid.UUID | str) -> dict:
             for t in rows
         ]
     }
+
+
+def _has_succeeded_task(result: dict) -> bool:
+    """True iff >=1 Task in `aggregate_run`'s output actually succeeded (M-3).
+
+    A Task counts as succeeded only when `status=='completed'` AND its
+    stored `result.success` is truthy -- a `status=='failed'` Task (infra
+    error/timeout) or a `completed` Task whose Agent/tool reported
+    `success=False` (M-4) does NOT count.
+    """
+    return any(
+        t["status"] == "completed" and (t.get("result") or {}).get("success")
+        for t in result["tasks"]
+    )
 
 
 async def orchestrate_run(
@@ -500,10 +533,11 @@ async def orchestrate_run(
 
     _reassert_rls(session)
     result = aggregate_run(session, run_id)
+    to_status = "completed" if _has_succeeded_task(result) else "failed"
     _reassert_rls(session)
     if not transition_and_audit(
         session, kind="run", entity_id=run_id, run_id=run_id,
-        from_status="running", to_status="completed",
+        from_status="running", to_status=to_status,
         extra_cols={"result": json.dumps(result)},
     ):
         return  # lost race (AD-6) — do not overwrite a Run someone else transitioned

@@ -92,6 +92,68 @@ async def test_orchestrate_run_end_to_end(
     assert all(t["result"]["output"]["ok"] is True for t in updated.result["tasks"])
 
 
+async def test_orchestrate_run_fails_when_no_task_succeeds(
+    app_session: Session,
+    seeded_run_with_two_agents: tuple[WorkflowRun, uuid.UUID, uuid.UUID],
+) -> None:
+    """M-3: every Task ends `completed` with `result.success=False` (M-4 tool
+    failure, not an infra error) -> the Run must end `failed`, not
+    `completed` -- a Run with zero actually-successful Tasks is not a
+    success."""
+    from app.modules.orchestrator.service import orchestrate_run
+
+    run, a_id, b_id = seeded_run_with_two_agents
+    payload = [
+        {"task": {"summary": f"t{i}"}, "target_agent_id": str(aid), "input": {},
+         "output": {}, "expected": [], "criteria": {}}
+        for i, aid in enumerate([a_id, b_id])
+    ]
+    execu = FakeExecutor(
+        TaskExecutionResult(
+            output={"ok": False}, confidence=0.9, success=False, error="tool failed"
+        )
+    )
+    await orchestrate_run(app_session, run.id, llm=FakeLlm(payload), executor=execu)
+
+    app_session.expire_all()
+    updated = app_session.get(WorkflowRun, run.id)
+    assert updated.status == "failed"
+    assert len(updated.result["tasks"]) == 2
+
+
+async def test_orchestrate_run_completes_when_at_least_one_task_succeeds(
+    app_session: Session,
+    seeded_run_with_two_agents: tuple[WorkflowRun, uuid.UUID, uuid.UUID],
+) -> None:
+    """M-3 counterpart: >=1 succeeding Task (of N) is still enough for the
+    Run to end `completed` -- only an all-failed Run flips to `failed`."""
+    from app.modules.orchestrator.service import orchestrate_run
+
+    run, a_id, b_id = seeded_run_with_two_agents
+    payload = [
+        {"task": {"summary": f"t{i}"}, "target_agent_id": str(aid), "input": {},
+         "output": {}, "expected": [], "criteria": {}}
+        for i, aid in enumerate([a_id, b_id])
+    ]
+
+    class MixedExecutor:
+        def __init__(self) -> None:
+            self._calls = 0
+
+        async def execute_task(self, agent_id, payload, *, tenant_id, department_id):
+            self._calls += 1
+            ok = self._calls == 1
+            return TaskExecutionResult(
+                output={"ok": ok}, confidence=0.9, success=ok, error="" if ok else "boom"
+            )
+
+    await orchestrate_run(app_session, run.id, llm=FakeLlm(payload), executor=MixedExecutor())
+
+    app_session.expire_all()
+    updated = app_session.get(WorkflowRun, run.id)
+    assert updated.status == "completed"
+
+
 async def test_run_workflow_calls_orchestrate(
     app_session: Session,
     seeded_run_with_two_agents: tuple[WorkflowRun, uuid.UUID, uuid.UUID],

@@ -145,6 +145,7 @@ def update_workflow_route(
 async def create_run_route(
     workflow_id: uuid.UUID,
     body: CreateRunRequest,
+    request: Request,
     session: Session = Depends(get_tenant_session),  # noqa: B008
     pool: ArqRedis = Depends(get_arq_pool),  # noqa: B008
 ) -> JSONResponse:
@@ -154,7 +155,9 @@ async def create_run_route(
     enqueue fails). AC3: enqueues via `enqueue_job_with_context`, which
     materializes `tenant_context.get()` into the job payload (AD-10) — the
     codebase idiom, not a raw `tenant_id=` kwarg (see Story 3.2 Dev Notes).
+    Builder role required (M-9) — mirrors Workflow CRUD mutations (AC10).
     """
-    run = create_run(session, workflow_id, input=body.input)
+    principal = _principal(request)
+    run = create_run(session, workflow_id, role=principal.role, input=body.input)
     await enqueue_job_with_context(pool, "run_workflow", run_id=str(run.id))
     return JSONResponse(status_code=201, content=_ok(serialize_run(run)))
