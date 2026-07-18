@@ -60,6 +60,7 @@ def create_app_from_schema(
     visibility_tier: str,
     whitelist_user_ids: list[uuid.UUID],
     created_by_agent_id: uuid.UUID | None = None,
+    database_id: uuid.UUID | None = None,
 ) -> MiniApp:
     from app.modules.mini_app.lifecycle import plan_to_model
     from app.modules.mini_app.provisioner import build_provisioning_plan
@@ -73,6 +74,7 @@ def create_app_from_schema(
         owner_id=principal.user_id, name=name, description=description,
         schema=schema, ui_spec=ui_spec, visibility_tier=visibility_tier,
         whitelist_user_ids=whitelist_user_ids, created_by_agent_id=created_by_agent_id,
+        database_id=database_id,
     )
     app = plan_to_model(plan)
     session.add(app)
@@ -172,6 +174,7 @@ def serialize_app(app: MiniApp) -> dict[str, Any]:
         "description": app.description, "entity_schema": app.entity_schema,
         "ui_spec": app.ui_spec, "visibility_tier": app.visibility_tier,
         "whitelist_user_ids": [str(u) for u in (app.whitelist_user_ids or [])],
+        "database_id": str(app.database_id) if app.database_id else None,
         "build_status": app.build_status, "build_error": app.build_error,
         "created_at": app.created_at.isoformat(), "updated_at": app.updated_at.isoformat(),
     }
