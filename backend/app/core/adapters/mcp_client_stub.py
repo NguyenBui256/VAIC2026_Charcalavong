@@ -73,6 +73,18 @@ class McpClientStub(McpClientPort):
             # returns an empty passage set so the client path is exercised
             # without implementing the real tool here.
             return ToolResult(tool_name=tool_name, output={"passages": []}, success=True)
+        if tool_name == "gmail":
+            return ToolResult(
+                tool_name=tool_name,
+                output={"message_id": "stub-msg", "status": "sent"},
+                success=True,
+            )
+        if tool_name == "calendar":
+            return ToolResult(
+                tool_name=tool_name,
+                output={"event_id": "stub-evt", "status": "created"},
+                success=True,
+            )
 
         return ToolResult(
             tool_name=tool_name,

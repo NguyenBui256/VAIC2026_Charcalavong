@@ -90,22 +90,31 @@ async def kb_search(
     audit: AuditPort | None = None,
     agent_loader: AgentLoader = get_agent_row,
 ) -> list[RetrievalPassage]:
-    """Retrieve cited passages from the Agent's own Department-scoped KB.
+    """Two-gate KB retrieval (spec D3).
 
-    Scope (`tenant_id`, `department_id`) is derived from the Agent record --
-    never caller-supplied (FR-2, AD-11). Routes through
-    `McpClientPort.call_tool("rag.search", ...)`; a department mismatch
-    RAISES `AuthorizationError` before the network (AD-11, AC2) -- this
-    function never swallows it.
+    Gate 1: the agent must reference the `rag` tool. Gate 2: it must have
+    granted documents. `rag.search` is scoped to exactly those documents;
+    scope is derived from `agent_kb_documents`, never caller-supplied.
     """
-    agent = agent_loader(session, agent_id)
-    mcp = mcp_factory(agent_department_id=agent.department_id)
+    from app.modules.agent_builder.agent_kb_service import list_agent_document_ids
+    from app.modules.agent_builder.tool_catalog_service import list_agent_tool_refs
 
+    agent = agent_loader(session, agent_id)
+
+    has_rag = any(t.tool_type == "rag" for t in list_agent_tool_refs(session, agent_id=agent_id))
+    if not has_rag:
+        return []
+    doc_ids = [str(d) for d in list_agent_document_ids(session, agent_id)]
+    if not doc_ids:
+        return []
+
+    mcp = mcp_factory(agent_department_id=agent.department_id)
     result = await mcp.call_tool(
         "rag.search",
         {
             "agent_id": str(agent.id),
             "query": query,
+            "document_ids": doc_ids,
             "tenant_id": str(agent.tenant_id),
             "department_id": str(agent.department_id),
         },
@@ -113,7 +122,6 @@ async def kb_search(
         department_id=agent.department_id,
     )
     passages = _map_passages(result.output.get("passages", []))
-
     _emit_retrieval_audit(audit or PostgresAuditSink(), agent, query, passages)
     return passages
 

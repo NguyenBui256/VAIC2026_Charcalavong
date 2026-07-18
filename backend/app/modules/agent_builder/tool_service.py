@@ -22,7 +22,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.adapters.audit_postgres import PostgresAuditSink
-from app.core.adapters.sandbox import SubprocessSandbox
 from app.core.deps import crud_audit_ids, get_mcp_client
 from app.core.errors import NotFoundError
 from app.core.ids import utcnow_iso_ms
@@ -33,30 +32,22 @@ from app.core.ports.tool import ToolOutput
 from app.modules.agent_builder.models import Tool
 from app.modules.agent_builder.schema_validation import validate_instance
 
-__all__ = ["AgentToolPort", "get_tool", "get_tool_by_name", "invoke_tool"]
+__all__ = ["AgentToolPort", "get_tool_by_name", "invoke_tool"]
 
 McpFactory = Callable[..., McpClientPort]
 
 
-def get_tool(session: Session, *, agent_id: uuid.UUID, tool_id: uuid.UUID) -> Tool:
-    """Fetch a single non-deleted Tool scoped to an Agent. RLS hides cross-tenant rows."""
-    tool = session.execute(
-        select(Tool).where(
-            Tool.id == tool_id, Tool.agent_id == agent_id, Tool.is_deleted.is_(False)
-        )
-    ).scalar_one_or_none()
-    if tool is None:
-        raise NotFoundError("Tool not found")
-    return tool
-
-
 def get_tool_by_name(session: Session, *, agent_id: uuid.UUID, display_name: str) -> Tool:
-    """Fetch a Tool scoped to an Agent by `display_name` (Orchestrator dispatch, Story 3.4)."""
+    """Resolve a catalog Tool the agent references, by display_name or tool_type."""
+    from app.modules.agent_builder.models import AgentTool
+
     tool = session.execute(
-        select(Tool).where(
-            Tool.agent_id == agent_id,
-            Tool.display_name == display_name,
+        select(Tool)
+        .join(AgentTool, AgentTool.tool_id == Tool.id)
+        .where(
+            AgentTool.agent_id == agent_id,
             Tool.is_deleted.is_(False),
+            (Tool.display_name == display_name) | (Tool.tool_type == display_name),
         )
     ).scalar_one_or_none()
     if tool is None:
@@ -99,22 +90,11 @@ def _execute(
     sandbox: SandboxPort | None,
     mcp_factory: McpFactory,
 ) -> tuple[dict[str, Any] | None, Any, int]:
-    """Route to sandbox (embedded Python) or MCP; return (raw_output, sandbox_result, latency_ms).
-
-    `sandbox_result` is the raw `SandboxResult` (None for MCP-routed calls) so
-    the caller can inspect `timed_out`/`exit_code` for AC5 without re-running.
-    """
+    """Route every catalog tool to MCP by its tool_type (gmail/calendar stubbed)."""
+    _ = sandbox  # embedded-Python tools are out of scope in Sub-project A
     start = time.monotonic()
-    if tool.embedded_python:
-        sandbox_port = sandbox or SubprocessSandbox()
-        result = sandbox_port.run(tool.embedded_python, stdin=_to_json(arguments))
-        latency_ms = int((time.monotonic() - start) * 1000)
-        if result.timed_out or result.exit_code < 0:
-            return None, result, latency_ms
-        return result.output, result, latency_ms
-
     mcp = mcp_factory(agent_department_id=department_id)
-    mcp_result = _call_mcp(mcp, tool.display_name, arguments, tenant_id, department_id)
+    mcp_result = _call_mcp(mcp, tool.tool_type, arguments, tenant_id, department_id)
     latency_ms = int((time.monotonic() - start) * 1000)
     return mcp_result.output, None, latency_ms
 
@@ -140,7 +120,7 @@ def invoke_tool(
     tool_name = tool.display_name
 
     # -- AC2: input validation -----------------------------------------
-    input_errors = validate_instance(tool.input_schema, arguments)
+    input_errors = validate_instance(tool.params_schema, arguments)
     if input_errors:
         _emit_audit(
             audit_port,
@@ -239,12 +219,6 @@ def _call_mcp(
     )
 
 
-def _to_json(value: dict[str, Any]) -> str:
-    import json
-
-    return json.dumps(value)
-
-
 class AgentToolPort:
     """`ToolPort` implementation, scoped to one Agent's registered Tools.
 
@@ -275,15 +249,7 @@ class AgentToolPort:
         tenant_id: uuid.UUID,
         department_id: uuid.UUID,
     ) -> ToolOutput:
-        tool = self._session.execute(
-            select(Tool).where(
-                Tool.agent_id == self._agent_id,
-                Tool.display_name == name,
-                Tool.is_deleted.is_(False),
-            )
-        ).scalar_one_or_none()
-        if tool is None:
-            raise NotFoundError(f"Tool '{name}' not found for this Agent")
+        tool = get_tool_by_name(self._session, agent_id=self._agent_id, display_name=name)
 
         return invoke_tool(
             self._session,
