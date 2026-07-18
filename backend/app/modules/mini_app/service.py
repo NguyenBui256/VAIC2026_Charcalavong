@@ -22,7 +22,6 @@ from app.core.ids import utcnow_iso_ms
 from app.core.ports.audit import AuditEntry
 from app.modules.mini_app.models import MiniApp, MiniAppRow
 from app.modules.mini_app.schema_validation import (
-    SchemaValidationError,
     coerce_row_data,
     validate_entity_schema,
 )
@@ -77,10 +76,10 @@ def create_app_from_schema(
     )
     app = plan_to_model(plan)
     session.add(app)
-    _audit(app.id, "mini_app.provisioned",
-           {"slug": app.slug, "visibility_tier": app.visibility_tier})
     session.commit()
     session.refresh(app)
+    _audit(app.id, "mini_app.provisioned",
+           {"slug": app.slug, "visibility_tier": app.visibility_tier})
     return app
 
 
