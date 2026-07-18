@@ -2,6 +2,56 @@
 
 All notable changes to VAIC. Local commits on branch `rebuild`.
 
+## [Unreleased] — 2026-07-18 (Epic 4: Mini-App Builder + Sandbox)
+
+### Added — Epic 4: Mini-App Builder & Visibility Tier Enforcement (PRD §4.3, FR-12..FR-16)
+
+Demo vertical slice (stories 4-1,2,3,4,5,7) + a build/runtime **sandbox** layer. Commits
+`def653e`..`e22ef6e` on `rebuild`. Built subagent-driven (fresh implementer + spec/quality
+reviewer per task); spec `docs/superpowers/specs/2026-07-18-mini-app-builder-design.md`, plan
+`docs/superpowers/plans/2026-07-18-mini-app-builder.md`, ledger `.superpowers/sdd/progress.md`.
+
+- **Backend `mini_app` module**: from a description, `emission.py` has an LLM emit a
+  `{entity_schema, ui_spec}`; `schema_validation.py` validates it against the meta-schema (field
+  types `string/longtext/integer/number/boolean/date/enum` + validations); the **pure**
+  `provisioner.py` (AD-8) builds a `ProvisioningPlan`; `lifecycle.py`/`service.py` insert a
+  `mini_apps` row and enqueue the build. `service.py` is the **sole writer** to `mini_app_rows`
+  with **CAS on `updated_at`** → 409 (Divergence-3). Generic visibility-gated CRUD in `routes.py`
+  (`/mini-apps` catalog + `/apps/{app_id}/rows*`). `visibility.py` enforces the tier
+  (`public`/`need_auth`/`private` + whitelist) at the app layer; tenant isolation is DB RLS.
+  Migration `c4f1a9d3e7b2` (`mini_apps` + `mini_app_rows`, RLS ENABLE+FORCE, four access fields
+  NOT NULL, FR-13).
+- **Sandbox (the "generated app can't affect the platform" guarantee)** — three planes:
+  - *Data plane*: declarative-only backend (no per-app server code) + RLS + app-layer tier ⇒ a
+    Mini-App can't reach platform tables.
+  - *Build plane*: `source_guard.py` (AST/lexical allowlist — only `react`+`./sdk` imports, bans
+    `eval`/`window.parent`/`fetch`/…) → pure `codegen.py` (`.tsx`) → `core/ports/build.py`
+    `BuildPort` + `core/adapters/esbuild_build.py` run esbuild in an **isolated, resource-capped**
+    workdir; the adapter **never raises into the worker** and UUID-validates `app_id` as a path
+    component. `mini_app_worker.py` (arq `@tenant_aware_job`) drives
+    `pending→building→ready|failed`.
+  - *Runtime plane*: bundle served at `/mini-app-runtime/{app_id}` and embedded in a
+    `sandbox="allow-scripts allow-forms"` iframe (**no `allow-same-origin`**). The iframe holds a
+    **per-app scoped JWT** (`scoped_token.py`, custom `miniapp_id` claim — not reserved `aud`)
+    that is **globally denied on every route except its own `/apps/{id}/rows*`** (enforced in
+    `AuthMiddleware`), so leaking it into the iframe can't touch the platform. A scoped
+    null-origin CORS middleware (`core/miniapp_cors.py`) lets the opaque-origin iframe reach the
+    data plane (safe: bearer-token auth, not cookies).
+- **Frontend**: `/mini-apps` catalog (`routes/mini-apps.tsx` — list + create form + build-status
+  pills), `/mini-apps/:appId` host (`routes/mini-app-host.tsx` — sandboxed iframe + scoped token
+  via URL hash), `lib/miniAppsApi.ts`. Replaces the old `/mini-apps` `ComingSoon` stub.
+- **Rubric**: delivers **SM-5** (a live Mini-App with real JSONB storage, CRUD, and an
+  auth-gated UI). App-Event emission (FR-17, `_emit_row_change` no-op seam) + live event stream
+  (4-8) are deferred to the Epic 5 pairing.
+- **Verification**: live curl end-to-end for CRUD, a real ~1.1 MB React bundle built + served
+  over HTTP, and the scoped-token boundary (403 on `/agents`, `/mini-apps`, cross-app, mint). A
+  final whole-branch review caught a browser-only CORS gap (opaque-origin iframe) — fixed. **Not**
+  yet browser-smoke-tested; no live LLM key in this env, so emission *quality* is unverified.
+- **Known follow-ups (non-blocking)**: LLM infra failures surface as generic 500 (not 422/503);
+  `/mini-app-runtime/*` is public, exposing a private-tier app's schema *field names* to a holder
+  of its (unguessable UUIDv7) `app_id` — no row data leaks; minor dead-code/unused-param/provenance
+  nits. See ledger.
+
 ## [Unreleased] — 2026-07-18 (Epic 6 merge)
 
 ### Added — Epic 6: Trace Dashboard & Audit Provenance (PRD §4.5, FR-22/23/24)

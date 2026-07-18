@@ -175,12 +175,65 @@ Replaces the previous `ComingSoon` stub. Deep-linkable via `/audit?run_id=` (use
 `lib/auditApi.ts` exposes `downloadAuditExport` (JSON/CSV) wired to an Export button on the page
 (FR-24).
 
+## Mini-App Builder & Sandbox (Epic 4)
+
+Demo vertical slice (PRD §4.3, FR-12..FR-16). From a description an Agent/LLM emits a schema, the
+platform provisions a per-app JSONB namespace with auto CRUD, compiles a per-app React UI in an
+**isolated build sandbox**, and serves it in a **sandboxed iframe** gated by a per-app scoped
+token. Commits `def653e`..`e22ef6e` on `rebuild`. Detail spec:
+`docs/superpowers/specs/2026-07-18-mini-app-builder-design.md`.
+
+### Data model (migration `c4f1a9d3e7b2`)
+
+- `mini_apps` — one row per app: `entity_schema`/`ui_spec` (JSONB), `visibility_tier`
+  (`public`/`need_auth`/`private`) + `whitelist_user_ids`, `build_status`, `bundle_path`. Unique
+  `(tenant_id, slug)`.
+- `mini_app_rows` — one row per user record across **all** apps (single-table JSONB namespace,
+  FR-13). `tenant_id`/`department_id`/`owner_id`/`data` are NOT NULL. RLS ENABLE+FORCE on both,
+  tenant-isolation policy (`app.tenant_id` GUC) — the same pattern as every other table.
+
+### Flow: create → provision → build → serve → open
+
+1. `POST /mini-apps` (role `builder`) with a description (LLM-emitted schema) or a supplied schema
+   → `emission.py`/`schema_validation.py` → **pure** `provisioner.py` (AD-8) → `lifecycle.py`
+   inserts the row (`build_status=pending`) and enqueues `build_mini_app`. Audited
+   (`mini_app.schema_emitted`/`schema_rejected`/`provisioned`) commit-then-audit (AD-4).
+2. `mini_app_worker.py` (arq `@tenant_aware_job`): `source_guard.assert_source_safe` →
+   `codegen.generate_app_source` → `EsbuildBuild.build` into `mini_app_bundle_root/<app_id>` →
+   `build_status=ready|failed`.
+3. Row CRUD via the generic `/apps/{app_id}/rows*` router — `service.py` is the **sole writer**
+   (Divergence-3), CAS on `updated_at` (409 on conflict). Tier enforced at the app layer
+   (`visibility.py`) using the caller's `Principal`; tenant isolation is DB RLS. `_emit_row_change`
+   is a no-op seam for FR-17 (Epic 5).
+4. Frontend `/mini-apps/:appId` mounts the built bundle in a sandboxed iframe.
+
+### Sandbox model (three planes)
+
+| Plane | Isolation |
+|---|---|
+| Data | Declarative-only backend (no per-app server code) + RLS + app-layer tier ⇒ no path to platform tables. |
+| Build | `source_guard` AST/lexical allowlist (only `react`+`./sdk`; bans `eval`/`window.parent`/`fetch`/…) → pure deterministic `codegen` → `BuildPort`/`EsbuildBuild` runs esbuild in an isolated resource-capped workdir; adapter **never raises into the worker**, UUID-validates `app_id` as a path component. One bad app can only fail its own build. |
+| Runtime | Bundle served at `/mini-app-runtime/{id}`; iframe `sandbox="allow-scripts allow-forms"` (no `allow-same-origin` → opaque origin, can't read the parent's token). Per-app scoped JWT (`scoped_token.py`, custom `miniapp_id` claim) is **globally denied** by `AuthMiddleware` on every route but its own `/apps/{id}/rows*`, and can't mint another. `core/miniapp_cors.py` allows the opaque origin's `Origin: null` for the data-plane routes only (safe under bearer-token auth). |
+
+### Key files
+
+Backend: `modules/mini_app/{models,schemas,schema_validation,emission,provisioner,codegen,source_guard,lifecycle,service,visibility,routes,scoped_token,mini_app_worker}.py`,
+`modules/mini_app/runtime_template/{index.html,sdk.ts,entry.tsx}`, `core/ports/build.py`,
+`core/adapters/esbuild_build.py`, `core/miniapp_cors.py`. Frontend: `routes/mini-apps.tsx`,
+`routes/mini-app-host.tsx`, `lib/miniAppsApi.ts`.
+
+### Deferred (Epic 5 pairing)
+
+FR-17 App-Event emission (`_emit_row_change` becomes the Action Bus publish), story 4-8 live event
+stream, and orchestrator-triggered mid-Run emission (`service` is already orchestrator-callable).
+
 ## Status & Roadmap
 
-Epic 3 (backend), Epic 6 (Trace Dashboard), and Epic 7-thin are complete on branch `rebuild`
-(merge commit `63f009e`). All 4 SHB rubric bars are covered end-to-end. Remaining: a live-LLM-key
-rehearsal run (PRD OQ-2), optional embedding of trace directly inside
-`/workflows/$id/runs/$runId` (currently reachable via `/audit?run_id=` deep link instead).
-Deferred: Epic 4 Mini-App, Epic 5 Actions. See
+Epic 3 (backend), Epic 4 (Mini-App Builder + sandbox, demo slice), Epic 6 (Trace Dashboard), and
+Epic 7-thin are complete on branch `rebuild`. All 4 SHB rubric bars are covered end-to-end; Epic 4
+adds rubric SM-5 (a live Mini-App with real storage). Remaining: a browser smoke test of the Epic 4
+runtime + a live-LLM-key rehearsal run (PRD OQ-2, also gates Mini-App emission *quality*); optional
+embedding of trace inside `/workflows/$id/runs/$runId` (reachable via `/audit?run_id=` today).
+Deferred: Epic 5 Actions (incl. FR-17 App-Event emission that pairs with the Epic 4 seam). See
 `docs/superpowers/specs/2026-07-18-remaining-epics-roadmap-design.md` for the full roadmap and
 `.superpowers/sdd/progress.md` for the task-by-task ledger.

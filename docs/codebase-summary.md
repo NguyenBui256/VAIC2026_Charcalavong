@@ -3,7 +3,8 @@
 Modular monolith: FastAPI backend (`backend/`) + React/TypeScript frontend (`frontend/`).
 Multi-tenant via Postgres RLS. Background jobs via arq (Redis). See
 `docs/system-architecture.md` for architecture invariants (AD-1, AD-4, AD-6, AD-10), the
-Orchestrator flow, and the Audit/Trace Dashboard (Epic 6) in detail.
+Orchestrator flow, the Audit/Trace Dashboard (Epic 6), and the Mini-App Builder + sandbox
+(Epic 4) in detail.
 
 `audit_trail` columns: `{id, tenant_id, run_id, step_id, agent_id, ts, type, input, output,
 latency_ms, model}` — append-only (INSERT/SELECT only; UPDATE/DELETE revoked).
@@ -16,7 +17,7 @@ latency_ms, model}` — append-only (INSERT/SELECT only; UPDATE/DELETE revoked).
 | `orchestrator` | DONE, thin-slice (Epic 3) | Workflow CRUD, Run lifecycle (CAS state machine), decomposition (`decompose_run`), dispatch/aggregate (`execute_task_row`, `aggregate_run`, `orchestrate_run`) |
 | `tenant` | DONE (Epic 1) | Tenant/department/user foundation, RLS context |
 | `audit` | DONE (Epic 6) | Write: `PostgresAuditSink` — sole writer to `audit_trail` (AD-4). Read: `service.list_audit_entries` / `export_audit_entries` / `entries_to_csv`, `routes.py` — `GET /audit`, `GET /audit/export` |
-| `mini_app` | Stub, DEFER (Epic 4) | Mini-App Builder — not implemented |
+| `mini_app` | DONE, demo slice (Epic 4) | Mini-App Builder + sandbox. From a description, LLM emits + validates an entity-schema/UI-spec (`emission.py`, `schema_validation.py`), a pure provisioner (`provisioner.py`, AD-8) creates a `mini_apps` row; `service.py` is the sole writer to `mini_app_rows` (CAS on `updated_at`, Divergence-3); generic visibility-gated CRUD (`routes.py` `/mini-apps` + `/apps/{id}/rows*`); app-layer tier enforcement (`visibility.py`). Sandbox: `source_guard.py` (AST/lexical allowlist) → pure `codegen.py` (`.tsx`) → isolated esbuild build via `mini_app_worker.py` → static serve at `/mini-app-runtime/{id}` → sandboxed iframe + per-app scoped token (`scoped_token.py`). App-Event emission is a no-op seam (`_emit_row_change`), deferred to Epic 5 |
 | `actions` | Stub, DEFER (Epic 5) | Actions/Triggers — not implemented |
 
 ## Core ports (`backend/app/core/ports/*`)
@@ -27,6 +28,7 @@ Protocol interfaces implemented by module adapters (hexagonal architecture, AD-1
 - `llm.py` — `LlmPort`
 - `mcp_client.py` — `McpClientPort` (doc intake, tool invocation)
 - `tool.py`, `sandbox.py` — Tool execution + embedded-Python sandbox
+- `build.py` — `BuildPort` (`build(app_id, tsx_source, out_dir) -> BuildResult`); adapter `core/adapters/esbuild_build.py` bundles a per-app React app in an isolated, resource-capped esbuild step (never raises into the worker; `app_id` UUID-validated as a path component)
 - `audit.py` — audit sink interface
 - `doc_intake.py` — legacy/dead code path superseded by `McpClientPort` (see Epic 2 P4 note in `.superpowers/sdd/progress.md`)
 
@@ -35,6 +37,11 @@ Protocol interfaces implemented by module adapters (hexagonal architecture, AD-1
 - `orchestrator_worker.py` — arq entrypoint `run_workflow(ctx, *, run_id, resume=False)`,
   decorated `@tenant_aware_job` (AD-10), registers `resume_orphaned_runs` on startup to recover
   Runs stuck at `running` after a worker crash.
+- `modules/mini_app/mini_app_worker.py` (Epic 4) — arq job `build_mini_app(ctx, *, app_id)`,
+  `@tenant_aware_job`; transitions `build_status` `pending→building→ready|failed`, runs
+  guard→codegen→esbuild, writes the bundle under `mini_app_bundle_root`. Registered in
+  `scripts/run_worker.py` via `dataclasses.replace(worker_config, functions=[…])` so the
+  `orchestrator` module is never imported into it (AD-1).
 
 ## Demo bootstrap scripts (`backend/scripts/*`, Epic 7-thin)
 
@@ -52,7 +59,8 @@ Protocol interfaces implemented by module adapters (hexagonal architecture, AD-1
 | `workflows`, `workflow-detail` | DONE (Epic 3 Story 3.1 — list + Definition tab) |
 | `audit` (`AuditPage`) | DONE (Epic 6) — Trace timeline (FR-22), collaboration graph (FR-23), JSON/CSV export (FR-24); deep-link `/audit?run_id=` |
 | `orchestrator` | Scaffold |
-| `mini-apps.$appId`, `actions` | Stub, DEFER (Epic 4/5) |
+| `mini-apps` (`MiniAppsPage`), `mini-app-host` (`MiniAppHostPage`) | DONE (Epic 4) — catalog list+create; `/mini-apps/:appId` mounts the generated app in a `sandbox="allow-scripts allow-forms"` iframe (no `allow-same-origin`) with a per-app scoped token passed via the URL hash. Client: `lib/miniAppsApi.ts` |
+| `actions` | Stub, DEFER (Epic 5) |
 
 ### Audit components (`frontend/src/components/audit/*`, Epic 6)
 
@@ -66,6 +74,7 @@ Chain includes (chronological, Epic 3 additions):
 
 - `1ad51bb8e8cb` — `create_workflows_rls` (Story 3.1)
 - `39dfa51cec0c` — `create_workflow_runs_tasks_rls` (Story 3.2; `workflow_runs` + `tasks` + RLS)
+- `c4f1a9d3e7b2` — `create_mini_apps_rls` (Epic 4; `mini_apps` + `mini_app_rows`, tenant RLS ENABLE+FORCE on both; `mini_app_rows` four access fields NOT NULL)
 
 ## Testing
 
