@@ -1,4 +1,4 @@
-/* Story 2.7 — TanStack Query mutation hooks for the Integrations tab (CRUD + test). */
+/* Shared pool — TanStack Query mutation hooks for tenant-level Integrations (CRUD + test). */
 
 import {
   useMutation,
@@ -27,14 +27,12 @@ export interface UseIntegrationMutationsResult {
   test: UseMutationResult<IntegrationTestResult, Error, string>;
 }
 
-export function useIntegrationMutations(
-  agentId: string | undefined,
-): UseIntegrationMutationsResult {
+export function useIntegrationMutations(): UseIntegrationMutationsResult {
   const queryClient = useQueryClient();
-  const key = ["integrations", agentId];
+  const key = ["integrations"];
 
   const create = useMutation<ApiIntegration, Error, CreateIntegrationInput>({
-    mutationFn: (input) => createIntegration(agentId as string, input),
+    mutationFn: (input) => createIntegration(input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: key }),
   });
 
@@ -43,18 +41,17 @@ export function useIntegrationMutations(
     Error,
     { integrationId: string; patch: UpdateIntegrationInput }
   >({
-    mutationFn: ({ integrationId, patch }) =>
-      updateIntegration(agentId as string, integrationId, patch),
+    mutationFn: ({ integrationId, patch }) => updateIntegration(integrationId, patch),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: key }),
   });
 
   const remove = useMutation<{ id: string }, Error, string>({
-    mutationFn: (integrationId) => deleteIntegration(agentId as string, integrationId),
+    mutationFn: (integrationId) => deleteIntegration(integrationId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: key }),
   });
 
   const test = useMutation<IntegrationTestResult, Error, string>({
-    mutationFn: (integrationId) => testIntegration(agentId as string, integrationId),
+    mutationFn: (integrationId) => testIntegration(integrationId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: key }),
   });
 
