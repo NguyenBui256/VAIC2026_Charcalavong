@@ -63,6 +63,7 @@ def _emit_audit(
     input_payload: dict[str, Any],
     output_payload: dict[str, Any],
     latency_ms: int,
+    agent_id: str = "",
 ) -> None:
     """Emit one audit entry (AD-4). NEVER includes the raw `header` secret."""
     run_id, step_id = crud_audit_ids(str(tool.id))
@@ -70,7 +71,7 @@ def _emit_audit(
         AuditEntry(
             run_id=run_id,
             step_id=step_id,
-            agent_id=str(tool.agent_id),
+            agent_id=agent_id,
             ts=utcnow_iso_ms(),
             type=entry_type,
             input=input_payload,
@@ -109,6 +110,7 @@ def invoke_tool(
     audit: AuditPort | None = None,
     sandbox: SandboxPort | None = None,
     mcp_factory: McpFactory = get_mcp_client,
+    agent_id: uuid.UUID | None = None,
 ) -> ToolOutput:
     """Validate -> route (sandbox|MCP) -> validate output -> audit (AC2-AC5).
 
@@ -118,6 +120,7 @@ def invoke_tool(
     _ = session  # reserved for future Tool-scoped lookups; not needed here
     audit_port = audit or PostgresAuditSink()
     tool_name = tool.display_name
+    audit_agent_id = str(agent_id) if agent_id else ""
 
     # -- AC2: input validation -----------------------------------------
     input_errors = validate_instance(tool.params_schema, arguments)
@@ -129,6 +132,7 @@ def invoke_tool(
             input_payload={"tool_id": str(tool.id), "arguments": arguments},
             output_payload={"reason": "input_schema_mismatch", "errors": input_errors},
             latency_ms=0,
+            agent_id=audit_agent_id,
         )
         return ToolOutput(
             tool_name=tool_name,
@@ -144,6 +148,7 @@ def invoke_tool(
         input_payload={"tool_id": str(tool.id), "arguments": arguments},
         output_payload={},
         latency_ms=0,
+        agent_id=audit_agent_id,
     )
 
     # -- AC4: route to sandbox (embedded Python) or MCP -----------------
@@ -169,6 +174,7 @@ def invoke_tool(
                 "stderr": sandbox_result.stderr[:2000],
             },
             latency_ms=latency_ms,
+            agent_id=audit_agent_id,
         )
         return ToolOutput(
             tool_name=tool_name,
@@ -188,6 +194,7 @@ def invoke_tool(
             input_payload={"tool_id": str(tool.id)},
             output_payload={"reason": "output_schema_mismatch", "errors": output_errors},
             latency_ms=latency_ms,
+            agent_id=audit_agent_id,
         )
         return ToolOutput(
             tool_name=tool_name,
@@ -260,4 +267,5 @@ class AgentToolPort:
             audit=self._audit,
             sandbox=self._sandbox,
             mcp_factory=self._mcp_factory,
+            agent_id=self._agent_id,
         )

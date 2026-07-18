@@ -12,6 +12,26 @@ functions only. The one sanctioned exception is a DB-level foreign key
 interfaces (e.g. `AgentProviderPort`, `LlmPort`, `McpClientPort`) implemented by adapters in each
 module.
 
+## Shared Tools & Knowledge Base (Sub-project A)
+
+Tools and KB documents are **tenant-wide shared resources**, not agent-owned children (all inside
+the `agent_builder` module, so AD-1 is preserved). Frontend surfaces for this are built separately.
+
+- **Tools catalog** (`tools`): built-in connectors `rag`/`gmail`/`calendar`, seeded per tenant,
+  each with `description` + `params_schema` (the LLM call interface). Agents reference tools via the
+  `agent_tools` M2M. No user-authored tools yet; `gmail`/`calendar` execution is stubbed through the
+  MCP stub (mirroring `rag.*`).
+- **KB store** (`kb_documents`): `owner_id` (uploader = implicit `manager`), nullable
+  `department_id` (optional tag). Two permission axes: `kb_document_grants` (per-user `viewer`/
+  `manager` ACL, enforced in `kb_grants_service`) and `agent_kb_documents` (which agents may RAG a
+  doc). Tenant isolation remains DB RLS; the intra-tenant user ACL is enforced in the service layer.
+- **Two-gate retrieval** (`kb_retrieval.kb_search`): an agent gets KB context only if it (a)
+  references the `rag` tool AND (b) has granted docs. `rag.search` is scoped to exactly those
+  document ids, derived from `agent_kb_documents` — never caller-supplied. `AgentExecutor` resolves
+  tools via `agent_tools`.
+- **Migrations**: `a1b2c3d4e5f6` (tools catalog + `agent_tools`), `b2c3d4e5f6a7` (KB store + grants
+  + `agent_kb_documents`), greenfield reset onto `c4f1a9d3e7b2`.
+
 ## Orchestrator (Epic 3)
 
 Thin-slice backend implementation of the Workflow Orchestrator (PRD §4.2, FR-7..FR-11).

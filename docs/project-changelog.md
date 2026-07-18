@@ -2,6 +2,39 @@
 
 All notable changes to VAIC. Local commits on branch `rebuild`.
 
+## [Unreleased] — 2026-07-18 (Sub-project A: shared Tools + KB re-platform, backend)
+
+### Changed — Tools & Knowledge Base become tenant-wide shared resources
+
+Backend domain re-platform (spec `docs/superpowers/specs/2026-07-18-shared-tools-kb-re-platform-design.md`,
+plan `docs/superpowers/plans/2026-07-18-shared-tools-kb-re-platform.md`). Built subagent-driven
+(fresh implementer + spec/quality reviewer per task); ledger `.superpowers/sdd/progress.md`
+(Sub-project A section). Commits `0c5a21d`..`23a9ee6` on `rebuild`. Frontend (new sidebar +
+Tools/Database sections + agent reference-picker tabs) is handled by a separate concurrent effort
+and is **not** part of these commits.
+
+- **Tools are no longer agent-owned.** The `tools` table is now a **tenant-wide catalog** of
+  built-in connectors (`tool_type ∈ {rag, gmail, calendar}`, seeded per tenant) carrying a required
+  `description` + `params_schema` (the LLM call interface). Agents reference tools via the new M2M
+  `agent_tools`. No user-authored tools yet; `gmail`/`calendar` execution is stubbed via the MCP
+  stub (like `rag.*`). Removed `Tool.agent_id`/`embedded_python`/`integration_id`/`header`/
+  `input_schema` and deleted `tool_crud.py`.
+- **KB documents are a tenant-wide store with a user ACL.** `kb_documents` drops `agent_id`, gains
+  `owner_id` (uploader = implicit manager) and a nullable `department_id` (optional tag). New
+  `kb_document_grants` (per-user `viewer`/`manager` grants) and `agent_kb_documents` (which docs an
+  agent may RAG over). Access is enforced in the service layer (`kb_grants_service`); tenant
+  isolation stays DB RLS.
+- **Two-gate KB retrieval** (`kb_retrieval.kb_search`): an agent gets KB context only if it (a)
+  references the `rag` tool AND (b) has granted docs; `rag.search` is scoped to exactly those
+  document ids, derived from `agent_kb_documents` — never caller-supplied.
+- **APIs**: tenant-wide `GET /tools`, `GET /tools/{id}`; `POST/GET/DELETE /kb/documents` +
+  `.../grants`; agent references `GET/POST/DELETE /agents/{id}/tools` and
+  `/agents/{id}/kb-documents`. Old nested tool/KB authoring routes removed.
+- **Migrations** (greenfield reset, demo-only data): `a1b2c3d4e5f6` (tools catalog + `agent_tools`),
+  `b2c3d4e5f6a7` (KB store + `kb_document_grants` + `agent_kb_documents`). Chain onto `c4f1a9d3e7b2`.
+- **Demo seed** reshaped: `seed_default_tools` per tenant, KB docs seeded into the store, 3 demo
+  agents reference `['rag']` + one granted doc each.
+
 ## [Unreleased] — 2026-07-18 (Epic 4: Mini-App Builder + Sandbox)
 
 ### Added — Epic 4: Mini-App Builder & Visibility Tier Enforcement (PRD §4.3, FR-12..FR-16)
