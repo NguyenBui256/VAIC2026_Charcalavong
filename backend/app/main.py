@@ -26,6 +26,7 @@ from app.core.errors import register_error_handlers
 from app.core.settings import get_settings
 from app.modules.agent_builder.routes import router as agents_router
 from app.modules.audit.routes import router as audit_router
+from app.modules.mini_app.routes import mini_app_rows_router, mini_apps_router
 from app.modules.orchestrator.routes import router as workflows_router
 from app.modules.tenant.routes import departments_router
 from app.modules.tenant.routes import router as tenant_router
@@ -82,6 +83,10 @@ app.include_router(workflows_router)
 
 # Epic 6 (FR-22) — Trace Dashboard read API (/audit).
 app.include_router(audit_router)
+
+# Epic 4 (Stories 4-2/4-4) — Mini-App catalog + generic row CRUD routes.
+app.include_router(mini_apps_router)
+app.include_router(mini_app_rows_router)
 
 # Story 1.4 — wire the error envelope exception handlers.
 register_error_handlers(app)

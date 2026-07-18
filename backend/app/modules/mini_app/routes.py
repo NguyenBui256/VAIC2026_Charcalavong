@@ -1,1 +1,147 @@
-"""Mini-App routes — auto-gen CRUD endpoints mounted per app (FR-15)."""
+"""Mini-App HTTP routes — catalog CRUD + generic row CRUD (Epic 4).
+
+Thin adapters: parse -> service -> _ok envelope. Visibility tier is
+asserted on every read/write of a specific app (`assert_can_access`). For
+this slice, `POST /mini-apps` accepts a caller-supplied validated schema;
+Phase 2 adds the LLM-emission path.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from typing import Any
+
+from arq.connections import ArqRedis
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from app.core.arq_pool import get_arq_pool
+from app.core.deps import get_tenant_session
+from app.modules.mini_app import service
+from app.modules.mini_app.lifecycle import enqueue_build
+from app.modules.mini_app.schema_validation import validate_entity_schema, validate_ui_spec
+from app.modules.mini_app.visibility import MiniAppPrincipal, assert_can_access
+
+mini_apps_router = APIRouter(prefix="/mini-apps", tags=["mini-apps"])
+mini_app_rows_router = APIRouter(prefix="/apps", tags=["mini-app-rows"])
+
+
+def _ok(data: Any) -> dict[str, Any]:
+    return {"data": data, "error": None, "meta": {}}
+
+
+def _principal(request: Request) -> MiniAppPrincipal:
+    dept = getattr(request.state, "department_id", None)
+    return MiniAppPrincipal(
+        user_id=uuid.UUID(str(request.state.user_id)),
+        tenant_id=uuid.UUID(str(request.state.tenant_id)),
+        department_id=uuid.UUID(str(dept)) if dept else None,
+        role=str(getattr(request.state, "role", "")),
+    )
+
+
+class CreateMiniAppRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    description: str = ""
+    entity_schema: dict[str, Any]
+    ui_spec: dict[str, Any] | None = None
+    visibility_tier: str = "need_auth"
+    whitelist_user_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
+class RowWriteRequest(BaseModel):
+    data: dict[str, Any]
+
+
+class RowUpdateRequest(BaseModel):
+    data: dict[str, Any]
+    expected_updated_at: datetime
+
+
+@mini_apps_router.post("")
+async def create_mini_app_route(
+    body: CreateMiniAppRequest, request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+    pool: ArqRedis = Depends(get_arq_pool),  # noqa: B008
+) -> JSONResponse:
+    principal = _principal(request)
+    schema = validate_entity_schema(body.entity_schema)
+    ui_spec = validate_ui_spec(body.ui_spec or {})
+    app = service.create_app_from_schema(
+        session, principal=principal, name=body.name, description=body.description,
+        schema=schema, ui_spec=ui_spec, visibility_tier=body.visibility_tier,
+        whitelist_user_ids=body.whitelist_user_ids,
+    )
+    await enqueue_build(pool, str(app.id))
+    return JSONResponse(status_code=201, content=_ok(service.serialize_app(app)))
+
+
+@mini_apps_router.get("")
+def list_mini_apps_route(session: Session = Depends(get_tenant_session)) -> JSONResponse:  # noqa: B008
+    return JSONResponse(status_code=200, content=_ok([service.serialize_app(a) for a in service.list_apps(session)]))
+
+
+@mini_apps_router.get("/{app_id}")
+def get_mini_app_route(app_id: uuid.UUID, request: Request,
+                       session: Session = Depends(get_tenant_session)) -> JSONResponse:  # noqa: B008
+    app = service.get_app(session, app_id)
+    assert_can_access(app, _principal(request))
+    return JSONResponse(status_code=200, content=_ok(service.serialize_app(app)))
+
+
+@mini_apps_router.post("/{app_id}/rebuild")
+async def rebuild_mini_app_route(app_id: uuid.UUID, request: Request,
+                                 session: Session = Depends(get_tenant_session),  # noqa: B008
+                                 pool: ArqRedis = Depends(get_arq_pool)) -> JSONResponse:  # noqa: B008
+    app = service.get_app(session, app_id)
+    assert_can_access(app, _principal(request))
+    await enqueue_build(pool, str(app.id))
+    return JSONResponse(status_code=202, content=_ok({"app_id": str(app.id), "build_status": "pending"}))
+
+
+def _load_and_gate(app_id: uuid.UUID, request: Request, session: Session):  # noqa: ANN202
+    app = service.get_app(session, app_id)
+    principal = _principal(request)
+    assert_can_access(app, principal)
+    return app, principal
+
+
+@mini_app_rows_router.post("/{app_id}/rows")
+def create_row_route(app_id: uuid.UUID, body: RowWriteRequest, request: Request,
+                     session: Session = Depends(get_tenant_session)) -> JSONResponse:  # noqa: B008
+    app, principal = _load_and_gate(app_id, request, session)
+    row = service.create_row(session, app, principal, body.data)
+    return JSONResponse(status_code=201, content=_ok(service.serialize_row(row)))
+
+
+@mini_app_rows_router.get("/{app_id}/rows")
+def list_rows_route(app_id: uuid.UUID, request: Request,
+                    session: Session = Depends(get_tenant_session)) -> JSONResponse:  # noqa: B008
+    app, _ = _load_and_gate(app_id, request, session)
+    return JSONResponse(status_code=200, content=_ok([service.serialize_row(r) for r in service.list_rows(session, app)]))
+
+
+@mini_app_rows_router.get("/{app_id}/rows/{row_id}")
+def get_row_route(app_id: uuid.UUID, row_id: uuid.UUID, request: Request,
+                  session: Session = Depends(get_tenant_session)) -> JSONResponse:  # noqa: B008
+    app, _ = _load_and_gate(app_id, request, session)
+    return JSONResponse(status_code=200, content=_ok(service.serialize_row(service.get_row(session, app, row_id))))
+
+
+@mini_app_rows_router.patch("/{app_id}/rows/{row_id}")
+def update_row_route(app_id: uuid.UUID, row_id: uuid.UUID, body: RowUpdateRequest, request: Request,
+                     session: Session = Depends(get_tenant_session)) -> JSONResponse:  # noqa: B008
+    app, principal = _load_and_gate(app_id, request, session)
+    row = service.update_row(session, app, principal, row_id, body.data, body.expected_updated_at)
+    return JSONResponse(status_code=200, content=_ok(service.serialize_row(row)))
+
+
+@mini_app_rows_router.delete("/{app_id}/rows/{row_id}")
+def delete_row_route(app_id: uuid.UUID, row_id: uuid.UUID, request: Request,
+                     session: Session = Depends(get_tenant_session)) -> JSONResponse:  # noqa: B008
+    app, _ = _load_and_gate(app_id, request, session)
+    service.delete_row(session, app, row_id)
+    return JSONResponse(status_code=200, content=_ok({"deleted": str(row_id)}))
