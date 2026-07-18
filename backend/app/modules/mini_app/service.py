@@ -2,12 +2,14 @@
 
 CRUD-outside-a-Run audit ids via `crud_audit_ids` (OQ-1). Row updates are
 compare-and-set on `updated_at` → ConflictError (409) on mismatch. Every
-material row change funnels through `_emit_row_change` — a no-op seam that
-becomes the Action Bus publish in the Epic 5 pairing (FR-17).
+material row change funnels through `_emit_row_change`, which writes an
+`action_events` outbox row (best-effort; failures are logged, never raised)
+— the Action Bus publish for the Actions/Events pairing (FR-17).
 """
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Any
@@ -28,6 +30,8 @@ from app.modules.mini_app.schema_validation import (
 from app.modules.mini_app.schemas import EntitySchema, UiSpec
 from app.modules.mini_app.visibility import MiniAppPrincipal
 
+logger = logging.getLogger(__name__)
+
 
 def _emit_row_change(
     session: Session, app: MiniApp, event_type: str, payload: dict[str, Any]
@@ -41,15 +45,20 @@ def _emit_row_change(
     from app.modules.action.emit import emit_action_event
 
     row_id = payload.get("row_id")
-    emit_action_event(
-        session,
-        tenant_id=app.tenant_id,
-        app_id=app.id,
-        database_id=app.database_id,
-        event_type=event_type,
-        row_id=uuid.UUID(row_id) if row_id else None,
-        payload=payload,
-    )
+    try:
+        emit_action_event(
+            session,
+            tenant_id=app.tenant_id,
+            app_id=app.id,
+            database_id=app.database_id,
+            event_type=event_type,
+            row_id=uuid.UUID(row_id) if row_id else None,
+            payload=payload,
+        )
+    except Exception:
+        logger.exception(
+            "failed to emit action event for app %s (%s)", app.id, event_type
+        )
 
 
 def _audit(entity_id: uuid.UUID, event_type: str, detail: dict[str, Any]) -> None:
