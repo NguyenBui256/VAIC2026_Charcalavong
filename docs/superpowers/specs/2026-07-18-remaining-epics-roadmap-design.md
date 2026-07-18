@@ -1,12 +1,19 @@
 ---
 title: "Roadmap — Hoàn thành các Epic còn thiếu (VAIC)"
-status: approved
+status: in-progress
 created: 2026-07-18
+progress_updated: 2026-07-18
 branch: rebuild
 strategy: demo-safe · gấp ≤3 ngày · song song có kiểm soát
 covers_epics: [3, 4, 5, 6, 7]
 supersedes: none
 ---
+
+> **CẬP NHẬT TIẾN ĐỘ (2026-07-18):**
+> - Epic 3 (agent khác): Story **3.1 CRUD+UI DONE** (16 BE + 22 FE test); 3.2 Run lifecycle đang chạy nền; 3.3/3.4 queued.
+> - Epic 6-thin: **FR-22 Timeline DONE** (`/audit` Trace Dashboard) — PR #1.
+> - Epic 7-thin: **Seed 3 Agent + KB + Tool DONE**; Workflow seed để dạng hook (tự kích hoạt khi 3.1 migration land) — PR #1.
+> - PR #1 `feat/epic6-trace-epic7-seed` → `rebuild` (Epic 6 + Epic 7, độc lập Epic 3). Chi tiết: `.claude/docs/project-roadmap.md`.
 
 # Roadmap: Hoàn thành phần còn thiếu của VAIC
 
@@ -23,15 +30,17 @@ Nguồn epic gốc: `_bmad-output/planning-artifacts/epics.md` (đã khôi phụ
 |------|----------|-----|-----|-----------|
 | 1 | Foundation & Contracts | §4.6 | FR-25,26,27 + audit sink | ✅ DONE |
 | 2 | Agent Builder | §4.1 | FR-1..6 | ✅ DONE |
-| 3 | Workflow Orchestrator + HITL | §4.2 | FR-7..11 | ❌ Stub (plan sẵn) |
-| 4 | Mini-App Builder + Visibility | §4.3 | FR-12..17 | ❌ Stub |
-| 5 | Actions / Triggers | §4.4 | FR-18..20 | ❌ Stub |
-| 6 | Trace Dashboard + Provenance | §4.5 | FR-22,23,24 | ⚠️ Sink có, UI/export chưa |
-| 7 | Integration & Demo Readiness | — | FR-28 + wiring | ❌ Chưa |
+| 3 | Workflow Orchestrator + HITL | §4.2 | FR-7..11 | 🚧 3.1 DONE, 3.2 đang chạy (agent khác) |
+| 4 | Mini-App Builder + Visibility | §4.3 | FR-12..17 | ❌ Stub (DEFER — cần migration) |
+| 5 | Actions / Triggers | §4.4 | FR-18..20 | ❌ Stub (DEFER) |
+| 6 | Trace Dashboard + Provenance | §4.5 | FR-22,23,24 | 🟡 FR-22 Timeline DONE; FR-23/24 chưa |
+| 7 | Integration & Demo Readiness | — | FR-28 + wiring | 🟡 Seed Agent+KB+Tool DONE; workflow=hook, warm-run chờ runs |
 
-Bằng chứng code: `backend/app/modules/{orchestrator,mini_app,actions,audit}` đều stub 1 dòng,
-chưa router, chưa migration. Frontend `/workflows /mini-apps /actions /audit` = `<ComingSoon>`.
-Core infra (auth, RLS×7 migration, LlmPort, McpClientPort, AuditPort, model_catalog) REAL.
+Bằng chứng code (cập nhật): `orchestrator` đã có `Workflow` model + CRUD (3.1); `audit` đã có
+read-side (`service.list_audit_entries` + `GET /audit`). `mini_app`, `actions` vẫn stub.
+Frontend `/audit` = Trace Dashboard THẬT; `/workflows` do Epic 3 agent thay; `/mini-apps /actions` = `<ComingSoon>`.
+Core infra (auth, RLS×7 migration, LlmPort, McpClientPort, AuditPort + PostgresAuditSink, model_catalog) REAL.
+Seed demo: `backend/scripts/{bootstrap_demo_tenant,demo_seed_agents,demo_seed_workflow}.py`.
 
 ## 1. Chiến lược đã chốt
 
@@ -129,20 +138,28 @@ Luồng B & C không được chặn đường găng — luôn có mock/types đ
 
 ## 6. Definition of Done (roadmap-level)
 
-- [ ] Epic 3 thin-slice: định nghĩa Workflow → Run → decompose → dispatch ≥2 Agent →
-      tool call thật → aggregate, tất cả audit bằng run_id/step_id thật.
-- [ ] Epic 6: Timeline view render Audit Trail của 1 Run e2e, đủ 4 bar quan sát được.
-- [ ] Epic 7-thin: bootstrap seed chạy < 60s, ra 3 Agent + 1 Workflow demo-ready.
+- [~] Epic 3 thin-slice: 3.1 (Workflow CRUD) DONE; Run→decompose→dispatch≥2 Agent→tool call→aggregate
+      (3.2–3.4) đang chạy (agent khác).
+- [x] Epic 6: Timeline view render Audit Trail — bề mặt `/audit` DONE (đủ 4 bar quan sát được khi có
+      Run thật; hiện render entry CRUD Epic 2, sáng đủ khi Epic 3 Run land).
+- [~] Epic 7-thin: bootstrap seed 3 Agent + KB + Tool DONE (idempotent); Workflow seed để hook
+      (tự kích hoạt khi 3.1 migration land) — chưa verify e2e < 60s trên DB thật.
 - [ ] 1 lần chạy e2e demo-safe được rehearse thành công (warm).
-- [ ] DEFER items (Epic 4, 5, FR-23/24, 3.6) ghi rõ là hoãn, có hook không nợ kỹ thuật chặn.
+- [x] DEFER items (Epic 4, 5, FR-23/24, 3.6) ghi rõ là hoãn; không nợ kỹ thuật chặn (workflow hook + audit
+      read-side đều additive, không migration).
 
 ## 7. Bước tiếp theo (per-Epic cycle)
 
 Mỗi Epic MUST → spec → plan → execute riêng:
-1. **Epic 3** — plan đã có (`plans/260718-0052-epic-3-orchestrator/`): mở rộng brief 3.3–3.8
-   thành artifact đầy đủ; chốt quyết định `execute_task`. → execute trước tiên (đường găng).
-2. **Epic 6 (thin)** — viết spec Timeline view + audit-graduation. Có thể scaffold FE song song.
-3. **Epic 7 (thin)** — viết spec bootstrap seed + router wiring. Sau khi 3.1 có model Workflow.
+1. **Epic 3** — 🚧 đang chạy (agent khác): 3.1 DONE; 3.2 Run lifecycle → 3.3/3.4 dispatch. Đường găng.
+2. **Epic 6 (thin)** — ✅ Timeline `/audit` DONE (PR #1). Audit-graduation (bỏ stopgap `crud_audit_ids`)
+   thuộc Epic 3 (dùng run_id/step_id thật ở 3.2) — không nằm ở lát cắt này.
+3. **Epic 7 (thin)** — ✅ Seed Agent+KB+Tool DONE (PR #1). Workflow seed = hook tự-kích-hoạt.
+   Router wiring orchestrator do Epic 3 agent tự làm.
+
+Runway độc lập kế tiếp (không đụng Epic 3, không migration): FR-23 collaboration graph (SHOULD),
+FR-24 audit export (DEFER). Còn lại (dashboard real-wiring, run-view trace embed, Epic 4/5) **phụ thuộc
+Epic 3** (runs endpoint) hoặc cần migration → chờ Epic 3 land thêm.
 
 DEFER (chỉ mở khi vượt tiến độ): Epic 4 Mini-App → Epic 5 Actions → FR-23 graph / FR-24 export / 3.6 HITL.
 
