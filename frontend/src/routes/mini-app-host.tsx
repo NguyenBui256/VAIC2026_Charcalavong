@@ -8,10 +8,11 @@
  * localStorage or platform token.
  */
 
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Card, ErrorState, Skeleton } from "../components/ui";
 import { getMiniApp, getScopedToken, type MiniApp } from "../lib/miniAppsApi";
+import { useMiniAppDatabases } from "../hooks/useMiniAppDatabases";
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -30,6 +31,11 @@ export function MiniAppHostPage() {
 
   const app = appQuery.data;
   const isReady = app?.build_status === "ready";
+
+  const dbQuery = useMiniAppDatabases();
+  const boundDb = app?.database_id
+    ? (dbQuery.data ?? []).find((d) => d.id === app.database_id)
+    : undefined;
 
   const tokenQuery = useQuery<{ token: string }, Error>({
     queryKey: ["mini-app-token", appId],
@@ -72,6 +78,14 @@ export function MiniAppHostPage() {
         {app.description && (
           <p className="text-body" style={{ color: "var(--color-text-tertiary)" }}>
             {app.description}
+          </p>
+        )}
+        {app.database_id && (
+          <p className="text-small" style={{ color: "var(--color-text-tertiary)", marginTop: "var(--space-1)" }}>
+            Database:{" "}
+            <Link to="/database" className="vaic-focusable" style={{ color: "var(--color-primary)" }}>
+              {boundDb?.name ?? "View in Database"}
+            </Link>
           </p>
         )}
       </header>

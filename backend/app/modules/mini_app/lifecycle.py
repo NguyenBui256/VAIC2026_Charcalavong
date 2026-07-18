@@ -29,6 +29,7 @@ def plan_to_model(plan: ProvisioningPlan) -> MiniApp:
         whitelist_user_ids=plan.whitelist_user_ids,
         build_status="pending",
         created_by_agent_id=plan.created_by_agent_id,
+        database_id=plan.database_id,
     )
 
 

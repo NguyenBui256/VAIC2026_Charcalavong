@@ -42,6 +42,7 @@ export default function FormField({
   className = "",
   children,
   id,
+  onChange: onChangeProp,
   ...rest
 }: FormFieldProps) {
   const [internalValue, setInternalValue] = useState(defaultValue);
@@ -65,6 +66,10 @@ export default function FormField({
     // If there was a previous error, clear it on edit so the user isn't stuck.
     // (But we don't validate on keystroke — only on blur per UX-DR8.)
     if (error) setError(null);
+    // Forward to the consumer's onChange so controlled usage (value + onChange,
+    // the default-input path) actually updates parent state. Consumers that
+    // pass a raw <input> child instead never set this, so it's a no-op there.
+    onChangeProp?.(e);
   }
 
   const inputId = id || `vaic-field-${label.toLowerCase().replace(/\s+/g, "-")}`;
