@@ -5,7 +5,6 @@
  */
 
 import { useRef, useState, type ChangeEvent } from "react";
-import { Trash2 } from "lucide-react";
 import {
   Button,
   Card,
@@ -13,26 +12,17 @@ import {
   EmptyState,
   ErrorState,
   Skeleton,
-  Table,
   useToast,
-  type TableColumn,
 } from "../../components/ui";
 import { semanticIcons, ICON_STROKE_WIDTH } from "../../lib/icons";
 import { useKbPool, useKbPoolMutations } from "../../hooks/useKbPool";
 import { useIsBuilder } from "../../hooks/useIsBuilder";
-import KbStatusPill from "../../components/agents/KbStatusPill";
+import KbDocumentList from "../../components/knowledge-base/kb-document-list";
 import {
   KB_MAX_BYTES,
   KB_ACCEPTED_EXTENSIONS,
   KB_ACCEPTED_MIME_TYPES,
-  type KbDocument,
 } from "../../lib/kbApi";
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 function hasAcceptedExtension(filename: string): boolean {
   const lower = filename.toLowerCase();
@@ -87,40 +77,6 @@ export default function KnowledgeBasePage() {
     setPendingDeleteId(null);
   }
 
-  const columns: TableColumn<KbDocument>[] = [
-    { key: "filename", header: "Name" },
-    { key: "content_type", header: "Type" },
-    { key: "size_bytes", header: "Size", render: (d) => formatBytes(d.size_bytes) },
-    { key: "chunk_count", header: "Chunks" },
-    {
-      key: "status",
-      header: "Status",
-      render: (d) => <KbStatusPill status={d.status} failureReason={d.failure_reason} />,
-    },
-    {
-      key: "created_at",
-      header: "Uploaded",
-      render: (d) => new Date(d.created_at).toLocaleString(),
-    },
-    ...(isBuilder
-      ? [
-          {
-            key: "actions",
-            header: "",
-            render: (d: KbDocument) => (
-              <Button
-                variant="icon"
-                aria-label={`Delete ${d.filename}`}
-                onClick={() => setPendingDeleteId(d.id)}
-              >
-                <Trash2 size={16} strokeWidth={ICON_STROKE_WIDTH} aria-hidden="true" />
-              </Button>
-            ),
-          } as TableColumn<KbDocument>,
-        ]
-      : []),
-  ];
-
   function renderBody() {
     if (isError) {
       return (
@@ -158,11 +114,10 @@ export default function KnowledgeBasePage() {
       );
     }
     return (
-      <Table<KbDocument>
-        columns={columns}
-        rows={documents}
-        rowId={(d) => d.id}
-        caption="Knowledge Base documents"
+      <KbDocumentList
+        documents={documents}
+        isBuilder={isBuilder}
+        onDelete={(id) => setPendingDeleteId(id)}
       />
     );
   }
