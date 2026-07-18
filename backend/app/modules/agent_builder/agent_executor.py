@@ -123,6 +123,7 @@ class AgentExecutor(AgentProviderPort):
             tenant_id=tenant_id,
             department_id=department_id,
             audit=self._audit,
+            agent_id=agent_id,
         )
         return [
             {"tool": tool_name, "output": out.output, "success": out.success, "error": out.error}
