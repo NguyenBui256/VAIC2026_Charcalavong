@@ -14,15 +14,18 @@ Vietnamese banking AI-agent platform — Specialist Agents, cross-department Wor
 ### Bring up infrastructure
 
 ```bash
-cp .env.example .env
-docker compose -f infra/docker-compose.yml up -d
-docker compose -f infra/docker-compose.yml ps    # both services should report "healthy"
+cp infra/.env.example infra/.env
+docker compose --env-file infra/.env -f infra/docker-compose.yml up -d
+docker compose --env-file infra/.env -f infra/docker-compose.yml ps    # both services should report "healthy"
 ```
+
+Env is split by consumer — `infra/.env` (compose), `backend/.env` (app), `frontend/.env` (Vite). See the root `.env.example` for the layout. There is no root `.env`.
 
 ### Run the backend
 
 ```bash
 cd backend
+cp .env.example .env          # VAIC_* config; ports must match infra/.env
 uv sync
 uv run uvicorn app.main:app --reload --port 8000
 ```
@@ -33,6 +36,7 @@ Health check: <http://localhost:8000/health> → `{"status": "ok"}`
 
 ```bash
 cd frontend
+cp .env.example .env          # optional; VITE_API_BASE (default: same-origin via Vite proxy)
 npm install
 npm run dev
 ```

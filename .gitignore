@@ -5,6 +5,8 @@ web_modules/
 
 # Environment files
 .env
+.env.bak
+*.env.bak
 .env.local
 .env.development.local
 .env.test.local

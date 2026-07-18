@@ -44,9 +44,9 @@ export default function DashboardPage() {
   };
 
   // Click-to-trace: navigate to the trace view for the run.
-  // Real trace route arrives in Epic 4; for now we route to /audit.
+  // `/audit` reads the `run_id` query param to pre-fill its Run filter.
   const handleOpenRun = (runId: string) => {
-    navigate(`/audit?run=${runId}`);
+    navigate(`/audit?run_id=${runId}`);
   };
 
   return (
