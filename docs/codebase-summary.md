@@ -1,0 +1,74 @@
+# Codebase Summary
+
+Modular monolith: FastAPI backend (`backend/`) + React/TypeScript frontend (`frontend/`).
+Multi-tenant via Postgres RLS. Background jobs via arq (Redis). See
+`docs/system-architecture.md` for architecture invariants (AD-1, AD-4, AD-6, AD-10) and the
+Orchestrator flow in detail.
+
+## Backend module map (`backend/app/modules/*`)
+
+| Module | Status | Purpose |
+|---|---|---|
+| `agent_builder` | DONE (Epic 2) | Agent CRUD, KB upload/retrieval, Tool config, model catalog, `AgentExecutor` (runs an Agent's prompt+model+KB+Tool for a Task — added Epic 3), `list_routable_agents` public selector for Orchestrator |
+| `orchestrator` | DONE, thin-slice (Epic 3) | Workflow CRUD, Run lifecycle (CAS state machine), decomposition (`decompose_run`), dispatch/aggregate (`execute_task_row`, `aggregate_run`, `orchestrate_run`) |
+| `tenant` | DONE (Epic 1) | Tenant/department/user foundation, RLS context |
+| `audit` | Partial (Epic 6 pending) | `PostgresAuditSink` — sole writer to `audit_trail` (AD-4); UI/Timeline view not built |
+| `mini_app` | Stub, DEFER (Epic 4) | Mini-App Builder — not implemented |
+| `actions` | Stub, DEFER (Epic 5) | Actions/Triggers — not implemented |
+
+## Core ports (`backend/app/core/ports/*`)
+
+Protocol interfaces implemented by module adapters (hexagonal architecture, AD-1):
+
+- `agent_provider.py` — `AgentProviderPort` (`retrieve`, `execute_task`), `TaskExecutionResult`
+- `llm.py` — `LlmPort`
+- `mcp_client.py` — `McpClientPort` (doc intake, tool invocation)
+- `tool.py`, `sandbox.py` — Tool execution + embedded-Python sandbox
+- `audit.py` — audit sink interface
+- `doc_intake.py` — legacy/dead code path superseded by `McpClientPort` (see Epic 2 P4 note in `.superpowers/sdd/progress.md`)
+
+## Background workers (`backend/app/workers/*`)
+
+- `orchestrator_worker.py` — arq entrypoint `run_workflow(ctx, *, run_id, resume=False)`,
+  decorated `@tenant_aware_job` (AD-10), registers `resume_orphaned_runs` on startup to recover
+  Runs stuck at `running` after a worker crash.
+
+## Demo bootstrap scripts (`backend/scripts/*`, Epic 7-thin)
+
+- `bootstrap_demo_tenant.py` — seeds tenant "SHB Demo", 3 departments, 3 users
+- `demo_agent_specs.py` — Agent + Tool spec data (3 Specialist Agents, 1 Tool each)
+- `bootstrap_demo_agents_workflow.py` — seeds Agents/Tools/Workflow via real services (idempotent)
+- `run_worker.py` — arq worker process entrypoint (`uv run python -m scripts.run_worker`)
+
+## Frontend routes (`frontend/src/routes/*`)
+
+| Route | Status |
+|---|---|
+| `login`, `dashboard` | DONE |
+| `agents`, `agent-builder`, `agent-detail` | DONE (Epic 2) |
+| `workflows`, `workflow-detail` | DONE (Epic 3 Story 3.1 — list + Definition tab; Run views deferred, Task 8) |
+| `orchestrator` | Scaffold |
+| `trace.$runId` | Scaffold, pending Epic 6 Timeline view |
+| `mini-apps.$appId`, `actions` | Stub, DEFER (Epic 4/5) |
+
+## Database migrations (Alembic, `backend/alembic/versions/`)
+
+Chain includes (chronological, Epic 3 additions):
+
+- `1ad51bb8e8cb` — `create_workflows_rls` (Story 3.1)
+- `39dfa51cec0c` — `create_workflow_runs_tasks_rls` (Story 3.2; `workflow_runs` + `tasks` + RLS)
+
+## Testing
+
+- `backend/tests/integration/test_demo_smoke.py` — end-to-end demo smoke: real arq `Worker`,
+  decompose → dispatch → aggregate, real tool sandbox, all 4 audit event types, stub LLM
+  (no live Anthropic key in this env).
+- Known pre-existing flake: `test_arq_tenant_context.py` cross-file test-isolation smell (8 arq
+  errors under full `pytest tests/`; clean per-file). Baseline: 350 passed / 1 flaky / 8 errors.
+
+## References
+
+- `docs/system-architecture.md` — Orchestrator flow, invariants, demo bootstrap
+- `docs/project-changelog.md` — dated changelog entries
+- `docs/superpowers/specs/2026-07-18-remaining-epics-roadmap-design.md` — roadmap for Epics 3-7
+- `.superpowers/sdd/progress.md` — task-by-task execution ledger (source of truth for commit ranges)
