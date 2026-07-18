@@ -1,8 +1,9 @@
 """Tenant-wide Knowledge Base store service (Sub-project A).
 
-Documents are shared, owner-scoped (spec D1/D2), no longer agent-owned.
-Ingestion/deletion route through `McpClientPort` (`rag.ingest`/`rag.delete`).
-Access is enforced via `kb_grants_service` (owner + grants).
+Documents are shared, builder-managed (spec D1/D2 revised), no longer
+agent-owned. Ingestion/deletion route through `McpClientPort`
+(`rag.ingest`/`rag.delete`). Mutations gated by `require_builder`; reads
+scoped by tenant via RLS.
 """
 
 from __future__ import annotations
@@ -14,17 +15,18 @@ import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.adapters.audit_postgres import PostgresAuditSink
 from app.core.deps import crud_audit_ids, get_mcp_client
 from app.core.errors import NotFoundError, ValidationError
 from app.core.ids import utcnow_iso_ms, uuid7
+from app.core.perms import require_builder
 from app.core.ports.audit import AuditEntry, AuditPort
 from app.core.ports.mcp_client import McpClientPort
 from app.core.tenant_context import tenant_context
-from app.modules.agent_builder.kb_models import AgentKbDocument, KbDocument, KbDocumentGrant
+from app.modules.agent_builder.kb_models import KbDocument
 from app.modules.agent_builder.service import Principal
 
 __all__ = [
@@ -101,7 +103,8 @@ def upload_document(
     data: bytes, department_id: uuid.UUID | None = None,
     mcp_factory: McpFactory = get_mcp_client, audit: AuditPort | None = None,
 ) -> KbDocument:
-    """Any authenticated tenant user may upload (spec OQ-3); uploader = owner."""
+    """Builder-only (spec OQ-3 revised); uploader = owner."""
+    require_builder(principal)
     _validate_upload(content_type, data)
     doc = KbDocument(
         id=uuid7(),
@@ -122,34 +125,25 @@ def upload_document(
 
 
 def list_documents(session: Session, *, principal: Principal) -> list[KbDocument]:
-    """Docs the caller can access: owned OR granted (RLS already scopes tenant)."""
-    granted_ids = select(KbDocumentGrant.document_id).where(
-        KbDocumentGrant.user_id == principal.user_id
-    )
+    """All docs in tenant (RLS already scopes tenant)."""
     return list(
         session.execute(
-            select(KbDocument)
-            .where(or_(KbDocument.owner_id == principal.user_id, KbDocument.id.in_(granted_ids)))
-            .order_by(KbDocument.created_at.desc())
+            select(KbDocument).order_by(KbDocument.created_at.desc())
         ).scalars().all()
     )
 
 
 def get_document(session: Session, *, document_id: uuid.UUID, principal: Principal) -> KbDocument:
-    from app.modules.agent_builder.kb_grants_service import require_access
-    doc = _get_document_row(session, document_id)
-    require_access(session, doc, principal.user_id)
-    return doc
+    return _get_document_row(session, document_id)
 
 
 def delete_document(
     session: Session, *, document_id: uuid.UUID, principal: Principal,
     mcp_factory: McpFactory = get_mcp_client, audit: AuditPort | None = None,
 ) -> None:
-    """Manager/owner only. Removes the external index + doc + refs/grants (CASCADE)."""
-    from app.modules.agent_builder.kb_grants_service import require_access
+    """Builder only. Removes the external index + doc + refs (CASCADE)."""
+    require_builder(principal)
     doc = _get_document_row(session, document_id)
-    require_access(session, doc, principal.user_id, need_manage=True)
     dept = doc.department_id or _NIL_UUID
     mcp = mcp_factory(agent_department_id=dept)
     asyncio.run(
@@ -165,7 +159,7 @@ def delete_document(
     session.commit()
 
 
-def serialize_document(doc: KbDocument, *, effective_role: str | None = None) -> dict:
+def serialize_document(doc: KbDocument) -> dict:
     return {
         "id": str(doc.id),
         "owner_id": str(doc.owner_id),
@@ -176,7 +170,6 @@ def serialize_document(doc: KbDocument, *, effective_role: str | None = None) ->
         "status": doc.status,
         "failure_reason": doc.failure_reason,
         "chunk_count": doc.chunk_count,
-        "effective_role": effective_role,
         "created_at": doc.created_at.isoformat(timespec="milliseconds"),
         "updated_at": doc.updated_at.isoformat(timespec="milliseconds"),
     }
