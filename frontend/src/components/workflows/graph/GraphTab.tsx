@@ -9,11 +9,15 @@ import {
   type Connection,
 } from "@xyflow/react";
 import { Skeleton, ErrorState, useToast } from "../../ui";
-import GraphEditor from "./GraphEditor";
+import GraphEditor, { type DropPayload } from "./GraphEditor";
 import NodeInspector from "./NodeInspector";
 import GraphToolbar from "./GraphToolbar";
+import PaletteSidebar, { type EdgeMode } from "./PaletteSidebar";
+import { GraphUsersProvider } from "./GraphUsersContext";
 import { useWorkflowGraph } from "../../../hooks/useWorkflowGraph";
 import { useWorkflowGraphMutation } from "../../../hooks/useWorkflowGraphMutation";
+import { useUsers } from "../../../hooks/useUsers";
+import { layoutVertical, allPositionsZero } from "../../../lib/graphLayout";
 import {
   toReactFlow,
   toDefinition,
@@ -41,12 +45,17 @@ export default function GraphTab({ workflowId, onDirtyChange }: GraphTabProps) {
   const [edges, setEdges] = useState<Edge[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [edgeMode, setEdgeMode] = useState<EdgeMode>("transition");
+  const users = useUsers();
 
   // Resync baseline from server on load / after save.
   useEffect(() => {
     if (!graph.data) return;
     const rf = toReactFlow(graph.data);
-    setNodes(rf.nodes);
+    const laid = allPositionsZero(rf.nodes)
+      ? layoutVertical(rf.nodes, rf.edges)
+      : rf.nodes;
+    setNodes(laid);
     setEdges(rf.edges);
     setDirty(false);
   }, [graph.data]);
@@ -70,6 +79,32 @@ export default function GraphTab({ workflowId, onDirtyChange }: GraphTabProps) {
         type: "agent",
         position: { x: 80 + ns.length * 40, y: 80 + ns.length * 40 },
         data: { label: key, agentId: "", nodeKey: key, approverUserIds: [] },
+      },
+    ]);
+    setSelectedId(key);
+    setDirty(true);
+  }
+
+  function autoLayout() {
+    setNodes((ns) => layoutVertical(ns, edges));
+    setDirty(true);
+  }
+
+  function addNodeFromDrop(payload: DropPayload, position: { x: number; y: number }) {
+    const key = nextNodeKey(nodes.map((n) => n.data.nodeKey));
+    const isAgent = payload.kind === "agent";
+    setNodes((ns) => [
+      ...ns,
+      {
+        id: key,
+        type: "agent",
+        position,
+        data: {
+          label: isAgent ? payload.name : key,
+          agentId: isAgent ? payload.agentId : "",
+          nodeKey: key,
+          approverUserIds: [],
+        },
       },
     ]);
     setSelectedId(key);
@@ -120,21 +155,30 @@ export default function GraphTab({ workflowId, onDirtyChange }: GraphTabProps) {
         error={error}
       />
       <div style={{ display: "flex", gap: "var(--space-4)", alignItems: "flex-start" }}>
+        <PaletteSidebar
+          edgeMode={edgeMode}
+          onEdgeModeChange={setEdgeMode}
+          onAutoLayout={autoLayout}
+        />
         <div style={{ flex: 1 }}>
-          <GraphEditor
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={(c) => {
-              setNodes((ns) => applyNodeChanges(c, ns));
-              if (c.some((ch) => STRUCTURAL_NODE_CHANGES.has(ch.type))) setDirty(true);
-            }}
-            onEdgesChange={(c) => {
-              setEdges((es) => applyEdgeChanges(c, es));
-              if (c.some((ch) => STRUCTURAL_EDGE_CHANGES.has(ch.type))) setDirty(true);
-            }}
-            onConnect={(conn: Connection) => { setEdges((es) => addEdge(conn, es)); setDirty(true); }}
-            onSelectNode={setSelectedId}
-          />
+          <GraphUsersProvider users={users.data ?? []}>
+            <GraphEditor
+              nodes={nodes}
+              edges={edges}
+              edgeMode={edgeMode}
+              onNodesChange={(c) => {
+                setNodes((ns) => applyNodeChanges(c, ns));
+                if (c.some((ch) => STRUCTURAL_NODE_CHANGES.has(ch.type))) setDirty(true);
+              }}
+              onEdgesChange={(c) => {
+                setEdges((es) => applyEdgeChanges(c, es));
+                if (c.some((ch) => STRUCTURAL_EDGE_CHANGES.has(ch.type))) setDirty(true);
+              }}
+              onConnect={(conn: Connection) => { setEdges((es) => addEdge(conn, es)); setDirty(true); }}
+              onSelectNode={setSelectedId}
+              onDropNode={addNodeFromDrop}
+            />
+          </GraphUsersProvider>
         </div>
         <div style={{ width: 300, flexShrink: 0 }}>
           <NodeInspector
