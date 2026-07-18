@@ -91,6 +91,10 @@ class CreateMiniAppRequest(BaseModel):
         return self
 
 
+class EditMiniAppRequest(BaseModel):
+    instruction: str = Field(..., min_length=1, max_length=2000)
+
+
 class RowWriteRequest(BaseModel):
     data: dict[str, Any]
 
@@ -156,6 +160,26 @@ async def rebuild_mini_app_route(app_id: uuid.UUID, request: Request,
     assert_can_access(app, _principal(request))
     await enqueue_build(pool, str(app.id))
     return JSONResponse(status_code=202, content=_ok({"app_id": str(app.id), "build_status": "pending"}))
+
+
+@mini_apps_router.post("/{app_id}/edit")
+async def edit_mini_app_route(
+    app_id: uuid.UUID, body: EditMiniAppRequest, request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+    pool: ArqRedis = Depends(get_arq_pool),  # noqa: B008
+) -> JSONResponse:
+    if getattr(request.state, "scope", None) == SCOPE_MINIAPP_ROWS:
+        raise AuthorizationError("a scoped mini-app token cannot edit the app")
+    app = service.get_app(session, app_id)
+    principal = _principal(request)
+    assert_can_access(app, principal)
+    try:
+        app, message = service.revise_app(session, app, principal, body.instruction)
+    except SchemaValidationError as exc:
+        _audit_emission(app.id, "mini_app.revise_rejected", {"reason": exc.reason})
+        raise DomainError(exc.reason, code="schema_rejected", http_status=422) from exc
+    await enqueue_build(pool, str(app.id))
+    return JSONResponse(status_code=200, content=_ok({"message": message, "app": service.serialize_app(app)}))
 
 
 @mini_apps_router.post("/{app_id}/session-token")

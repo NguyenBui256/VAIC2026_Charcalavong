@@ -112,6 +112,35 @@ def create_app_from_schema(
     return app
 
 
+def revise_app(
+    session: Session,
+    app: MiniApp,
+    principal: MiniAppPrincipal,
+    instruction: str,
+    *,
+    llm: Any | None = None,
+) -> tuple[MiniApp, str]:
+    """LLM-revise an app's schema/ui_spec from an instruction, mark it for
+    rebuild (build_status='pending'), and return (app, assistant_message).
+    Caller enqueues the build + wraps SchemaValidationError -> 422."""
+    from app.modules.mini_app.emission import revise_schema
+
+    if principal.role not in ("builder", "admin"):
+        from app.core.errors import AuthorizationError
+        raise AuthorizationError("mini-app editing requires the builder role")
+
+    schema, ui_spec, message, _prompt = revise_schema(app.entity_schema, app.ui_spec, instruction, llm=llm)
+    app.entity_schema = schema.model_dump()
+    app.ui_spec = ui_spec.model_dump()
+    app.build_status = "pending"
+    app.build_error = None
+    app.updated_at = datetime_now()
+    session.commit()
+    session.refresh(app)
+    _audit(app.id, "mini_app.revised", {"instruction": instruction, "message": message})
+    return app, message
+
+
 def get_app(session: Session, app_id: uuid.UUID) -> MiniApp:
     app = session.get(MiniApp, app_id)
     if app is None:
