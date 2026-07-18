@@ -5,6 +5,8 @@
  */
 import { apiFetch, authHeaders } from "./api";
 
+const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+
 export interface FileRef {
   file_id: string;
   name: string;
@@ -82,7 +84,7 @@ export async function uploadWorkflowFile(file: File): Promise<FileRef> {
 
 /** Download via authed blob fetch (protected endpoint needs the JWT header). */
 export async function downloadWorkflowFile(ref: FileRef): Promise<void> {
-  const resp = await fetch(`/workflows/files/${ref.file_id}`, {
+  const resp = await fetch(`${API_BASE}/workflows/files/${ref.file_id}`, {
     headers: authHeaders(),
   });
   if (!resp.ok) throw new Error("Download failed");

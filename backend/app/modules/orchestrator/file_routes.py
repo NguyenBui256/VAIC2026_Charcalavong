@@ -45,9 +45,17 @@ def upload_file_route(
     session: Session = Depends(get_tenant_session),  # noqa: B008
     file: UploadFile = File(...),  # noqa: B008
 ) -> JSONResponse:
-    data = file.file.read()
-    if len(data) > _MAX_BYTES:
-        raise ValidationError("file too large (max 20MB)", code="file_too_large")
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = file.file.read(65536)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > _MAX_BYTES:
+            raise ValidationError("file too large (max 20MB)", code="file_too_large")
+        chunks.append(chunk)
+    data = b"".join(chunks)
     tenant_id = tenant_context.get()
     file_id = uuid7()
     safe = _safe_name(file.filename or "file")
