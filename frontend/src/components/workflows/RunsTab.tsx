@@ -30,6 +30,10 @@ export default function RunsTab({ workflowId }: RunsTabProps) {
       toast.show("Input must be valid JSON", "error");
       return;
     }
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      toast.show("Input must be a JSON object", "error");
+      return;
+    }
     setCreating(true);
     try {
       const run = await createRun(workflowId, parsed);

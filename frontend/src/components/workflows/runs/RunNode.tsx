@@ -48,7 +48,7 @@ export default function RunNode({
         alignItems: "flex-start",
         justifyContent: "center",
         padding: "var(--space-2)",
-        borderRadius: "var(--radius-md, 8px)",
+        borderRadius: "var(--radius-card, 8px)",
         border: `2px solid ${border}`,
         background: "var(--color-surface)",
         cursor: "pointer",

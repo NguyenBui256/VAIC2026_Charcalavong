@@ -89,7 +89,7 @@ export default function WorkflowDetailShell({ workflowId }: WorkflowDetailShellP
             <Button
               variant={tab === "runs" ? "primary" : "ghost"}
               disabled={isNew}
-              onClick={() => setTab("runs")}
+              onClick={() => guardedNavigate(() => { setIsDirty(false); setTab("runs"); })}
             >
               Runs
             </Button>

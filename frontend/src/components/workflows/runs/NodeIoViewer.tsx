@@ -19,8 +19,8 @@ export default function NodeIoViewer({ label, value }: NodeIoViewerProps) {
         style={{
           margin: 0,
           padding: "var(--space-2)",
-          background: "var(--color-surface-sunken, var(--color-surface))",
-          borderRadius: "var(--radius-sm, 6px)",
+          background: "var(--color-surface-inset, var(--color-surface))",
+          borderRadius: "var(--radius-control, 6px)",
           overflow: "auto",
           maxHeight: 200,
           fontSize: "0.85em",

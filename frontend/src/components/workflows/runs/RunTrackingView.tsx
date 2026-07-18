@@ -61,7 +61,7 @@ export default function RunTrackingView({ runId }: RunTrackingViewProps) {
         {run.data && <RunStatusBadge status={run.data.status} />}
       </div>
       <div style={{ display: "flex", gap: "var(--space-4)", alignItems: "flex-start" }}>
-        <div style={{ flex: 1, overflow: "auto", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md, 8px)" }}>
+        <div style={{ flex: 1, overflow: "auto", border: "1px solid var(--color-border)", borderRadius: "var(--radius-card, 8px)" }}>
           <RunGraphCanvas
             nodes={merged}
             edges={graph.data?.edges ?? []}

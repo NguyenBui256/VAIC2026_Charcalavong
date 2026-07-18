@@ -53,7 +53,12 @@ export function layoutPositions(
 ): Map<string, { x: number; y: number }> {
   const out = new Map<string, { x: number; y: number }>();
   if (!positionsCollapsed(nodes)) {
-    nodes.forEach((n) => out.set(n.node_key, { x: n.position.x, y: n.position.y }));
+    nodes.forEach((n) =>
+      out.set(n.node_key, {
+        x: Number.isFinite(n.position?.x) ? n.position.x : 0,
+        y: Number.isFinite(n.position?.y) ? n.position.y : 0,
+      }),
+    );
     return out;
   }
   const depth = depths(nodes, edges);
