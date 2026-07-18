@@ -1,8 +1,9 @@
 """Story 2.3 T1 — provider/model catalog (AC1, AC2, AC3).
 
 - `configured` reflects `Settings` only (no live API call).
-- Anthropic is the only provider with real models; OpenAI/Google/Ollama are
-  always unconfigured (placeholders) and yield no selectable models (AC2).
+- Anthropic and OpenAI (FPT AI Marketplace / DeepSeek-V4-Flash) have real
+  adapters; Google/Ollama remain unconfigured placeholders with no
+  selectable models (AC2).
 """
 
 from __future__ import annotations
@@ -35,16 +36,29 @@ def test_anthropic_not_configured_when_key_absent() -> None:
 
 
 def test_placeholder_providers_always_not_configured_with_no_models() -> None:
-    """OpenAI/Google/Ollama render 'Not configured' even with a key set,
-    because the adapter is not implemented (AC1). A disabled provider yields
-    no selectable models (AC2)."""
-    catalog = get_provider_catalog(
-        _settings(openai_api_key="sk-oa-test", google_api_key="sk-g-test")
-    )
-    for provider_id in ("openai", "google", "ollama"):
+    """Google/Ollama render 'Not configured' even with a key set, because the
+    adapter is not implemented (AC1). A disabled provider yields no
+    selectable models (AC2)."""
+    catalog = get_provider_catalog(_settings(google_api_key="sk-g-test"))
+    for provider_id in ("google", "ollama"):
         entry = _entry(catalog, provider_id)
         assert entry.configured is False
         assert entry.models == []
+
+
+def test_openai_configured_when_llm_api_key_present() -> None:
+    """`openai` (FPT AI Marketplace / DeepSeek-V4-Flash) is a real adapter;
+    `configured` follows `llm_api_key` (sourced from `ANTHROPIC_API_KEY`)."""
+    catalog = get_provider_catalog(_settings(llm_api_key="sk-fpt-test"))
+    openai_entry = _entry(catalog, "openai")
+    assert openai_entry.configured is True
+    assert any(m.name == "DeepSeek-V4-Flash" for m in openai_entry.models)
+
+
+def test_openai_not_configured_when_no_key_present() -> None:
+    catalog = get_provider_catalog(_settings())
+    openai_entry = _entry(catalog, "openai")
+    assert openai_entry.configured is False
 
 
 def test_get_context_window_known_model() -> None:

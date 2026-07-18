@@ -55,6 +55,11 @@ def test_get_providers_lists_anthropic_configured_others_not(
 
     get_settings.cache_clear()
     monkeypatch.setenv("VAIC_ANTHROPIC_API_KEY", "sk-ant-test-key")
+    # `openai` (FPT AI Marketplace / DeepSeek-V4-Flash) reads its key from the
+    # bare `ANTHROPIC_API_KEY` env var (settings.py `llm_api_key` alias) --
+    # blank it here so this test isolates the always-unconfigured providers
+    # (google/ollama) from the real deployment key that may be in `.env`.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
     get_settings.cache_clear()
     try:
         token = login_token(agent_client, "builder@tenantc.example")
@@ -63,7 +68,10 @@ def test_get_providers_lists_anthropic_configured_others_not(
         by_id = {p["id"]: p for p in r.json()["data"]}
         assert by_id["anthropic"]["configured"] is True
         assert len(by_id["anthropic"]["models"]) >= 1
-        for provider_id in ("openai", "google", "ollama"):
+        # `openai`'s static model list (DeepSeek-V4-Flash) is always shown --
+        # only `configured` is key-gated (model_catalog.get_provider_catalog).
+        assert by_id["openai"]["configured"] is False
+        for provider_id in ("google", "ollama"):
             assert by_id[provider_id]["configured"] is False
             assert by_id[provider_id]["models"] == []
     finally:

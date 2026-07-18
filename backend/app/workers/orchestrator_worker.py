@@ -138,11 +138,15 @@ async def resume_orphaned_runs(ctx: dict[str, Any]) -> None:
     sets tenant context from the row's own materialized `tenant_id`
     before touching any Run-specific data.
     """
-    pool: ArqRedis | None = ctx.get("arq_redis")
+    # arq's real `Worker.run()` populates `ctx["redis"]` (see arq/worker.py
+    # `self.ctx['redis'] = self.pool`), not `arq_redis` -- accept both so a
+    # live worker process (real key) and existing tests (which stub the
+    # `arq_redis` key directly) both work without duplicating fixtures.
+    pool: ArqRedis | None = ctx.get("arq_redis") or ctx.get("redis")
     if pool is None:
         raise RuntimeError(
-            "resume_orphaned_runs requires `arq_redis` in ctx (arq injects "
-            "this automatically; tests must provide it)."
+            "resume_orphaned_runs requires `arq_redis`/`redis` in ctx (arq "
+            "injects `redis` automatically; tests must provide one of these)."
         )
 
     loop = asyncio.get_running_loop()

@@ -52,7 +52,11 @@ _STATIC_PROVIDERS: dict[str, dict[str, Any]] = {
             {"name": "claude-opus-4-1", "context_window": 200_000},
         ],
     },
-    "openai": {"label": "OpenAI", "implemented": False, "models": []},
+    "openai": {
+        "label": "OpenAI-compatible",
+        "implemented": True,
+        "models": [{"name": "DeepSeek-V4-Flash", "context_window": 128_000}],
+    },
     "google": {"label": "Google", "implemented": False, "models": []},
     "ollama": {"label": "Ollama", "implemented": False, "models": []},
 }
@@ -64,7 +68,7 @@ def _settings_key_for(provider_id: str, settings: Settings) -> str:
     """Return the runtime config value that gates ``configured`` for a provider."""
     return {
         "anthropic": settings.anthropic_api_key,
-        "openai": settings.openai_api_key,
+        "openai": settings.llm_api_key or settings.openai_api_key,
         "google": settings.google_api_key,
         "ollama": settings.ollama_base_url,
     }.get(provider_id, "")

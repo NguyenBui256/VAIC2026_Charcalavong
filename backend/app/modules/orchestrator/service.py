@@ -36,6 +36,7 @@ from app.core.ports.audit import AuditEntry, AuditPort
 from app.core.ports.llm import Message, ModelRef
 from app.core.tenant_context import set_tenant_session_var, tenant_context
 from app.modules.agent_builder.agent_executor import AgentExecutor
+from app.modules.agent_builder.models import Tool
 from app.modules.agent_builder.service import get_agent, list_routable_agents
 from app.modules.orchestrator.models import Task, Workflow, WorkflowRun
 from app.modules.orchestrator.schemas import TaskSchemaModel
@@ -59,10 +60,11 @@ __all__ = [
     "orchestrate_run",
 ]
 
-# TODO(settings): move to config. Cheap model for dev; swap to a premium
-# model for the demo run. Injected as `llm=` in every call site that needs
-# determinism (tests use a FakeLlm; no live API key required for tests).
-ORCHESTRATOR_MODEL = ModelRef(provider="anthropic", model_name="claude-haiku-4-5-20251001")
+# TODO(settings): move to config. FPT AI Marketplace (OpenAI-compatible,
+# `VAIC_LLM_BASE_URL`) serving DeepSeek-V4-Flash for the demo. Injected as
+# `llm=` in every call site that needs determinism (tests use a FakeLlm; no
+# live API key required for tests).
+ORCHESTRATOR_MODEL = ModelRef(provider="openai", model_name="DeepSeek-V4-Flash")
 
 
 @dataclass(frozen=True)
@@ -283,16 +285,46 @@ def _orchestrator_llm():
     return select_llm_adapter(ORCHESTRATOR_MODEL.provider)
 
 
-def _decomposition_prompt(workflow: Workflow, candidates: list[dict]) -> list[Message]:
-    roster = "\n".join(f"- {c['id']} | {c['name']} | dept={c['department_id']}" for c in candidates)
+def _decomposition_prompt(
+    workflow: Workflow,
+    candidates: list[dict],
+    tool_by_agent: dict[str, str],
+    run_input: dict[str, Any],
+) -> list[Message]:
+    roster = "\n".join(
+        f"- {c['id']} | {c['name']} | dept={c['department_id']} | "
+        f"tool={tool_by_agent.get(c['id'], 'none')}"
+        for c in candidates
+    )
     sys = (
         "You are a banking Workflow Orchestrator. Decompose the request into <=5 Tasks. "
         "Return ONLY a JSON array; each item = "
-        "{task:{summary}, target_agent_id, input, output, expected:[...], criteria:{}}. "
-        "target_agent_id MUST be one of the agent ids below."
+        '{task:{summary}, target_agent_id, input:{...}, output:{...}, expected:[...], '
+        "criteria:{must_use_tool:<tool name>}}. "
+        "target_agent_id MUST be one of the agent ids below. `task`, `input`, and `output` "
+        "MUST be JSON objects, never plain strings. `criteria.must_use_tool` MUST be set to "
+        "the exact `tool` value listed below for the chosen agent. Each Task's `input` MUST "
+        "be built ONLY from the actual fields present in APPLICATION_DATA below -- do NOT "
+        "invent placeholder values; pass through the real keys/values a Task's Tool needs."
     )
-    usr = f"REQUEST: {workflow.description}\nCONSTRAINTS: {workflow.constraints}\nAGENTS:\n{roster}"
+    usr = (
+        f"REQUEST: {workflow.description}\nCONSTRAINTS: {workflow.constraints}\n"
+        f"APPLICATION_DATA: {json.dumps(run_input, ensure_ascii=False)}\nAGENTS:\n{roster}"
+    )
     return [Message(role="system", content=sys), Message(role="user", content=usr)]
+
+
+def _tool_by_agent(session: Session, agent_ids: list[str]) -> dict[str, str]:
+    """Map `agent_id -> Tool.display_name` for the given candidates (best-effort,
+    first Tool found per Agent -- the demo seeds exactly one Tool per Agent)."""
+    if not agent_ids:
+        return {}
+    rows = session.execute(
+        select(Tool.agent_id, Tool.display_name).where(
+            Tool.agent_id.in_([uuid.UUID(a) for a in agent_ids])
+        )
+    ).all()
+    return {str(agent_id): display_name for agent_id, display_name in rows}
 
 
 def _audit(session: Session | None, entry_kwargs: dict[str, Any]) -> None:
@@ -307,6 +339,28 @@ def _safe_json_array(content: str) -> list:
         return []
 
 
+def _coerce_task_item(item: Any) -> Any:
+    """Normalize a decomposition item's `task`/`input`/`output` before validation.
+
+    Some models (e.g. DeepSeek-V4-Flash) reply with these fields as a
+    free-text string instead of the requested JSON object -- wrap a bare
+    string as `{"summary": <str>}` (`task`) / `{"description": <str>}`
+    (`input`/`output`) so it still satisfies `TaskSchemaModel`'s
+    `dict[str, Any]` fields (demo-safe, mirrors
+    `agent_executor._parse_output`'s raw-text fallback). Non-dict items pass
+    through unchanged so validation still rejects genuinely malformed shapes.
+    """
+    if not isinstance(item, dict):
+        return item
+    coerced = dict(item)
+    if isinstance(coerced.get("task"), str):
+        coerced["task"] = {"summary": coerced["task"]}
+    for key in ("input", "output"):
+        if isinstance(coerced.get(key), str):
+            coerced[key] = {"description": coerced[key]}
+    return coerced
+
+
 def _validate_and_route_task(
     session: Session,
     run: WorkflowRun,
@@ -318,7 +372,7 @@ def _validate_and_route_task(
     failure — never raises (T3.2's per-item audit trail, not a hard abort).
     """
     try:
-        ts = TaskSchemaModel(**item)
+        ts = TaskSchemaModel(**_coerce_task_item(item))
     except (TypeError, ValueError):
         _reassert_rls(session)
         _audit(
@@ -370,9 +424,12 @@ def decompose_run(
         raise NotFoundError("Workflow not found")
     candidates = list_routable_agents(session)
     valid_ids = {c["id"]: c for c in candidates}
+    tool_by_agent = _tool_by_agent(session, list(valid_ids.keys()))
     llm = llm or _orchestrator_llm()
     completion = llm.complete(
-        _decomposition_prompt(workflow, candidates), ORCHESTRATOR_MODEL, {"temperature": 0.3}
+        _decomposition_prompt(workflow, candidates, tool_by_agent, run.input or {}),
+        ORCHESTRATOR_MODEL,
+        {"temperature": 0.3},
     )
     raw = _safe_json_array(completion.content)
 

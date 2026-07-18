@@ -179,12 +179,13 @@ AGENT_SPECS: tuple[AgentSpec, ...] = (
     },
 )
 
-# Model selected at config time (§A8) — Anthropic is the only implemented
-# adapter (`model_catalog._STATIC_PROVIDERS`); `configured` depends on
-# `VAIC_ANTHROPIC_API_KEY` being set in the runtime environment.
+# Model selected at config time (§A8) — the `openai` adapter targets the FPT
+# AI Marketplace (OpenAI-compatible, `VAIC_LLM_BASE_URL`) serving
+# DeepSeek-V4-Flash; `configured` depends on `ANTHROPIC_API_KEY` being set in
+# the runtime environment (see `core/settings.py::llm_api_key`).
 AGENT_MODEL_REF: dict[str, Any] = {
-    "provider": "anthropic",
-    "model_name": "claude-sonnet-4-5",
+    "provider": "openai",
+    "model_name": "DeepSeek-V4-Flash",
     "parameters": {},
 }
 

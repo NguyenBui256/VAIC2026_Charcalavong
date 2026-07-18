@@ -20,6 +20,10 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        # Allows constructing `Settings(llm_api_key=...)` by field name in
+        # tests, in addition to the `ANTHROPIC_API_KEY` validation_alias used
+        # for env/`.env` resolution below.
+        populate_by_name=True,
     )
 
     # Sync SQLAlchemy URL (architecture mandates sync mode)
@@ -56,6 +60,23 @@ class Settings(BaseSettings):
     ollama_base_url: str = Field(
         default="http://localhost:11434",
         description="Ollama HTTP base URL for local models",
+    )
+
+    # OpenAI-compatible Model Layer endpoint (AD-7, FR-26 provider-agnostic).
+    # Defaults to the FPT AI Marketplace "OpenAI Wrapper" root. Override with
+    # `VAIC_LLM_BASE_URL` to point the `openai` adapter at any other
+    # Chat-Completions-compatible endpoint (self-hosted, OpenAI proper, etc.).
+    llm_base_url: str = Field(
+        default="https://mkp-api.fptcloud.com/v1",
+        description="Base URL for the OpenAI-compatible LLM adapter",
+    )
+    # The deployment's Model Layer key is stored under the bare `ANTHROPIC_API_KEY`
+    # env var (not `VAIC_`-prefixed) by operator convention -- `validation_alias`
+    # bypasses `env_prefix` for this field only so it reads that exact var.
+    llm_api_key: str = Field(
+        default="",
+        validation_alias="ANTHROPIC_API_KEY",
+        description="API key for the OpenAI-compatible LLM adapter (from ANTHROPIC_API_KEY)",
     )
 
     # Story 2.7 (AR-14 stored credentials / NFR-6) — Fernet key for
