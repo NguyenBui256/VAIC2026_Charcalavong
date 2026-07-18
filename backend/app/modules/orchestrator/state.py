@@ -31,6 +31,7 @@ from app.core.ports.audit import AuditEntry, AuditPort
 __all__ = [
     "transition_run_status",
     "transition_task_status",
+    "transition_node_status",
     "transition_and_audit",
 ]
 
@@ -40,6 +41,14 @@ _RUN_CAS_SET_CLAUSES = [
     "THEN now() ELSE started_at END",
     "ended_at = CASE WHEN CAST(:to AS varchar) IN ('completed','failed','timed_out') "
     "THEN now() ELSE ended_at END",
+]
+
+_NODE_CAS_SET_CLAUSES = [
+    "status=CAST(:to AS varchar)",
+    "started_at = CASE WHEN CAST(:to AS varchar)='running' "
+    "THEN now() ELSE started_at END",
+    "completed_at = CASE WHEN CAST(:to AS varchar) "
+    "IN ('completed','failed','rejected') THEN now() ELSE completed_at END",
 ]
 
 
@@ -107,6 +116,41 @@ def transition_task_status(
         f"UPDATE tasks SET {', '.join(set_clauses)} "
         "WHERE id=:id AND status=CAST(:from AS varchar)"
     )
+    result = session.execute(sql, params)
+    session.commit()
+    return result.rowcount == 1
+
+
+def transition_node_status(
+    session: Session,
+    node_id: uuid.UUID | str,
+    *,
+    from_status: str,
+    to_status: str,
+    extra_cols: dict[str, Any] | None = None,
+    extra_where: str | None = None,
+) -> bool:
+    """CAS transition on a `run_node_executions` row (AD-6 style).
+
+    `extra_where` is ANDed into the WHERE clause (e.g. ``"decision IS NULL"``
+    for a first-wins reject that keeps `status` unchanged). Returns True iff
+    exactly one row was updated.
+    """
+    set_clauses = list(_NODE_CAS_SET_CLAUSES)
+    params: dict[str, Any] = {
+        "to": to_status,
+        "from": from_status,
+        "id": str(node_id),
+    }
+    if extra_cols:
+        set_clauses.extend(f"{key}=:{key}" for key in extra_cols)
+        params.update(extra_cols)
+
+    where = "id=:id AND status=CAST(:from AS varchar)"
+    if extra_where:
+        where += f" AND {extra_where}"
+
+    sql = text(f"UPDATE run_node_executions SET {', '.join(set_clauses)} WHERE {where}")
     result = session.execute(sql, params)
     session.commit()
     return result.rowcount == 1
