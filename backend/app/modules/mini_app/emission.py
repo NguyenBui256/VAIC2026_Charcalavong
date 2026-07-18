@@ -70,3 +70,50 @@ def _strip_fences(text: str) -> str:
         if t.endswith("```"):
             t = t.rsplit("```", 1)[0]
     return t.strip()
+
+
+_REVISE_SYSTEM = (
+    "You revise a data-entry mini-app for a bank. You are given the CURRENT "
+    "app as JSON (entity_schema + ui_spec) and a user instruction describing a "
+    "change. Return STRICT JSON only (no prose, no markdown fences) of the form: "
+    '{"entity_schema": {"fields": [{"name","type","label","required","min","max",'
+    '"minLength","maxLength","pattern","options"}], "primary_display"}, '
+    '"ui_spec": {"layout":"table|cards","primary_actions":["create","edit","delete"]}, '
+    '"message": "one short sentence describing what changed"}. '
+    "Return the FULL updated entity_schema and ui_spec (not a diff), preserving "
+    "fields the instruction does not change. "
+    f"Allowed field types: {_ALLOWED_TYPES}. Field names must match ^[a-z][a-z0-9_]*$. "
+    "enum fields MUST include a non-empty options array. Keep the app minimal and coherent."
+)
+
+
+def revise_schema(
+    current_schema: dict[str, Any],
+    current_ui_spec: dict[str, Any],
+    instruction: str,
+    *,
+    llm: Any | None = None,
+) -> tuple[EntitySchema, UiSpec, str, str]:
+    """Ask the LLM to revise {entity_schema, ui_spec} per an instruction.
+
+    Returns (schema, ui_spec, message, prompt). Raises SchemaValidationError if
+    the model output isn't valid JSON or fails the meta-schema.
+    """
+    prompt = (
+        "CURRENT APP JSON:\n"
+        + json.dumps({"entity_schema": current_schema, "ui_spec": current_ui_spec})
+        + f"\n\nINSTRUCTION:\n{instruction}"
+    )
+    adapter = llm or select_llm_adapter(_model().provider)
+    messages = [Message(role="system", content=_REVISE_SYSTEM), Message(role="user", content=prompt)]
+    completion = adapter.complete(messages, _model(), {"temperature": 0.2})
+    try:
+        parsed = json.loads(_strip_fences(completion.content))
+    except json.JSONDecodeError as exc:
+        raise SchemaValidationError(f"model did not return valid JSON: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise SchemaValidationError("model output must be a JSON object")
+    schema = validate_entity_schema(parsed.get("entity_schema", {}))
+    ui_spec = validate_ui_spec(parsed.get("ui_spec", {}))
+    message = str(parsed.get("message") or "Updated the app.")
+    return schema, ui_spec, message, prompt

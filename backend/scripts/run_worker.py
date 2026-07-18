@@ -22,15 +22,20 @@ _BACKEND_DIR = Path(__file__).resolve().parent.parent
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
+from app.modules.action.worker import (  # noqa: E402
+    action_cron_jobs,
+    process_tenant_action_events,
+)
 from app.modules.mini_app.mini_app_worker import build_mini_app  # noqa: E402
 from app.workers.orchestrator_worker import resume_orphaned_runs, worker_config  # noqa: E402
 
 __all__ = ["main"]
 
-# Merge `build_mini_app` into the orchestrator's `WorkerConfig` without
-# `orchestrator_worker.py` importing anything mini_app-related (AD-1).
+# Merge Mini-App builder + Action dispatch onto the orchestrator worker (AD-1).
 _combined_worker_config = replace(
-    worker_config, functions=[*worker_config.functions, build_mini_app]
+    worker_config,
+    functions=[*worker_config.functions, build_mini_app, process_tenant_action_events],
+    cron_jobs_list=[*worker_config.cron_jobs_list, *action_cron_jobs],
 )
 
 

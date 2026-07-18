@@ -2,12 +2,14 @@
 
 CRUD-outside-a-Run audit ids via `crud_audit_ids` (OQ-1). Row updates are
 compare-and-set on `updated_at` → ConflictError (409) on mismatch. Every
-material row change funnels through `_emit_row_change` — a no-op seam that
-becomes the Action Bus publish in the Epic 5 pairing (FR-17).
+material row change funnels through `_emit_row_change`, which writes an
+`action_events` outbox row (best-effort; failures are logged, never raised)
+— the Action Bus publish for the Actions/Events pairing (FR-17).
 """
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Any
@@ -28,10 +30,35 @@ from app.modules.mini_app.schema_validation import (
 from app.modules.mini_app.schemas import EntitySchema, UiSpec
 from app.modules.mini_app.visibility import MiniAppPrincipal
 
+logger = logging.getLogger(__name__)
 
-def _emit_row_change(app_id: uuid.UUID, event_type: str, payload: dict[str, Any]) -> None:
-    """Seam for FR-17 App Event emission (Epic 5). Intentional no-op now."""
-    return None
+
+def _emit_row_change(
+    session: Session, app: MiniApp, event_type: str, payload: dict[str, Any]
+) -> None:
+    """FR-17 App Event emission — write the action-event outbox (Actions/Events).
+
+    Best-effort: the row is already committed by the caller; we append an
+    `action_events` row (its own short commit). Import is function-local to keep
+    the mini_app module decoupled from the action module at import time.
+    """
+    from app.modules.action.emit import emit_action_event
+
+    row_id = payload.get("row_id")
+    try:
+        emit_action_event(
+            session,
+            tenant_id=app.tenant_id,
+            app_id=app.id,
+            database_id=app.database_id,
+            event_type=event_type,
+            row_id=uuid.UUID(row_id) if row_id else None,
+            payload=payload,
+        )
+    except Exception:
+        logger.exception(
+            "failed to emit action event for app %s (%s)", app.id, event_type
+        )
 
 
 def _audit(entity_id: uuid.UUID, event_type: str, detail: dict[str, Any]) -> None:
@@ -60,6 +87,7 @@ def create_app_from_schema(
     visibility_tier: str,
     whitelist_user_ids: list[uuid.UUID],
     created_by_agent_id: uuid.UUID | None = None,
+    database_id: uuid.UUID | None = None,
 ) -> MiniApp:
     from app.modules.mini_app.lifecycle import plan_to_model
     from app.modules.mini_app.provisioner import build_provisioning_plan
@@ -73,6 +101,7 @@ def create_app_from_schema(
         owner_id=principal.user_id, name=name, description=description,
         schema=schema, ui_spec=ui_spec, visibility_tier=visibility_tier,
         whitelist_user_ids=whitelist_user_ids, created_by_agent_id=created_by_agent_id,
+        database_id=database_id,
     )
     app = plan_to_model(plan)
     session.add(app)
@@ -81,6 +110,35 @@ def create_app_from_schema(
     _audit(app.id, "mini_app.provisioned",
            {"slug": app.slug, "visibility_tier": app.visibility_tier})
     return app
+
+
+def revise_app(
+    session: Session,
+    app: MiniApp,
+    principal: MiniAppPrincipal,
+    instruction: str,
+    *,
+    llm: Any | None = None,
+) -> tuple[MiniApp, str]:
+    """LLM-revise an app's schema/ui_spec from an instruction, mark it for
+    rebuild (build_status='pending'), and return (app, assistant_message).
+    Caller enqueues the build + wraps SchemaValidationError -> 422."""
+    from app.modules.mini_app.emission import revise_schema
+
+    if principal.role not in ("builder", "admin"):
+        from app.core.errors import AuthorizationError
+        raise AuthorizationError("mini-app editing requires the builder role")
+
+    schema, ui_spec, message, _prompt = revise_schema(app.entity_schema, app.ui_spec, instruction, llm=llm)
+    app.entity_schema = schema.model_dump()
+    app.ui_spec = ui_spec.model_dump()
+    app.build_status = "pending"
+    app.build_error = None
+    app.updated_at = datetime_now()
+    session.commit()
+    session.refresh(app)
+    _audit(app.id, "mini_app.revised", {"instruction": instruction, "message": message})
+    return app, message
 
 
 def get_app(session: Session, app_id: uuid.UUID) -> MiniApp:
@@ -108,7 +166,7 @@ def create_row(session: Session, app: MiniApp, principal: MiniAppPrincipal, data
     session.add(row)
     session.commit()
     session.refresh(row)
-    _emit_row_change(app.id, "row.created", {"row_id": str(row.id)})
+    _emit_row_change(session, app, "row.created", {"row_id": str(row.id), "data": coerced})
     return row
 
 
@@ -150,7 +208,7 @@ def update_row(
         raise ConflictError("row was modified concurrently (updated_at mismatch)")
     session.commit()
     row = session.get(MiniAppRow, row_id)
-    _emit_row_change(app.id, "row.updated", {"row_id": str(row_id)})
+    _emit_row_change(session, app, "row.updated", {"row_id": str(row_id), "data": coerced})
     return row
 
 
@@ -158,7 +216,7 @@ def delete_row(session: Session, app: MiniApp, row_id: uuid.UUID) -> None:
     row = get_row(session, app, row_id)
     session.delete(row)
     session.commit()
-    _emit_row_change(app.id, "row.deleted", {"row_id": str(row_id)})
+    _emit_row_change(session, app, "row.deleted", {"row_id": str(row_id)})
 
 
 def datetime_now() -> datetime:
@@ -172,6 +230,7 @@ def serialize_app(app: MiniApp) -> dict[str, Any]:
         "description": app.description, "entity_schema": app.entity_schema,
         "ui_spec": app.ui_spec, "visibility_tier": app.visibility_tier,
         "whitelist_user_ids": [str(u) for u in (app.whitelist_user_ids or [])],
+        "database_id": str(app.database_id) if app.database_id else None,
         "build_status": app.build_status, "build_error": app.build_error,
         "created_at": app.created_at.isoformat(), "updated_at": app.updated_at.isoformat(),
     }

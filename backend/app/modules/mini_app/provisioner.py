@@ -38,6 +38,7 @@ class ProvisioningPlan:
     ui_spec: dict[str, Any]
     visibility_tier: str
     whitelist_user_ids: list[uuid.UUID] = field(default_factory=list)
+    database_id: uuid.UUID | None = None
     created_by_agent_id: uuid.UUID | None = None
 
 
@@ -53,6 +54,7 @@ def build_provisioning_plan(
     visibility_tier: str,
     whitelist_user_ids: list[uuid.UUID] | None = None,
     created_by_agent_id: uuid.UUID | None = None,
+    database_id: uuid.UUID | None = None,
 ) -> ProvisioningPlan:
     return ProvisioningPlan(
         app_id=uuid7(),
@@ -67,4 +69,5 @@ def build_provisioning_plan(
         visibility_tier=visibility_tier,
         whitelist_user_ids=list(whitelist_user_ids or []),
         created_by_agent_id=created_by_agent_id,
+        database_id=database_id,
     )

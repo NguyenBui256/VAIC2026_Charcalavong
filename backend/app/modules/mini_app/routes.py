@@ -25,7 +25,7 @@ from app.core.deps import crud_audit_ids, get_tenant_session
 from app.core.errors import AuthorizationError, DomainError
 from app.core.ids import utcnow_iso_ms
 from app.core.ports.audit import AuditEntry
-from app.modules.mini_app import service
+from app.modules.mini_app import database_service, service
 from app.modules.mini_app.emission import emit_schema
 from app.modules.mini_app.lifecycle import enqueue_build
 from app.modules.mini_app.schema_validation import (
@@ -75,6 +75,7 @@ class CreateMiniAppRequest(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=255)
     description: str = ""
+    database_id: uuid.UUID | None = None
     entity_schema: dict[str, Any] | None = None
     expected_output: str | None = None
     ui_spec: dict[str, Any] | None = None
@@ -83,11 +84,15 @@ class CreateMiniAppRequest(BaseModel):
 
     @model_validator(mode="after")
     def _require_schema_or_description(self) -> "CreateMiniAppRequest":
-        if self.entity_schema is None and not self.expected_output:
+        if self.database_id is None and self.entity_schema is None and not self.expected_output:
             raise ValueError(
-                "either 'entity_schema' or ('description' + 'expected_output') is required"
+                "one of 'database_id', 'entity_schema', or ('description' + 'expected_output') is required"
             )
         return self
+
+
+class EditMiniAppRequest(BaseModel):
+    instruction: str = Field(..., min_length=1, max_length=2000)
 
 
 class RowWriteRequest(BaseModel):
@@ -107,7 +112,14 @@ async def create_mini_app_route(
 ) -> JSONResponse:
     principal = _principal(request)
     prompt: str | None = None
-    if body.entity_schema is not None:
+    if body.database_id is not None:
+        db = database_service.get_database(session, body.database_id)
+        try:
+            schema = validate_entity_schema(db.entity_schema)
+            ui_spec = validate_ui_spec(body.ui_spec or {})
+        except SchemaValidationError as exc:
+            raise DomainError(exc.reason, code="schema_rejected", http_status=422) from exc
+    elif body.entity_schema is not None:
         schema = validate_entity_schema(body.entity_schema)
         ui_spec = validate_ui_spec(body.ui_spec or {})
     else:
@@ -119,7 +131,7 @@ async def create_mini_app_route(
     app = service.create_app_from_schema(
         session, principal=principal, name=body.name, description=body.description,
         schema=schema, ui_spec=ui_spec, visibility_tier=body.visibility_tier,
-        whitelist_user_ids=body.whitelist_user_ids,
+        whitelist_user_ids=body.whitelist_user_ids, database_id=body.database_id,
     )
     if prompt is not None:
         _audit_emission(app.id, "mini_app.schema_emitted", {"prompt": prompt})
@@ -148,6 +160,26 @@ async def rebuild_mini_app_route(app_id: uuid.UUID, request: Request,
     assert_can_access(app, _principal(request))
     await enqueue_build(pool, str(app.id))
     return JSONResponse(status_code=202, content=_ok({"app_id": str(app.id), "build_status": "pending"}))
+
+
+@mini_apps_router.post("/{app_id}/edit")
+async def edit_mini_app_route(
+    app_id: uuid.UUID, body: EditMiniAppRequest, request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+    pool: ArqRedis = Depends(get_arq_pool),  # noqa: B008
+) -> JSONResponse:
+    if getattr(request.state, "scope", None) == SCOPE_MINIAPP_ROWS:
+        raise AuthorizationError("a scoped mini-app token cannot edit the app")
+    app = service.get_app(session, app_id)
+    principal = _principal(request)
+    assert_can_access(app, principal)
+    try:
+        app, message = service.revise_app(session, app, principal, body.instruction)
+    except SchemaValidationError as exc:
+        _audit_emission(app.id, "mini_app.revise_rejected", {"reason": exc.reason})
+        raise DomainError(exc.reason, code="schema_rejected", http_status=422) from exc
+    await enqueue_build(pool, str(app.id))
+    return JSONResponse(status_code=200, content=_ok({"message": message, "app": service.serialize_app(app)}))
 
 
 @mini_apps_router.post("/{app_id}/session-token")

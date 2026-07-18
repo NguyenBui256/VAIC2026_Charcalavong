@@ -8,7 +8,7 @@
 import {
   LayoutGrid,
   Bot,
-  BookOpen,
+  Database,
   Wrench,
   Workflow,
   AppWindow,
@@ -30,7 +30,7 @@ export interface NavTarget {
 export const NAV_TARGETS: readonly NavTarget[] = [
   { id: "dashboard", title: "Go to Dashboard", path: "/dashboard" },
   { id: "agents", title: "Go to Agents", path: "/agents" },
-  { id: "knowledge-base", title: "Go to Knowledge Base", path: "/knowledge-base" },
+  { id: "database", title: "Go to Database", path: "/database" },
   { id: "tools", title: "Go to Tools", path: "/tools" },
   { id: "workflows", title: "Go to Workflows", path: "/workflows" },
   { id: "mini-apps", title: "Go to Mini-Apps", path: "/mini-apps" },
@@ -42,7 +42,7 @@ export const NAV_TARGETS: readonly NavTarget[] = [
 const NAV_ICON_BY_ID: Record<string, typeof LayoutGrid> = {
   dashboard: LayoutGrid,
   agents: Bot,
-  "knowledge-base": BookOpen,
+  database: Database,
   tools: Wrench,
   workflows: Workflow,
   "mini-apps": AppWindow,

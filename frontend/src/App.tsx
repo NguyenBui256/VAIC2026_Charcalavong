@@ -20,6 +20,8 @@ import AuditPage from "./routes/audit";
 import ToolsPage from "./routes/tools/ToolsPage";
 import KnowledgeBasePage from "./routes/knowledge-base/KnowledgeBasePage";
 import ChatPage from "./routes/chat/ChatPage";
+import DatabasePage from "./routes/database";
+import ActionsPage from "./routes/actions/ActionsPage";
 import { isAuthenticated } from "./lib/auth";
 import { CommandPaletteProvider } from "./components/CommandPalette/CommandPaletteContext";
 import CommandPalette from "./components/CommandPalette/CommandPalette";
@@ -68,6 +70,7 @@ export function AppRoutes() {
         {/* Task 9 — shared Tools + Knowledge Base pages. */}
         <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
         <Route path="/tools" element={<ToolsPage />} />
+        <Route path="/database" element={<DatabasePage />} />
         {/* Story 3.1 — Workflow list + Definition tab detail. */}
         <Route path="/workflows" element={<WorkflowsPage />} />
         <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
@@ -77,7 +80,7 @@ export function AppRoutes() {
         {/* Task 16 — sandboxed Mini-App host page (iframe + scoped token). */}
         <Route path="/mini-apps/:appId" element={<MiniAppHostPage />} />
         {/* Placeholder routes for nav — real surfaces arrive in later stories */}
-        <Route path="/actions" element={<ComingSoon title="Actions" />} />
+        <Route path="/actions" element={<ActionsPage />} />
         {/* Epic 6 (FR-22) — Trace Dashboard. */}
         <Route path="/audit" element={<AuditPage />} />
         <Route path="/settings" element={<ComingSoon title="Settings" />} />
