@@ -55,6 +55,9 @@ _STATIC_PROVIDERS: dict[str, dict[str, Any]] = {
     "openai": {
         "label": "OpenAI-compatible",
         "implemented": True,
+        # Fallback for `get_context_window` (no live ``settings`` there);
+        # `get_provider_catalog` overrides this with the deployment's
+        # configured `VAIC_LLM_MODEL` at call time (AC1, AC3).
         "models": [{"name": "DeepSeek-V4-Flash", "context_window": 128_000}],
     },
     "google": {"label": "Google", "implemented": False, "models": []},
@@ -80,12 +83,19 @@ def get_provider_catalog(settings: Settings) -> list[ProviderCatalogEntry]:
     for provider_id, meta in _STATIC_PROVIDERS.items():
         implemented: bool = meta["implemented"]
         configured = implemented and bool(_settings_key_for(provider_id, settings))
+        models = meta["models"]
+        if provider_id == "openai":
+            # `openai` advertises the deployment's configured model
+            # (`VAIC_LLM_MODEL`) rather than a static list -- keeps the
+            # catalog truthful to whatever model is actually wired at
+            # runtime for the passed-in ``settings`` (AD-7).
+            models = [{"name": settings.llm_model, "context_window": 128_000}]
         entries.append(
             ProviderCatalogEntry(
                 id=provider_id,
                 label=meta["label"],
                 configured=configured,
-                models=[ModelCatalogEntry(**m) for m in meta["models"]],
+                models=[ModelCatalogEntry(**m) for m in models],
             )
         )
     return entries

@@ -38,12 +38,12 @@ from app.modules.orchestrator.models import Workflow  # noqa: E402
 from app.modules.orchestrator.service import create_workflow  # noqa: E402
 from app.modules.tenant.models import Department, User  # noqa: E402
 from scripts.demo_agent_specs import (  # noqa: E402
-    AGENT_MODEL_REF,
     AGENT_SPECS,
     DEMO_WORKFLOW_DESCRIPTION,
     DEMO_WORKFLOW_NAME,
     AgentSpec,
     ToolSpec,
+    get_agent_model_ref,
 )
 
 __all__ = ["seed_agents_tools_workflow"]
@@ -93,7 +93,7 @@ def _upsert_agent(
     principal = Principal(
         user_id=owner.id, tenant_id=tenant_id, department_id=dept.id, role="builder"
     )
-    agent = update_agent(session, agent.id, principal, model=dict(AGENT_MODEL_REF))
+    agent = update_agent(session, agent.id, principal, model=get_agent_model_ref())
     return agent, True
 
 

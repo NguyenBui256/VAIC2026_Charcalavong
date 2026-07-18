@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -70,13 +70,31 @@ class Settings(BaseSettings):
         default="https://mkp-api.fptcloud.com/v1",
         description="Base URL for the OpenAI-compatible LLM adapter",
     )
-    # The deployment's Model Layer key is stored under the bare `ANTHROPIC_API_KEY`
-    # env var (not `VAIC_`-prefixed) by operator convention -- `validation_alias`
-    # bypasses `env_prefix` for this field only so it reads that exact var.
+    # Preferred var is `VAIC_LLM_API_KEY`; falls back to the bare
+    # `ANTHROPIC_API_KEY` env var (not `VAIC_`-prefixed, operator convention
+    # from earlier deployments) when unset. `validation_alias` bypasses
+    # `env_prefix` for this field so both exact var names resolve.
     llm_api_key: str = Field(
         default="",
-        validation_alias="ANTHROPIC_API_KEY",
-        description="API key for the OpenAI-compatible LLM adapter (from ANTHROPIC_API_KEY)",
+        validation_alias=AliasChoices("VAIC_LLM_API_KEY", "ANTHROPIC_API_KEY"),
+        description="API key for the OpenAI-compatible LLM adapter",
+    )
+    # Provider id for the OpenAI-compatible Model Layer adapter (AD-7,
+    # provider-agnostic per FR-26). Selects the `LlmPort` implementation via
+    # `select_llm_adapter`.
+    llm_provider: str = Field(
+        default="openai", description="Provider id for the default LLM adapter"
+    )
+    # Model name passed as `ModelRef.model_name` to the adapter's `complete`
+    # call. Defaults to the FPT AI Marketplace DeepSeek deployment.
+    llm_model: str = Field(
+        default="DeepSeek-V4-Flash", description="Default model name for the LLM adapter"
+    )
+    # Orchestrator-specific model override (Story 3.3 decomposition prompt).
+    # Falls back to `llm_model` when unset -- most deployments use one model
+    # for both orchestration and Specialist Agents.
+    orchestrator_model: str = Field(
+        default="", description="Model name for orchestrator decomposition; falls back to llm_model"
     )
 
     # Story 2.7 (AR-14 stored credentials / NFR-6) — Fernet key for

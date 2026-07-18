@@ -20,6 +20,8 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
+from app.core.settings import get_settings
+
 
 class ToolSpec(TypedDict):
     display_name: str
@@ -179,15 +181,21 @@ AGENT_SPECS: tuple[AgentSpec, ...] = (
     },
 )
 
-# Model selected at config time (§A8) — the `openai` adapter targets the FPT
-# AI Marketplace (OpenAI-compatible, `VAIC_LLM_BASE_URL`) serving
-# DeepSeek-V4-Flash; `configured` depends on `ANTHROPIC_API_KEY` being set in
-# the runtime environment (see `core/settings.py::llm_api_key`).
-AGENT_MODEL_REF: dict[str, Any] = {
-    "provider": "openai",
-    "model_name": "DeepSeek-V4-Flash",
-    "parameters": {},
-}
+def get_agent_model_ref() -> dict[str, Any]:
+    """Model selected at config time (§A8), fully `.env`-driven.
+
+    `provider`/`model_name` come from `Settings.llm_provider`/`llm_model`
+    (`VAIC_LLM_PROVIDER`/`VAIC_LLM_MODEL`) -- the `openai` adapter targets
+    the FPT AI Marketplace (OpenAI-compatible, `VAIC_LLM_BASE_URL`) by
+    default. `configured` depends on `VAIC_LLM_API_KEY`/`ANTHROPIC_API_KEY`
+    being set in the runtime environment (see `core/settings.py::llm_api_key`).
+    """
+    settings = get_settings()
+    return {
+        "provider": settings.llm_provider,
+        "model_name": settings.llm_model,
+        "parameters": {},
+    }
 
 DEMO_WORKFLOW_NAME = "Business Loan Pre-Screen"
 DEMO_WORKFLOW_DESCRIPTION = (
@@ -200,7 +208,7 @@ DEMO_WORKFLOW_DESCRIPTION = (
 
 __all__ = [
     "AGENT_SPECS",
-    "AGENT_MODEL_REF",
+    "get_agent_model_ref",
     "DEMO_WORKFLOW_NAME",
     "DEMO_WORKFLOW_DESCRIPTION",
     "AgentSpec",

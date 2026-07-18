@@ -34,6 +34,7 @@ from app.core.errors import AuthorizationError, NotFoundError
 from app.core.ids import utcnow_iso_ms, uuid7
 from app.core.ports.audit import AuditEntry, AuditPort
 from app.core.ports.llm import Message, ModelRef
+from app.core.settings import get_settings
 from app.core.tenant_context import set_tenant_session_var, tenant_context
 from app.modules.agent_builder.agent_executor import AgentExecutor
 from app.modules.agent_builder.models import Tool
@@ -60,11 +61,19 @@ __all__ = [
     "orchestrate_run",
 ]
 
-# TODO(settings): move to config. FPT AI Marketplace (OpenAI-compatible,
-# `VAIC_LLM_BASE_URL`) serving DeepSeek-V4-Flash for the demo. Injected as
-# `llm=` in every call site that needs determinism (tests use a FakeLlm; no
-# live API key required for tests).
-ORCHESTRATOR_MODEL = ModelRef(provider="openai", model_name="DeepSeek-V4-Flash")
+def _orchestrator_model() -> ModelRef:
+    """Build the decomposition-prompt `ModelRef` from `Settings`.
+
+    Provider/model are fully env-driven (`VAIC_LLM_PROVIDER`,
+    `VAIC_ORCHESTRATOR_MODEL` falling back to `VAIC_LLM_MODEL`). Recomputed
+    per call (not cached) so `llm=` overrides in tests (FakeLlm; no live API
+    key required) are unaffected by settings.
+    """
+    settings = get_settings()
+    return ModelRef(
+        provider=settings.llm_provider,
+        model_name=settings.orchestrator_model or settings.llm_model,
+    )
 
 
 @dataclass(frozen=True)
@@ -282,7 +291,7 @@ def _reassert_rls(session: Session) -> None:
 
 
 def _orchestrator_llm():
-    return select_llm_adapter(ORCHESTRATOR_MODEL.provider)
+    return select_llm_adapter(_orchestrator_model().provider)
 
 
 def _decomposition_prompt(
@@ -428,7 +437,7 @@ def decompose_run(
     llm = llm or _orchestrator_llm()
     completion = llm.complete(
         _decomposition_prompt(workflow, candidates, tool_by_agent, run.input or {}),
-        ORCHESTRATOR_MODEL,
+        _orchestrator_model(),
         {"temperature": 0.3},
     )
     raw = _safe_json_array(completion.content)
