@@ -72,10 +72,19 @@ export function validateGraph(def: GraphDefinition): string | null {
   const seen = new Set<string>();
   for (const k of keys) {
     if (!k) return "a node has an empty key";
+    // Mirror the backend GraphNodeIn schema (node_key max_length=64) so a
+    // too-long key is caught before Save instead of surfacing as an opaque
+    // 422 "API request failed".
+    if (k.length > 64) return `node key too long (max 64): ${k}`;
     if (seen.has(k)) return `duplicate node key: ${k}`;
     seen.add(k);
   }
   for (const n of def.nodes) {
+    // Mirror GraphNodeIn.label (min_length=1, max_length=255). Trim-empty is
+    // rejected client-side for clearer feedback (stricter than the server, so
+    // anything the client accepts the server also accepts).
+    if (!n.label || !n.label.trim()) return `node "${n.node_key}" has no label`;
+    if (n.label.length > 255) return `node "${n.node_key}" label too long (max 255)`;
     if (!n.agent_id) return `node "${n.node_key}" has no agent`;
   }
   const edgeSeen = new Set<string>();
