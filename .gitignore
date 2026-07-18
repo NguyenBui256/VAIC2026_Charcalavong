@@ -3,6 +3,11 @@ node_modules/
 jspm_packages/
 web_modules/
 
+# Mini-App builder sandbox runtime (Epic 4, story 4-5) — built bundles and
+# the per-app esbuild workdir are generated artifacts, never committed.
+backend/.miniapp-bundles/
+frontend/.miniapp-build/
+
 # Environment files
 .env
 .env.bak

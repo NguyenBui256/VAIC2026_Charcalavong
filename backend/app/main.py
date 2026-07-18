@@ -14,9 +14,11 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app.core.arq_pool import close_arq_pool, init_arq_pool
@@ -87,6 +89,19 @@ app.include_router(audit_router)
 # Epic 4 (Stories 4-2/4-4) — Mini-App catalog + generic row CRUD routes.
 app.include_router(mini_apps_router)
 app.include_router(mini_app_rows_router)
+
+# Story 4-5 — serve built Mini-App bundles (sandbox runtime plane). Each
+# `build_mini_app` job writes `{bundle_root}/{app_id}/{index.html,bundle.js}`;
+# `html=True` serves `index.html` for a directory request. The dir is created
+# here (not just by the worker) so a fresh checkout with zero builds yet still
+# boots — `StaticFiles` raises at mount time if `directory` doesn't exist.
+_mini_app_bundle_root = Path(get_settings().mini_app_bundle_root)
+_mini_app_bundle_root.mkdir(parents=True, exist_ok=True)
+app.mount(
+    "/mini-app-runtime",
+    StaticFiles(directory=str(_mini_app_bundle_root), html=True),
+    name="mini-app-runtime",
+)
 
 # Story 1.4 — wire the error envelope exception handlers.
 register_error_handlers(app)

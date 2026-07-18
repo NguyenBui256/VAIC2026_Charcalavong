@@ -133,6 +133,20 @@ class Settings(BaseSettings):
         default="", description="Fernet key (urlsafe base64, 32 bytes) for stored credentials"
     )
 
+    # Story 4-5 (sandbox build plane) — root directory under which each
+    # built Mini-App's static bundle lands at `{mini_app_bundle_root}/
+    # {app_id}/` (bundle.js + index.html). Served read-only by
+    # `StaticFiles` mounted at `/mini-app-runtime` in `app/main.py`.
+    # Repo-relative default under `backend/` keeps it out of the frontend
+    # tree (which esbuild's per-app workdir already occupies) and writable
+    # without extra OS-level permissioning in dev.
+    mini_app_bundle_root: str = Field(
+        default=".miniapp-bundles",
+        description="Root directory for built Mini-App static bundles (relative to the "
+        "process cwd, which is `backend/` per README run instructions — resolves to "
+        "`backend/.miniapp-bundles`)",
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

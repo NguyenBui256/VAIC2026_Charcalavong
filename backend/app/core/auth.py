@@ -149,11 +149,20 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
 
 
 def _is_public(path: str) -> bool:
-    """A path is public if it exactly matches a PUBLIC_PATHS entry or is docs."""
+    """A path is public if it exactly matches a PUBLIC_PATHS entry or is docs.
+
+    `/mini-app-runtime/...` (story 4-5) is the static bundle.js/index.html for
+    a generated Mini-App — sandbox-inert markup/JS, not tenant data. It is
+    deliberately served without auth here; the actual data plane
+    (`/apps/{app_id}/rows*`) stays gated behind a normal or scoped platform
+    JWT (story 4-6 `scoped_token.py`), so this exemption never exposes rows.
+    """
     if path in PUBLIC_PATHS:
         return True
     # Swagger UI assets
-    return path.startswith("/docs") or path.startswith("/redoc")
+    if path.startswith("/docs") or path.startswith("/redoc"):
+        return True
+    return path.startswith("/mini-app-runtime/")
 
 
 def _envelope(
