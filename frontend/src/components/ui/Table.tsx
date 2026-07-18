@@ -17,6 +17,8 @@ export interface TableColumn<T> {
   render?: (row: T, index: number) => ReactNode;
   /** Optional width (CSS value). */
   width?: string;
+  /** Text alignment for header + cells. Defaults to "left". */
+  align?: "left" | "center" | "right";
 }
 
 export interface TableProps<T> {
@@ -89,6 +91,7 @@ export default function Table<T>({
                 key={col.key}
                 style={{
                   width: col.width,
+                  textAlign: col.align,
                   top: stickyHeaderOffset > 0 ? `${stickyHeaderOffset}px` : undefined,
                 }}
               >
@@ -133,7 +136,7 @@ export default function Table<T>({
                     </td>
                   )}
                   {columns.map((col) => (
-                    <td key={col.key}>
+                    <td key={col.key} style={col.align ? { textAlign: col.align } : undefined}>
                       {col.render ? col.render(row, index) : (row as Record<string, ReactNode>)[col.key]}
                     </td>
                   ))}
