@@ -21,11 +21,16 @@ Demo runbook:
 
 from __future__ import annotations
 
+import asyncio
+import sys
 import uuid
 
+from arq import create_pool
+from arq.connections import RedisSettings
 from sqlalchemy import select
 
 from app.core.auth import hash_password
+from app.core.settings import get_settings
 from app.modules.agent_builder.models import Agent
 from app.modules.agent_builder.service import Principal, create_agent, update_agent
 from scripts.demo_agent_specs import get_agent_model_ref
@@ -39,11 +44,18 @@ from app.modules.orchestrator.service import create_workflow
 from app.modules.mini_app import database_service
 from app.modules.mini_app import service as mini_app_service
 from app.modules.mini_app.database_models import MiniAppDatabase
+from app.modules.mini_app.lifecycle import enqueue_build
 from app.modules.mini_app.models import MiniApp
 from app.modules.mini_app.schema_validation import validate_entity_schema, validate_ui_spec
 from app.modules.mini_app.visibility import MiniAppPrincipal
 from app.modules.action.models import ActionBinding
 from app.modules.action.service import create_binding
+
+# Ensure Vietnamese output prints on Windows consoles (cp1252 default).
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except (AttributeError, ValueError):
+    pass
 
 DEMO_PASSWORD = "Password123!"
 TENANT_NAME = "SHB Demo"
@@ -354,6 +366,16 @@ def seed_workflow(session, people, agents) -> Workflow:
     return wf
 
 
+async def enqueue_app_build(tenant_id: uuid.UUID, app_id: uuid.UUID) -> None:
+    """Enqueue the esbuild job so the mini-app renders. Needs Redis + tenant context."""
+    pool = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
+    try:
+        set_tenant_context(tenant_id)  # required or enqueue raises MissingTenantContextError
+        await enqueue_build(pool, str(app_id))
+    finally:
+        await pool.aclose()
+
+
 def main() -> int:
     with AdminSessionLocal() as session:
         people = seed_people(session)
@@ -369,6 +391,18 @@ def main() -> int:
               f"build_status={app.build_status})")
         binding = seed_binding(session, people, workflow, db)
         print(f"[auto-loan] binding: {binding.name} (id={binding.id}, active={binding.is_active})")
+        tid = people["tenant_id"]
+        app_id = app.id
+        build_status = app.build_status
+
+    if build_status != "ready":
+        print("[auto-loan] enqueuing mini-app build…")
+        asyncio.run(enqueue_app_build(tid, app_id))
+        print("[auto-loan] build enqueued — ensure an arq worker is running to complete it.")
+    print("\n[auto-loan] DONE. Login emails (pw Password123!):")
+    print("  khách:      khachhang@shb.demo")
+    print("  duyệt N4:   truongphong.td@shb.demo")
+    print("  duyệt N6:   vanhanh@shb.demo")
     return 0
 
 
