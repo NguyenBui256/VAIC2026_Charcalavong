@@ -33,9 +33,19 @@ from app.core.db import AdminSessionLocal
 from app.core.tenant_context import set_tenant_context
 from app.modules.tenant.models import Department, Tenant, User
 from scripts.bootstrap_demo_tenant import bootstrap_demo_tenant
+from app.modules.orchestrator.models import Workflow
+from app.modules.orchestrator.graph_authoring import replace_workflow_graph
+from app.modules.orchestrator.service import create_workflow
 
 DEMO_PASSWORD = "Password123!"
 TENANT_NAME = "SHB Demo"
+
+WORKFLOW_NAME = "Thẩm định & Giải ngân Vay Thế chấp Ô tô"
+WORKFLOW_DESC = (
+    "Quy trình 6 bước thẩm định và giải ngân vay thế chấp mua ô tô: tiếp nhận hồ sơ, "
+    "thẩm định tín dụng (CIC/DTI), định giá TSĐB, phê duyệt (duyệt thật), ký hợp đồng & "
+    "hoàn thiện TSĐB, đăng ký GDBĐ & giải ngân (duyệt thật)."
+)
 
 
 def _get_or_create_department(session, tenant_id: uuid.UUID, name: str) -> Department:
@@ -196,6 +206,53 @@ def seed_agents(session, people) -> dict:
     return agents
 
 
+def seed_workflow(session, people, agents) -> Workflow:
+    tid = people["tenant_id"]
+    owner = people["owner"]
+    credit_mgr = people["credit_mgr"]
+    ops = people["ops"]
+
+    wf = session.execute(
+        select(Workflow).where(
+            Workflow.tenant_id == tid, Workflow.name == WORKFLOW_NAME
+        )
+    ).scalar_one_or_none()
+    if wf is None:
+        set_tenant_context(tid)
+        wf = create_workflow(
+            session, owner_id=owner.id, role="builder",
+            name=WORKFLOW_NAME, description=WORKFLOW_DESC,
+        )
+
+    def node(key, label, x, y, approvers=None):
+        return {
+            "node_key": key, "label": label,
+            "agent_id": str(agents[key].id), "config": {},
+            "position": {"x": float(x), "y": float(y)},
+            "approver_user_ids": [str(u.id) for u in (approvers or [])],
+        }
+
+    nodes = [
+        node("rm_intake", "1. Tiếp nhận & kiểm tra hồ sơ", 0, 0),
+        node("credit_appraisal", "2. Thẩm định tín dụng (CIC/DTI)", -160, 160),
+        node("collateral_valuation", "3. Định giá TSĐB", 160, 160),
+        node("credit_memo", "4. Phê duyệt khoản vay", 0, 320, approvers=[credit_mgr]),
+        node("back_office", "5. Ký HĐ & hoàn thiện TSĐB", 0, 480),
+        node("disbursement", "6. Đăng ký GDBĐ & Giải ngân", 0, 640, approvers=[ops]),
+    ]
+    edges = [
+        {"from": "rm_intake", "to": "credit_appraisal"},
+        {"from": "rm_intake", "to": "collateral_valuation"},
+        {"from": "credit_appraisal", "to": "credit_memo"},
+        {"from": "collateral_valuation", "to": "credit_memo"},
+        {"from": "credit_memo", "to": "back_office"},
+        {"from": "back_office", "to": "disbursement"},
+    ]
+    set_tenant_context(tid)
+    replace_workflow_graph(session, wf.id, role="builder", nodes=nodes, edges=edges)
+    return wf
+
+
 def main() -> int:
     with AdminSessionLocal() as session:
         people = seed_people(session)
@@ -203,6 +260,8 @@ def main() -> int:
         print("[auto-loan] agents seeded:")
         for key, a in agents.items():
             print(f"  - {key}: {a.name} (id={a.id})")
+        workflow = seed_workflow(session, people, agents)
+        print(f"[auto-loan] workflow: {workflow.name} (id={workflow.id})")
     return 0
 
 
