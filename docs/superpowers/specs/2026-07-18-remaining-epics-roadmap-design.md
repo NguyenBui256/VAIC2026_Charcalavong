@@ -26,7 +26,7 @@ Nguồn epic gốc: `_bmad-output/planning-artifacts/epics.md` (đã khôi phụ
 | 3 | Workflow Orchestrator + HITL | §4.2 | FR-7..11 | ✅ DONE (thin-slice, backend) — head `135b295` |
 | 4 | Mini-App Builder + Visibility | §4.3 | FR-12..17 | ❌ Stub — DEFER |
 | 5 | Actions / Triggers | §4.4 | FR-18..20 | ❌ Stub — DEFER |
-| 6 | Trace Dashboard + Provenance | §4.5 | FR-22,23,24 | ⚠️ Sink có (real run_id/step_id từ Epic 3), UI/export chưa |
+| 6 | Trace Dashboard + Provenance | §4.5 | FR-22,23,24 | ✅ DONE (merged, commit `63f009e`) — FR-22 Timeline, FR-23 Collaboration graph, FR-24 export |
 | 7 | Integration & Demo Readiness | — | FR-28 + wiring | ✅ DONE (thin: bootstrap seed + worker entrypoint) — head `135b295` |
 
 Bằng chứng code: `backend/app/modules/{orchestrator,mini_app,actions,audit}` đều stub 1 dòng,
@@ -131,7 +131,7 @@ Luồng B & C không được chặn đường găng — luôn có mock/types đ
 
 - [x] Epic 3 thin-slice: định nghĩa Workflow → Run → decompose → dispatch ≥2 Agent →
       tool call thật → aggregate, tất cả audit bằng run_id/step_id thật. — DONE, head `135b295`.
-- [ ] Epic 6: Timeline view render Audit Trail của 1 Run e2e, đủ 4 bar quan sát được. — PENDING, chưa bắt đầu.
+- [x] Epic 6: Timeline view render Audit Trail của 1 Run e2e, đủ 4 bar quan sát được. — DONE, merged commit `63f009e` (FR-22 Timeline, FR-23 Collaboration graph, FR-24 export). Task 8 (FE run-views) phần lớn đã được Trace Dashboard `/audit?run_id=` phủ (deep-link theo Run); riêng embed trace trực tiếp trong `/workflows/$id/runs/$runId` vẫn DEFER nếu cần.
 - [x] Epic 7-thin: bootstrap seed chạy < 60s, ra 3 Agent + 1 Workflow demo-ready. — DONE (`backend/scripts/bootstrap_demo_tenant.py` + `bootstrap_demo_agents_workflow.py`).
 - [x] 1 lần chạy e2e demo-safe được rehearse thành công (warm) — DONE nhưng với STUB LLM (`backend/tests/integration/test_demo_smoke.py`); real live run cần Anthropic API key thật (PRD OQ-2), chưa rehearse.
 - [ ] DEFER items (Epic 4, 5, FR-23/24, 3.6) ghi rõ là hoãn, có hook không nợ kỹ thuật chặn. — vẫn DEFER, chưa mở.
@@ -141,7 +141,7 @@ Luồng B & C không được chặn đường găng — luôn có mock/types đ
 - Epic 3 (backend thin-slice) và Epic 7-thin (bootstrap) đã DONE, tất cả commit local trên
   branch `rebuild`, branch head `135b295`, KHÔNG push. Chi tiết task-by-task: `.superpowers/sdd/progress.md`.
 - Bars 1–3 (specialist collab, planner decompose, real tool use) đã chứng minh e2e qua smoke test.
-- Bar 4 (Trace Dashboard) và Task 8 (FE run-views) là NEXT MUST — chưa có spec/plan riêng, cần viết trước khi execute (mục 7).
+- Bar 4 (Trace Dashboard) — DONE, merged `63f009e` 2026-07-18. Tất cả 4 rubric bar SHB nay đã phủ end-to-end.
 - Known pre-existing, không phải do Epic 3/7 gây ra: `test_arq_tenant_context.py` có smell cô lập test
   giữa các file (baseline 350 pass / 1 flaky / 8 lỗi khi chạy full `pytest tests/`; chạy từng file riêng thì sạch).
 

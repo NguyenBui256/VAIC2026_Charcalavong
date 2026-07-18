@@ -143,10 +143,44 @@ sandbox invocation, and all 4 audit event types. Uses a stub LLM for decompositi
 Anthropic key is configured in this environment; a live run needs a real key (PRD open question
 OQ-2). KB content retrieval is skipped in the smoke test (no embedding provider configured).
 
+## Audit & Trace Dashboard (Epic 6)
+
+Read-only query/export surface over the append-only `audit_trail` table (PRD §4.5, FR-22/23/24).
+Merged into `rebuild` via `--no-ff` commit `63f009e`. Completes SHB rubric bar 4 — the platform
+now covers all 4 rubric bars end-to-end (bars 1–3 from Epic 3, bar 4 from Epic 6), reading the
+same `audit_trail` rows the Orchestrator (Epic 3) writes via `PostgresAuditSink` (AD-4).
+
+### Backend (`backend/app/modules/audit`)
+
+| File | Role |
+|---|---|
+| `service.py` | `list_audit_entries` — RLS-scoped read, filter by `run_id`/`type`, cap 500, ordered by `ts` (ASC per-run / DESC global); `export_audit_entries` + `entries_to_csv` — JSON/CSV export (FR-24), cap 10k rows |
+| `routes.py` | `GET /audit?run_id=&type=&limit=` (envelope `{data,error,meta}`); `GET /audit/export?format=json\|csv` (raw file, `Content-Disposition: attachment`) |
+
+The module remains read-only: `PostgresAuditSink` (`backend/app/core/adapters/audit_postgres.py`)
+is still the sole writer to `audit_trail` (AD-4). RLS scopes rows to the caller's tenant
+automatically — no manual tenant filtering in the read-side Python.
+
+### Frontend (`frontend/src/routes/audit.tsx` → `AuditPage`)
+
+Replaces the previous `ComingSoon` stub. Deep-linkable via `/audit?run_id=` (used from Run views).
+
+| File | Role |
+|---|---|
+| `components/audit/TraceTimeline.tsx` | FR-22 — vertical timeline, color-coded dot per event type, expand-to-JSON input/output |
+| `components/audit/TraceEntryCard.tsx` | Single audit entry card (used by the timeline) |
+| `components/audit/CollaborationGraph.tsx` + `lib/collaborationGraph.ts` | FR-23 — SVG graph, Orchestrator → Agent edges weighted by step count; toggle Timeline ⇄ Graph |
+| `hooks/useAuditTrail.ts`, `lib/auditApi.ts`, `lib/auditEntryMeta.ts` | TanStack Query hook + API client + event-type→label/color mapping |
+
+`lib/auditApi.ts` exposes `downloadAuditExport` (JSON/CSV) wired to an Export button on the page
+(FR-24).
+
 ## Status & Roadmap
 
-Epic 3 (backend) and Epic 7-thin are complete as of branch `rebuild` head `135b295` (local only,
-not pushed). Pending: Epic 6 Trace Dashboard (rubric bar 4 — UI over the `audit_trail` this module
-already writes), Task 8 frontend Run views, a live-LLM-key rehearsal run. Deferred: Epic 4
-Mini-App, Epic 5 Actions. See `docs/superpowers/specs/2026-07-18-remaining-epics-roadmap-design.md`
-for the full roadmap and `.superpowers/sdd/progress.md` for the task-by-task ledger.
+Epic 3 (backend), Epic 6 (Trace Dashboard), and Epic 7-thin are complete on branch `rebuild`
+(merge commit `63f009e`). All 4 SHB rubric bars are covered end-to-end. Remaining: a live-LLM-key
+rehearsal run (PRD OQ-2), optional embedding of trace directly inside
+`/workflows/$id/runs/$runId` (currently reachable via `/audit?run_id=` deep link instead).
+Deferred: Epic 4 Mini-App, Epic 5 Actions. See
+`docs/superpowers/specs/2026-07-18-remaining-epics-roadmap-design.md` for the full roadmap and
+`.superpowers/sdd/progress.md` for the task-by-task ledger.

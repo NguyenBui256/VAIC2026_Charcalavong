@@ -2,8 +2,11 @@
 
 Modular monolith: FastAPI backend (`backend/`) + React/TypeScript frontend (`frontend/`).
 Multi-tenant via Postgres RLS. Background jobs via arq (Redis). See
-`docs/system-architecture.md` for architecture invariants (AD-1, AD-4, AD-6, AD-10) and the
-Orchestrator flow in detail.
+`docs/system-architecture.md` for architecture invariants (AD-1, AD-4, AD-6, AD-10), the
+Orchestrator flow, and the Audit/Trace Dashboard (Epic 6) in detail.
+
+`audit_trail` columns: `{id, tenant_id, run_id, step_id, agent_id, ts, type, input, output,
+latency_ms, model}` — append-only (INSERT/SELECT only; UPDATE/DELETE revoked).
 
 ## Backend module map (`backend/app/modules/*`)
 
@@ -12,7 +15,7 @@ Orchestrator flow in detail.
 | `agent_builder` | DONE (Epic 2) | Agent CRUD, KB upload/retrieval, Tool config, model catalog, `AgentExecutor` (runs an Agent's prompt+model+KB+Tool for a Task — added Epic 3), `list_routable_agents` public selector for Orchestrator |
 | `orchestrator` | DONE, thin-slice (Epic 3) | Workflow CRUD, Run lifecycle (CAS state machine), decomposition (`decompose_run`), dispatch/aggregate (`execute_task_row`, `aggregate_run`, `orchestrate_run`) |
 | `tenant` | DONE (Epic 1) | Tenant/department/user foundation, RLS context |
-| `audit` | Partial (Epic 6 pending) | `PostgresAuditSink` — sole writer to `audit_trail` (AD-4); UI/Timeline view not built |
+| `audit` | DONE (Epic 6) | Write: `PostgresAuditSink` — sole writer to `audit_trail` (AD-4). Read: `service.list_audit_entries` / `export_audit_entries` / `entries_to_csv`, `routes.py` — `GET /audit`, `GET /audit/export` |
 | `mini_app` | Stub, DEFER (Epic 4) | Mini-App Builder — not implemented |
 | `actions` | Stub, DEFER (Epic 5) | Actions/Triggers — not implemented |
 
@@ -46,10 +49,16 @@ Protocol interfaces implemented by module adapters (hexagonal architecture, AD-1
 |---|---|
 | `login`, `dashboard` | DONE |
 | `agents`, `agent-builder`, `agent-detail` | DONE (Epic 2) |
-| `workflows`, `workflow-detail` | DONE (Epic 3 Story 3.1 — list + Definition tab; Run views deferred, Task 8) |
+| `workflows`, `workflow-detail` | DONE (Epic 3 Story 3.1 — list + Definition tab) |
+| `audit` (`AuditPage`) | DONE (Epic 6) — Trace timeline (FR-22), collaboration graph (FR-23), JSON/CSV export (FR-24); deep-link `/audit?run_id=` |
 | `orchestrator` | Scaffold |
-| `trace.$runId` | Scaffold, pending Epic 6 Timeline view |
 | `mini-apps.$appId`, `actions` | Stub, DEFER (Epic 4/5) |
+
+### Audit components (`frontend/src/components/audit/*`, Epic 6)
+
+`TraceTimeline.tsx`, `TraceEntryCard.tsx`, `CollaborationGraph.tsx` + `lib/collaborationGraph.ts`,
+`hooks/useAuditTrail.ts`, `lib/auditApi.ts`, `lib/auditEntryMeta.ts`. See
+`docs/system-architecture.md` → "Audit & Trace Dashboard (Epic 6)" for details.
 
 ## Database migrations (Alembic, `backend/alembic/versions/`)
 

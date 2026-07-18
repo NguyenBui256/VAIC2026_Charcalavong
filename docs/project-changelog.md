@@ -1,6 +1,32 @@
 # Project Changelog
 
-All notable changes to VAIC. Local commits on branch `rebuild`, NOT pushed unless noted.
+All notable changes to VAIC. Local commits on branch `rebuild`.
+
+## [Unreleased] — 2026-07-18 (Epic 6 merge)
+
+### Added — Epic 6: Trace Dashboard & Audit Provenance (PRD §4.5, FR-22/23/24)
+
+Merged into `rebuild` via `--no-ff` merge commit `63f009e` (branch `feat/epic6-trace-epic7-seed`).
+
+- **Backend**: `backend/app/modules/audit/service.py` + `routes.py` build out the previously
+  1-line-stub audit module into a read/query API over the `audit_trail` table — the same table
+  Epic 3's orchestrator writes to with real `run_id`/`step_id` (AD-4). `list_audit_entries`
+  (filter by `run_id`/`type`, RLS-scoped, cap 500) and `export_audit_entries` /
+  `entries_to_csv` (JSON/CSV export, FR-24) exposed via `GET /audit` and `GET /audit/export`.
+- **Frontend**: `/audit` route (`frontend/src/routes/audit.tsx` → `AuditPage`, replacing the old
+  `ComingSoon` stub) with `TraceTimeline.tsx` (FR-22 timeline view), `CollaborationGraph.tsx`
+  (FR-23 collaboration graph, SVG), `TraceEntryCard.tsx`; hooks/lib `useAuditTrail.ts`,
+  `auditApi.ts`, `auditEntryMeta.ts`, `collaborationGraph.ts`. JSON/CSV export wired to the export
+  endpoint (FR-24).
+- **Rubric coverage**: completes SHB rubric bar 4 (Trace Dashboard) — reading the same
+  `audit_trail` that Epic 3 (bars 1–3: specialist collaboration, planner decomposition, real tool
+  use) produces. **All 4 rubric bars are now covered end-to-end.**
+- **Merge reconciliation**: the source branch's own Epic 7 demo-seed scripts
+  (`demo_seed_agents.py`, `demo_seed_workflow.py`) were discarded in favor of `rebuild`'s already
+  tested `bootstrap_demo_agents_workflow.py` / `bootstrap_demo_tenant.py` / `demo_agent_specs.py`.
+- **Verified runnable post-merge**: alembic single head, pytest 350 passed / 1 flaky / 8 baseline
+  errors (pre-existing `test_arq_tenant_context.py` cross-file isolation smell, unrelated to this
+  merge), demo smoke test passes, frontend build OK (`tsc --noEmit` + vite), 293 vitest passed.
 
 ## [Unreleased] — 2026-07-18
 
