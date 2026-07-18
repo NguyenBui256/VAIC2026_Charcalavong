@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import uuid
 from pathlib import Path
 
 from app.core.ports.build import BuildResult
@@ -57,11 +58,16 @@ class EsbuildBuild:
         timeout_s: int = 60,
         memory_mb: int = 512,
     ) -> BuildResult:
-        out = Path(out_dir)
-        out.mkdir(parents=True, exist_ok=True)
+        try:
+            uuid.UUID(str(app_id))
+        except ValueError:
+            return BuildResult(ok=False, error="invalid app_id")
 
         work = _BUILD_ROOT / app_id
         try:
+            out = Path(out_dir)
+            out.mkdir(parents=True, exist_ok=True)
+
             if work.exists():
                 shutil.rmtree(work)
             work.mkdir(parents=True, exist_ok=True)
@@ -100,6 +106,8 @@ class EsbuildBuild:
 
             shutil.copy(bundle, out / "bundle.js")
             shutil.copy(_TEMPLATE / "index.html", out / "index.html")
+        except Exception as exc:  # noqa: BLE001 -- sandbox isolation: never raise into caller
+            return BuildResult(ok=False, error=str(exc))
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
