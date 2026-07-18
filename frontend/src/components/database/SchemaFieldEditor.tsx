@@ -8,6 +8,16 @@ import type { EntitySchema, FieldType, SchemaField } from "../../lib/miniAppData
 
 const FIELD_TYPES: FieldType[] = ["string", "longtext", "integer", "number", "boolean", "date", "enum"];
 
+/* On a type change, clear type-specific attributes that are no longer valid for the new
+ * type (backend rejects e.g. `options` left over from a prior `enum` type with a 422).
+ * SchemaField only carries `options` as a type-specific attribute today, so that's all
+ * that needs clearing; add min/max/minLength/maxLength/pattern here if SchemaField ever
+ * grows those fields. */
+function attrsForTypeChange(newType: FieldType): Partial<SchemaField> {
+  if (newType === "enum") return { options: [] };
+  return { options: undefined };
+}
+
 export interface SchemaFieldEditorProps {
   value: EntitySchema;
   onChange: (schema: EntitySchema) => void;
@@ -39,7 +49,10 @@ function FieldRow({ field: f, index: idx, onChange, onRemove }: FieldRowProps) {
       />
       <select
         className="vaic-form-input vaic-focusable"
-        value={f.type} onChange={(e) => onChange({ type: e.target.value as FieldType })}
+        value={f.type} onChange={(e) => {
+          const newType = e.target.value as FieldType;
+          onChange({ type: newType, ...attrsForTypeChange(newType) });
+        }}
       >
         {FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
       </select>
