@@ -9,7 +9,9 @@
 
 import { useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { Info } from "lucide-react";
 import { ErrorState, Skeleton, Button, ConfirmDialog } from "../ui";
+import { ICON_STROKE_WIDTH } from "../../lib/icons";
 import { useAgent } from "../../hooks/useAgent";
 import { useDepartments } from "../../hooks/useDepartments";
 import { useUnsavedChangesGuard } from "./useUnsavedChangesGuard";
@@ -101,11 +103,9 @@ function AgentDetailShellBody({
   const counts = useTabCounts(isNew ? undefined : agentId);
 
   const { guardedNavigate, confirmProps } = useUnsavedChangesGuard(anyDirty);
-  const {
-    guardedTabChange,
-    dialog: switchDialog,
-    isOpen: switchDialogOpen,
-  } = useTabSwitchGuard((tab) => setSearchParams({ tab }));
+  const { guardedTabChange, dialog: switchDialog } = useTabSwitchGuard((tab) =>
+    setSearchParams({ tab }),
+  );
 
   // AC #7 — new-Agent gating: only Identity is enabled until the record exists.
   const disabledTabs = useMemo(
@@ -134,7 +134,6 @@ function AgentDetailShellBody({
         agent={agent}
         departmentName={departmentName}
         onBack={handleBack}
-        suppressSaveAll={switchDialogOpen}
       />
 
       {isError && (
@@ -156,35 +155,63 @@ function AgentDetailShellBody({
 
       {showTabs && (
         <>
-          <AgentTabNav
-            activeTab={activeTab}
-            onTabChange={handleTabChange}
-            disabledTabs={disabledTabs}
-            dirtyTabs={dirtyTabs}
-            counts={counts}
-          />
-
-          <div className="vaic-tab-panel" role="tabpanel" aria-labelledby={`vaic-tab-${activeTab}`}>
-            {activeTab === "identity" && (
-              <IdentityTab
-                agentId={agentId}
-                isNew={isNew}
-                agent={agent}
-                onDirtyChange={() => {}}
-                onSaved={onSaved}
+          {isNew && (
+            <div className="vaic-agent-gating-note" role="note">
+              <Info
+                size={16}
+                strokeWidth={ICON_STROKE_WIDTH}
+                className="vaic-agent-gating-note-icon"
+                aria-hidden="true"
               />
-            )}
-            {activeTab === "knowledge-base" && <KnowledgeBaseTab agentId={agentId} isNew={isNew} />}
-            {activeTab === "tools" && <ToolsTab agentId={agentId} isNew={isNew} />}
-            {activeTab === "api-integrations" && (
-              <ApiIntegrationsTab agentId={agentId} isNew={isNew} />
-            )}
-            {activeTab === "prompt" && (
-              <PromptTab agentId={agentId} isNew={isNew} agent={agent} onDirtyChange={() => {}} />
-            )}
-            {activeTab === "model" && (
-              <ModelTab agentId={agentId} isNew={isNew} agent={agent} onDirtyChange={() => {}} />
-            )}
+              <span>
+                Start with the <strong>Identity</strong> basics. Once you create the Agent,
+                Knowledge Base, Tools, API Integrations, Prompt and Model unlock.
+              </span>
+            </div>
+          )}
+
+          <div className="vaic-agent-builder-layout">
+            <aside className="vaic-agent-builder-nav">
+              <AgentTabNav
+                activeTab={activeTab}
+                onTabChange={handleTabChange}
+                disabledTabs={disabledTabs}
+                dirtyTabs={dirtyTabs}
+                counts={counts}
+              />
+            </aside>
+
+            <div className="vaic-agent-builder-content">
+              <div
+                className="vaic-tab-panel"
+                role="tabpanel"
+                aria-labelledby={`vaic-tab-${activeTab}`}
+              >
+                {activeTab === "identity" && (
+                  <IdentityTab
+                    agentId={agentId}
+                    isNew={isNew}
+                    agent={agent}
+                    onDirtyChange={() => {}}
+                    onSaved={onSaved}
+                    onCancelNew={handleBack}
+                  />
+                )}
+                {activeTab === "knowledge-base" && (
+                  <KnowledgeBaseTab agentId={agentId} isNew={isNew} />
+                )}
+                {activeTab === "tools" && <ToolsTab agentId={agentId} isNew={isNew} />}
+                {activeTab === "api-integrations" && (
+                  <ApiIntegrationsTab agentId={agentId} isNew={isNew} />
+                )}
+                {activeTab === "prompt" && (
+                  <PromptTab agentId={agentId} isNew={isNew} agent={agent} onDirtyChange={() => {}} />
+                )}
+                {activeTab === "model" && (
+                  <ModelTab agentId={agentId} isNew={isNew} agent={agent} onDirtyChange={() => {}} />
+                )}
+              </div>
+            </div>
           </div>
         </>
       )}

@@ -154,37 +154,110 @@
  * Agent detail — 6-tab nav + dirty dot + status toggle
  * ──────────────────────────────────────────────────────────────────── */
 
+/* Two-column builder layout: a left sub-sidebar of section links + the
+ * content panel. The nav sticks so it stays visible while the panel scrolls. */
+.vaic-agent-builder-layout {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.vaic-agent-builder-nav {
+  position: sticky;
+  top: var(--space-2);
+}
+
+.vaic-agent-builder-content {
+  min-width: 0;
+}
+
+/* Vertical section nav (was a horizontal tab strip). */
 .vaic-tabs {
   display: flex;
-  gap: var(--space-1);
-  border-bottom: 1px solid var(--color-border);
-  margin-bottom: var(--space-4);
-  overflow-x: auto;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .vaic-tab {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
+  width: 100%;
   padding: var(--space-2) var(--space-3);
   border: none;
-  border-bottom: 2px solid transparent;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-text-tertiary);
   font-size: var(--text-body);
   font-weight: 600;
-  cursor: pointer;
+  text-align: left;
   white-space: nowrap;
-  transition: color var(--duration-hover) ease-out, border-color var(--duration-hover) ease-out;
+  cursor: pointer;
+  transition: color var(--duration-hover) ease-out,
+              background var(--duration-hover) ease-out;
 }
 
-.vaic-tab:hover {
+/* Icon keeps its size; the label takes the slack and truncates if needed. */
+.vaic-tab > svg {
+  flex-shrink: 0;
+}
+
+/* Count badge + dirty dot hug the right edge of the row. */
+.vaic-tab .vaic-tab-count-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.vaic-tab .vaic-tab-count-badge + .vaic-dirty-dot {
+  margin-left: 0;
+}
+
+.vaic-tab .vaic-dirty-dot {
+  margin-left: auto;
+}
+
+.vaic-tab:hover:not([aria-disabled="true"]) {
   color: var(--color-text);
+  background: var(--color-surface-muted);
 }
 
-.vaic-tab-active {
+.vaic-tab-active,
+.vaic-tab-active:hover {
   color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+/* Narrow content area — fall back to a stacked horizontal scroller so the
+ * nav never squeezes the panel on tight viewports. */
+@media (max-width: 860px) {
+  .vaic-agent-builder-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+
+  .vaic-agent-builder-nav {
+    position: static;
+  }
+
+  .vaic-tabs {
+    flex-direction: row;
+    gap: var(--space-1);
+    overflow-x: auto;
+    scrollbar-width: thin;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: var(--space-1);
+  }
+
+  .vaic-tab {
+    width: auto;
+    white-space: nowrap;
+  }
+
+  .vaic-tab .vaic-tab-count-badge,
+  .vaic-tab .vaic-dirty-dot {
+    margin-left: 0;
+  }
 }
 
 .vaic-dirty-dot {
@@ -217,11 +290,44 @@
 
 .vaic-agent-detail-header {
   display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+/* Breadcrumb-style back link — a quiet, always-present escape route
+ * (UX-DR1) that reads as navigation, not a competing action. */
+.vaic-agent-detail-breadcrumb {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  margin-bottom: var(--space-4);
+  gap: var(--space-1);
+  align-self: flex-start;
+  padding: var(--space-1) 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: var(--text-small);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--duration-hover) ease-out;
+}
+
+.vaic-agent-detail-breadcrumb:hover {
+  color: var(--color-text);
+}
+
+.vaic-agent-detail-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.vaic-agent-detail-title h1 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .vaic-agent-detail-header-meta {
@@ -232,24 +338,129 @@
 }
 
 .vaic-agent-detail-shell {
-  display: flex;
-  gap: var(--space-4);
+  display: block;
 }
 
 .vaic-agent-detail-main {
-  flex: 1;
+  min-width: 0;
+  /* Constrain the overall body so it doesn't sprawl on wide screens, but stay
+   * left-aligned (no auto margins) to avoid empty side gutters. */
+  max-width: 1080px;
+  padding-bottom: var(--space-8);
+}
+
+/* Plain container — the AppShell content area already provides the page
+ * padding, and the left nav supplies the structure, so a second card box
+ * here would double the inset. The form sits flush, aligned with the
+ * header and nav. */
+.vaic-tab-panel {
   min-width: 0;
 }
 
-.vaic-status-toggle {
-  display: inline-flex;
-  gap: var(--space-2);
+/* Fields fill the content column and stand a little taller for comfortable
+ * input; the outer body max-width keeps line length in check. */
+.vaic-tab-panel .vaic-form-input {
+  min-height: 42px;
 }
 
-.vaic-status-toggle-active {
-  background: var(--color-primary-soft) !important;
-  border-color: var(--color-primary) !important;
-  color: var(--color-primary) !important;
+/* ── New-Agent gating note ─────────────────────────────────────────── */
+.vaic-agent-gating-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-card);
+  background: var(--color-primary-soft);
+  color: var(--color-text-secondary);
+  font-size: var(--text-small);
+  line-height: var(--leading-small);
+}
+
+.vaic-agent-gating-note strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.vaic-agent-gating-note-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--color-primary);
+}
+
+/* ── Field helper text ─────────────────────────────────────────────── */
+.vaic-form-help {
+  font-size: var(--text-caption);
+  line-height: var(--leading-caption);
+  color: var(--color-text-tertiary);
+}
+
+/* View mode — disabled controls read as clean, filled-in values rather than
+ * greyed-out "broken" inputs. Editing restores the normal white surface. */
+.vaic-form-input:disabled {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  border-color: var(--color-border);
+  opacity: 1;
+  cursor: default;
+}
+
+.vaic-segmented-option:disabled {
+  cursor: default;
+}
+
+.vaic-segmented-option:disabled:not([aria-pressed="true"]) {
+  opacity: 0.6;
+}
+
+/* In-tab action row — right-aligned footer holding Edit, or Save + Cancel. */
+.vaic-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── Segmented control (status toggle) ─────────────────────────────── */
+.vaic-segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-muted);
+}
+
+.vaic-segmented-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 30px;
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: calc(var(--radius-control) - 2px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: var(--text-small);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--duration-hover) ease-out,
+              color var(--duration-hover) ease-out;
+}
+
+.vaic-segmented-option:hover {
+  color: var(--color-text);
+}
+
+.vaic-segmented-option[aria-pressed="true"] {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
 }
 
 .vaic-inline-alert {

@@ -1,14 +1,12 @@
-/* Story 2.8 T2.3 — detail-view header: name, Department badge, status pill,
- * global "Save All" (AC #8). Single Primary CTA per UX-DR3 — Save All is the
- * shell's Primary; the per-tab Save buttons remain Secondary-weight in
- * their own view (only one is mounted at a time alongside this header).
+/* Story 2.8 T2.3 — detail-view header: breadcrumb back link, title with icon,
+ * Department badge + status pill. Saving is per-tab (view → Edit → Save/Cancel),
+ * so the header is purely orientation/identity — no global save control.
  */
 
-import { Button, useToast } from "../ui";
+import { ChevronLeft } from "lucide-react";
 import { semanticIcons, ICON_STROKE_WIDTH } from "../../lib/icons";
 import AgentStatusPill from "./AgentStatusPill";
 import DepartmentBadge from "./DepartmentBadge";
-import { useAgentBuilder } from "./AgentBuilderContext";
 import type { Agent } from "../../lib/agentsApi";
 
 export interface AgentDetailHeaderProps {
@@ -16,9 +14,6 @@ export interface AgentDetailHeaderProps {
   agent: Agent | undefined;
   departmentName: string | undefined;
   onBack: () => void;
-  /** Suppress the Save All button (UX-DR3 — a modal with its own Primary,
-   * e.g. the tab-switch guard, is currently open). */
-  suppressSaveAll?: boolean;
 }
 
 export default function AgentDetailHeader({
@@ -26,42 +21,26 @@ export default function AgentDetailHeader({
   agent,
   departmentName,
   onBack,
-  suppressSaveAll = false,
 }: AgentDetailHeaderProps) {
   const AgentIcon = semanticIcons.Agent;
-  const { anyDirty, saveAll } = useAgentBuilder();
-  const { show } = useToast();
-
-  async function handleSaveAll() {
-    try {
-      await saveAll();
-      show("All changes saved");
-    } catch (err) {
-      show(err instanceof Error ? err.message : "Failed to save changes", "error");
-    }
-  }
 
   return (
     <header className="vaic-agent-detail-header">
-      <div className="vaic-agent-detail-header-meta">
-        <Button variant="ghost" onClick={onBack}>
-          Back to Agents
-        </Button>
-        <h1
-          className="text-h1"
-          style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}
-        >
-          <AgentIcon size={20} strokeWidth={ICON_STROKE_WIDTH} aria-hidden="true" />
-          {isNew ? "New Agent" : agent?.name ?? "Agent"}
-        </h1>
-        {!isNew && departmentName && <DepartmentBadge name={departmentName} />}
-        {!isNew && agent && <AgentStatusPill status={agent.status} />}
+      <button type="button" className="vaic-agent-detail-breadcrumb vaic-focusable" onClick={onBack}>
+        <ChevronLeft size={14} strokeWidth={ICON_STROKE_WIDTH} aria-hidden="true" />
+        Agents
+      </button>
+
+      <div className="vaic-agent-detail-title">
+        <AgentIcon size={22} strokeWidth={ICON_STROKE_WIDTH} aria-hidden="true" />
+        <h1 className="text-h1">{isNew ? "New Agent" : agent?.name ?? "Agent"}</h1>
       </div>
 
-      {!isNew && anyDirty && !suppressSaveAll && (
-        <Button variant="primary" onClick={handleSaveAll} data-testid="vaic-save-all">
-          Save All
-        </Button>
+      {!isNew && (departmentName || agent) && (
+        <div className="vaic-agent-detail-header-meta">
+          {departmentName && <DepartmentBadge name={departmentName} />}
+          {agent && <AgentStatusPill status={agent.status} />}
+        </div>
       )}
     </header>
   );

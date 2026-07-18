@@ -8,10 +8,12 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Button, Card, useToast } from "../../ui";
+import { Card, useToast } from "../../ui";
 import { useAgentProviders } from "../../../hooks/useAgentProviders";
 import { useAgentMutations } from "../../../hooks/useAgentMutations";
 import { useRegisterTab } from "../AgentBuilderContext";
+import { useEditMode } from "../useEditMode";
+import { FieldEditActions } from "../TabEditBar";
 import type { Agent, ModelRef } from "../../../lib/agentsApi";
 
 export interface PromptTabProps {
@@ -52,6 +54,7 @@ export default function PromptTab({ agentId, isNew, agent, onDirtyChange }: Prom
   const { data: providers } = useAgentProviders();
   const { update } = useAgentMutations(agentId);
   const { show } = useToast();
+  const { editing, startEdit, stopEdit } = useEditMode(false);
 
   const initial = agent?.system_prompt ?? "";
   const [text, setText] = useState(initial);
@@ -71,6 +74,11 @@ export default function PromptTab({ agentId, isNew, agent, onDirtyChange }: Prom
   function handleReset() {
     setText(initial);
     setSaveError(null);
+  }
+
+  function handleCancel() {
+    handleReset();
+    stopEdit();
   }
 
   useRegisterTab("prompt", { isDirty, save: handleSave, reset: handleReset });
@@ -95,6 +103,7 @@ export default function PromptTab({ agentId, isNew, agent, onDirtyChange }: Prom
     try {
       await update.mutateAsync({ system_prompt: text });
       show("Agent saved");
+      stopEdit();
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to save Agent");
     }
@@ -152,11 +161,14 @@ export default function PromptTab({ agentId, isNew, agent, onDirtyChange }: Prom
             className="vaic-form-input vaic-focusable"
             style={{
               position: "relative",
+              width: "100%",
+              boxSizing: "border-box",
               background: "transparent",
               whiteSpace: "pre-wrap",
               wordBreak: "break-word",
             }}
             value={text}
+            disabled={!editing}
             onChange={(e) => setText(e.target.value)}
             onScroll={handleScroll}
           />
@@ -165,7 +177,7 @@ export default function PromptTab({ agentId, isNew, agent, onDirtyChange }: Prom
         <div
           className="text-small"
           data-testid="vaic-prompt-char-count"
-          style={{ color: "var(--color-text-tertiary)", marginTop: "var(--space-2)" }}
+          style={{ color: "var(--color-text-tertiary)", marginTop: "var(--space-2)", textAlign: "right" }}
         >
           {text.length.toLocaleString()} characters
         </div>
@@ -188,12 +200,14 @@ export default function PromptTab({ agentId, isNew, agent, onDirtyChange }: Prom
           </div>
         )}
 
-        <div style={{ marginTop: "var(--space-3)" }}>
-          {/* Secondary weight — the shell's "Save All" is the single Primary CTA (UX-DR3). */}
-          <Button variant="secondary" onClick={handleSave} disabled={update.isPending}>
-            Save
-          </Button>
-        </div>
+        <FieldEditActions
+          editing={editing}
+          isNew={false}
+          onEdit={startEdit}
+          onSave={handleSave}
+          onCancel={handleCancel}
+          saving={update.isPending}
+        />
       </Card>
     </div>
   );

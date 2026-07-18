@@ -91,7 +91,12 @@ export default function AgentTabNav({
   }
 
   return (
-    <nav className="vaic-tabs" role="tablist" aria-label="Agent configuration">
+    <nav
+      className="vaic-tabs"
+      role="tablist"
+      aria-label="Agent configuration"
+      aria-orientation="vertical"
+    >
       {tabRegistry.map((entry) => {
         const Icon = tabIcon(entry);
         const isDisabled = disabledTabs.has(entry.key);

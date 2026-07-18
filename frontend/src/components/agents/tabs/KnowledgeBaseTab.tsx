@@ -21,6 +21,8 @@ import { semanticIcons, ICON_STROKE_WIDTH } from "../../../lib/icons";
 import { useKbDocuments } from "../../../hooks/useKbDocuments";
 import { useKbMutations } from "../../../hooks/useKbMutations";
 import { useRegisterTab } from "../AgentBuilderContext";
+import { useEditMode } from "../useEditMode";
+import { ListEditActions } from "../TabEditBar";
 import KbStatusPill from "../KbStatusPill";
 import {
   KB_MAX_BYTES,
@@ -63,6 +65,7 @@ export default function KnowledgeBaseTab({ agentId, isNew }: KnowledgeBaseTabPro
   const { query, documents, isLoading, isError } = useKbDocuments(isNew ? undefined : agentId);
   const { upload, remove } = useKbMutations(agentId);
   const { show } = useToast();
+  const { editing, startEdit, stopEdit } = useEditMode(false);
 
   // List-style tab — mutations (upload/delete) are immediate, not
   // form-buffered, so this tab never contributes to the shell's "unsaved
@@ -110,19 +113,24 @@ export default function KnowledgeBaseTab({ agentId, isNew }: KnowledgeBaseTabPro
       header: "Uploaded",
       render: (d) => new Date(d.created_at).toLocaleString(),
     },
-    {
-      key: "actions",
-      header: "",
-      render: (d) => (
-        <Button
-          variant="icon"
-          aria-label={`Delete ${d.filename}`}
-          onClick={() => setPendingDeleteId(d.id)}
-        >
-          <Trash2 size={16} strokeWidth={ICON_STROKE_WIDTH} aria-hidden="true" />
-        </Button>
-      ),
-    },
+    // Row actions surface only in edit mode — the list is read-only otherwise.
+    ...(editing
+      ? [
+          {
+            key: "actions",
+            header: "",
+            render: (d: KbDocument) => (
+              <Button
+                variant="icon"
+                aria-label={`Delete ${d.filename}`}
+                onClick={() => setPendingDeleteId(d.id)}
+              >
+                <Trash2 size={16} strokeWidth={ICON_STROKE_WIDTH} aria-hidden="true" />
+              </Button>
+            ),
+          } as TableColumn<KbDocument>,
+        ]
+      : []),
   ];
 
   function renderBody() {
@@ -153,11 +161,10 @@ export default function KnowledgeBaseTab({ agentId, isNew }: KnowledgeBaseTabPro
         <EmptyState
           icon={<Icon size={48} strokeWidth={ICON_STROKE_WIDTH} />}
           title="No documents yet"
-          description="Upload policy, regulation, or SOP documents to ground this Agent's responses."
-          action={
-            <Button variant="primary" onClick={() => inputRef.current?.click()}>
-              Upload document
-            </Button>
+          description={
+            editing
+              ? "Upload policy, regulation, or SOP documents to ground this Agent's responses."
+              : "Click Edit to upload policy, regulation, or SOP documents."
           }
         />
       );
@@ -194,24 +201,6 @@ export default function KnowledgeBaseTab({ agentId, isNew }: KnowledgeBaseTabPro
         real customer PII.
       </div>
 
-      {!isNew && documents.length > 0 && (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            marginBottom: "var(--space-3)",
-          }}
-        >
-          <Button
-            variant="primary"
-            onClick={() => inputRef.current?.click()}
-            disabled={upload.isPending}
-          >
-            Upload document
-          </Button>
-        </div>
-      )}
-
       <input
         ref={inputRef}
         type="file"
@@ -222,6 +211,20 @@ export default function KnowledgeBaseTab({ agentId, isNew }: KnowledgeBaseTabPro
       />
 
       {renderBody()}
+
+      {!isNew && (
+        <ListEditActions editing={editing} onEdit={startEdit} onDone={stopEdit}>
+          {editing && (
+            <Button
+              variant="primary"
+              onClick={() => inputRef.current?.click()}
+              disabled={upload.isPending}
+            >
+              Upload document
+            </Button>
+          )}
+        </ListEditActions>
+      )}
 
       <ConfirmDialog
         open={pendingDeleteId !== null}

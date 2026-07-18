@@ -10,11 +10,13 @@
  */
 
 import { useEffect, useState } from "react";
-import { Button, Card, useToast } from "../../ui";
+import { Card, useToast } from "../../ui";
 import { semanticIcons, ICON_STROKE_WIDTH } from "../../../lib/icons";
 import { useAgentProviders } from "../../../hooks/useAgentProviders";
 import { useAgentMutations } from "../../../hooks/useAgentMutations";
 import { useRegisterTab } from "../AgentBuilderContext";
+import { useEditMode } from "../useEditMode";
+import { FieldEditActions } from "../TabEditBar";
 import type { Agent, ModelRef } from "../../../lib/agentsApi";
 
 export interface ModelTabProps {
@@ -51,6 +53,7 @@ export default function ModelTab({ agentId, isNew, agent, onDirtyChange }: Model
   const { data: providers, isLoading: providersLoading } = useAgentProviders();
   const { update } = useAgentMutations(agentId);
   const { show } = useToast();
+  const { editing, startEdit, stopEdit } = useEditMode(false);
 
   const initial = toFormState(agent);
   const [form, setForm] = useState<FormState>(initial);
@@ -73,6 +76,11 @@ export default function ModelTab({ agentId, isNew, agent, onDirtyChange }: Model
   function handleReset() {
     setForm(initial);
     setSaveError(null);
+  }
+
+  function handleCancel() {
+    handleReset();
+    stopEdit();
   }
 
   useRegisterTab("model", { isDirty, save: handleSave, reset: handleReset });
@@ -99,6 +107,7 @@ export default function ModelTab({ agentId, isNew, agent, onDirtyChange }: Model
     try {
       await update.mutateAsync({ model });
       show("Agent saved");
+      stopEdit();
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to save Agent");
     }
@@ -130,7 +139,7 @@ export default function ModelTab({ agentId, isNew, agent, onDirtyChange }: Model
             id="vaic-model-provider"
             className="vaic-form-input vaic-focusable"
             value={form.provider}
-            disabled={providersLoading}
+            disabled={!editing || providersLoading}
             onChange={(e) => handleProviderChange(e.target.value)}
           >
             <option value="">Select a Provider</option>
@@ -151,7 +160,7 @@ export default function ModelTab({ agentId, isNew, agent, onDirtyChange }: Model
             id="vaic-model-name"
             className="vaic-form-input vaic-focusable"
             value={form.modelName}
-            disabled={!form.provider || availableModels.length === 0}
+            disabled={!editing || !form.provider || availableModels.length === 0}
             onChange={(e) => setForm((f) => ({ ...f, modelName: e.target.value }))}
           >
             <option value="">Select a Model</option>
@@ -181,6 +190,7 @@ export default function ModelTab({ agentId, isNew, agent, onDirtyChange }: Model
                 className="vaic-form-input vaic-focusable"
                 value={form.temperature}
                 placeholder="unset"
+                disabled={!editing}
                 onChange={(e) => setForm((f) => ({ ...f, temperature: e.target.value }))}
               />
             </div>
@@ -195,6 +205,7 @@ export default function ModelTab({ agentId, isNew, agent, onDirtyChange }: Model
                 className="vaic-form-input vaic-focusable"
                 value={form.maxTokens}
                 placeholder={String(DEFAULT_MAX_TOKENS)}
+                disabled={!editing}
                 onChange={(e) => setForm((f) => ({ ...f, maxTokens: e.target.value }))}
               />
             </div>
@@ -207,14 +218,15 @@ export default function ModelTab({ agentId, isNew, agent, onDirtyChange }: Model
           </div>
         )}
 
-        {/* Secondary weight — the shell's "Save All" is the single Primary CTA (UX-DR3). */}
-        <Button
-          variant="secondary"
-          onClick={handleSave}
-          disabled={update.isPending || !form.provider || !form.modelName}
-        >
-          Save
-        </Button>
+        <FieldEditActions
+          editing={editing}
+          isNew={false}
+          onEdit={startEdit}
+          onSave={handleSave}
+          onCancel={handleCancel}
+          saving={update.isPending}
+          canSave={Boolean(form.provider && form.modelName)}
+        />
       </Card>
     </div>
   );

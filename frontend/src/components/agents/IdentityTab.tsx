@@ -12,10 +12,12 @@
  */
 
 import { useEffect, useState, type ReactNode } from "react";
-import { Button, useToast } from "../ui";
+import { useToast } from "../ui";
 import { useDepartments } from "../../hooks/useDepartments";
 import { useAgentMutations } from "../../hooks/useAgentMutations";
 import { useRegisterTab } from "./AgentBuilderContext";
+import { useEditMode } from "./useEditMode";
+import { FieldEditActions } from "./TabEditBar";
 import type { Agent, AgentStatus } from "../../lib/agentsApi";
 
 export interface IdentityTabProps {
@@ -24,6 +26,8 @@ export interface IdentityTabProps {
   agent: Agent | undefined;
   onDirtyChange: (dirty: boolean) => void;
   onSaved?: (agent: Agent) => void;
+  /** New-Agent flow: Cancel discards and returns to the Agents list. */
+  onCancelNew?: () => void;
 }
 
 interface FormState {
@@ -49,12 +53,14 @@ function validateRequired(value: string, label: string): string | null {
 function FieldWrapper({
   id,
   label,
+  help,
   error,
   touched,
   children,
 }: {
   id: string;
   label: string;
+  help?: string;
   error?: string;
   touched?: boolean;
   children: ReactNode;
@@ -68,6 +74,11 @@ function FieldWrapper({
           *
         </span>
       </label>
+      {help && (
+        <p id={`${id}-help`} className="vaic-form-help">
+          {help}
+        </p>
+      )}
       {children}
       {hasError && (
         <div className="vaic-form-error-text" role="alert">
@@ -84,6 +95,7 @@ export default function IdentityTab({
   agent,
   onDirtyChange,
   onSaved,
+  onCancelNew,
 }: IdentityTabProps) {
   const initial = toFormState(agent);
   const [form, setForm] = useState<FormState>(initial);
@@ -91,6 +103,7 @@ export default function IdentityTab({
   const [touched, setTouched] = useState<Partial<Record<keyof FormState, boolean>>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  const { editing, startEdit, stopEdit } = useEditMode(isNew);
   const { data: departments } = useDepartments();
   const { update, create } = useAgentMutations(agentId);
   const { show } = useToast();
@@ -118,6 +131,15 @@ export default function IdentityTab({
     setErrors({});
     setTouched({});
     setSaveError(null);
+  }
+
+  function handleCancel() {
+    handleReset();
+    if (isNew) {
+      onCancelNew?.();
+    } else {
+      stopEdit();
+    }
   }
 
   useRegisterTab("identity", { isDirty, save: handleSave, reset: handleReset });
@@ -154,6 +176,7 @@ export default function IdentityTab({
         ? await create.mutateAsync(payload)
         : await update.mutateAsync(payload);
       show("Agent saved");
+      stopEdit();
       onSaved?.(saved);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to save Agent");
@@ -164,20 +187,29 @@ export default function IdentityTab({
 
   return (
     <div data-testid="vaic-identity-tab">
-      <FieldWrapper id="vaic-identity-name" label="Name" error={errors.name} touched={touched.name}>
+      <FieldWrapper
+        id="vaic-identity-name"
+        label="Name"
+        help="How this Agent appears in lists and workflows — e.g. Loan Screener."
+        error={errors.name}
+        touched={touched.name}
+      >
         <input
           id="vaic-identity-name"
           className={`vaic-form-input vaic-focusable ${touched.name && errors.name ? "vaic-form-input-error" : ""}`}
           value={form.name}
+          disabled={!editing}
           onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
           onBlur={() => handleBlur("name", "Name")}
           aria-invalid={Boolean(touched.name && errors.name)}
+          aria-describedby="vaic-identity-name-help"
         />
       </FieldWrapper>
 
       <FieldWrapper
         id="vaic-identity-department"
         label="Department"
+        help="Which org unit owns this Agent. Controls access and grouping."
         error={errors.departmentId}
         touched={touched.departmentId}
       >
@@ -185,8 +217,10 @@ export default function IdentityTab({
           id="vaic-identity-department"
           className={`vaic-form-input vaic-focusable ${touched.departmentId && errors.departmentId ? "vaic-form-input-error" : ""}`}
           value={form.departmentId}
+          disabled={!editing}
           onChange={(e) => setForm((f) => ({ ...f, departmentId: e.target.value }))}
           onBlur={() => handleBlur("departmentId", "Department")}
+          aria-describedby="vaic-identity-department-help"
         >
           <option value="">Select a Department</option>
           {(departments ?? []).map((d) => (
@@ -200,6 +234,7 @@ export default function IdentityTab({
       <FieldWrapper
         id="vaic-identity-system-prompt"
         label="System Prompt"
+        help="The Agent's core instructions — role, tone, and rules it always follows. You can refine this later in the Prompt tab."
         error={errors.systemPrompt}
         touched={touched.systemPrompt}
       >
@@ -208,20 +243,39 @@ export default function IdentityTab({
           rows={6}
           className={`vaic-form-input vaic-focusable ${touched.systemPrompt && errors.systemPrompt ? "vaic-form-input-error" : ""}`}
           value={form.systemPrompt}
+          disabled={!editing}
           onChange={(e) => setForm((f) => ({ ...f, systemPrompt: e.target.value }))}
           onBlur={() => handleBlur("systemPrompt", "System prompt")}
+          aria-describedby="vaic-identity-system-prompt-help"
         />
+        <div
+          className="vaic-form-help"
+          data-testid="vaic-identity-prompt-char-count"
+          style={{ textAlign: "right" }}
+        >
+          {form.systemPrompt.length.toLocaleString()} characters
+        </div>
       </FieldWrapper>
 
       <div className="vaic-form-field">
-        <span className="vaic-form-label">Status</span>
-        <div className="vaic-status-toggle" role="group" aria-label="Agent status">
+        <span className="vaic-form-label" id="vaic-identity-status-label">
+          Status
+        </span>
+        <p className="vaic-form-help">
+          Draft Agents stay hidden from workflows until set to Active.
+        </p>
+        <div
+          className="vaic-segmented"
+          role="group"
+          aria-labelledby="vaic-identity-status-label"
+        >
           {(["draft", "active"] as const).map((s) => (
             <button
               key={s}
               type="button"
-              className={`vaic-btn vaic-btn-secondary vaic-focusable ${form.status === s ? "vaic-status-toggle-active" : ""}`}
+              className="vaic-segmented-option vaic-focusable"
               aria-pressed={form.status === s}
+              disabled={!editing}
               onClick={() => setForm((f) => ({ ...f, status: s }))}
             >
               {s === "draft" ? "Draft" : "Active"}
@@ -236,11 +290,16 @@ export default function IdentityTab({
         </div>
       )}
 
-      {/* Secondary weight — the shell's "Save All" (AgentDetailHeader) is the
-          single Primary CTA per UX-DR3 when both would co-render. */}
-      <Button variant="secondary" onClick={handleSave} disabled={isSaving}>
-        Save
-      </Button>
+      {/* View → Edit → Save/Cancel. Save is the single Primary while editing
+          (only one tab mounts at a time, so the UX-DR3 count stays at 1). */}
+      <FieldEditActions
+        editing={editing}
+        isNew={isNew}
+        onEdit={startEdit}
+        onSave={handleSave}
+        onCancel={handleCancel}
+        saving={isSaving}
+      />
     </div>
   );
 }

@@ -18,9 +18,15 @@ function pluralize(noun: CountNoun, count: number): string {
 export default function TabCountBadge({ count, noun }: TabCountBadgeProps) {
   if (count === undefined) return null;
 
+  // Show just the number in the compact side-nav; the full "N documents"
+  // stays available to screen readers via aria-label.
   return (
-    <span className="vaic-tab-count-badge" data-testid="vaic-tab-count-badge">
-      {count} {pluralize(noun, count)}
+    <span
+      className="vaic-tab-count-badge"
+      data-testid="vaic-tab-count-badge"
+      aria-label={`${count} ${pluralize(noun, count)}`}
+    >
+      {count}
     </span>
   );
 }
