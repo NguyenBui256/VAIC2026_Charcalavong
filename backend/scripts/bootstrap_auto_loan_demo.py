@@ -42,6 +42,8 @@ from app.modules.mini_app.database_models import MiniAppDatabase
 from app.modules.mini_app.models import MiniApp
 from app.modules.mini_app.schema_validation import validate_entity_schema, validate_ui_spec
 from app.modules.mini_app.visibility import MiniAppPrincipal
+from app.modules.action.models import ActionBinding
+from app.modules.action.service import create_binding
 
 DEMO_PASSWORD = "Password123!"
 TENANT_NAME = "SHB Demo"
@@ -55,6 +57,8 @@ WORKFLOW_DESC = (
 
 DATABASE_NAME = "Hồ sơ vay thế chấp ô tô"
 APP_NAME = "Đăng ký vay mua ô tô (SHB)"
+
+BINDING_NAME = "Auto-Loan Intake → Thẩm định & Giải ngân"
 
 LOAN_ENTITY_SCHEMA = {
     "fields": [
@@ -250,6 +254,30 @@ def seed_mini_app(session, people):
     return db, app
 
 
+def seed_binding(session, people, workflow, db) -> ActionBinding:
+    tid = people["tenant_id"]
+    owner = people["owner"]
+    existing = session.execute(
+        select(ActionBinding).where(
+            ActionBinding.tenant_id == tid, ActionBinding.name == BINDING_NAME
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return existing
+    principal = MiniAppPrincipal(
+        user_id=owner.id, tenant_id=tid,
+        department_id=owner.department_id, role="builder",
+    )
+    set_tenant_context(tid)
+    return create_binding(
+        session, principal=principal, name=BINDING_NAME,
+        database_id=db.id, event_type="row.created",
+        workflow_id=workflow.id,
+        notify_user_ids=[people["credit_mgr"].id, people["ops"].id],
+        is_active=True,
+    )
+
+
 def seed_agents(session, people) -> dict:
     tid = people["tenant_id"]
     owner = people["owner"]
@@ -339,6 +367,8 @@ def main() -> int:
         print(f"[auto-loan] database: {db.name} (id={db.id})")
         print(f"[auto-loan] mini-app: {app.name} (id={app.id}, database_id={app.database_id}, "
               f"build_status={app.build_status})")
+        binding = seed_binding(session, people, workflow, db)
+        print(f"[auto-loan] binding: {binding.name} (id={binding.id}, active={binding.is_active})")
     return 0
 
 
