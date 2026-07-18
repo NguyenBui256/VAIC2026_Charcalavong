@@ -5,13 +5,18 @@
  * Deep-linkable per Run via `/audit?run_id=<id>` (a Run's ordered timeline).
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button, EmptyState, ErrorState, Skeleton } from "../components/ui";
 import TraceTimeline from "../components/audit/TraceTimeline";
+import CollaborationGraph from "../components/audit/CollaborationGraph";
 import { useAuditTrail } from "../hooks/useAuditTrail";
+import { useAgents } from "../hooks/useAgents";
 import { useDebounce } from "../lib/useDebounce";
+import { buildCollaborationGraph } from "../lib/collaborationGraph";
 import { semanticIcons, ICON_STROKE_WIDTH } from "../lib/icons";
+
+type TraceView = "timeline" | "graph";
 
 const TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "", label: "All types" },
@@ -30,6 +35,7 @@ export default function AuditPage() {
 
   const [runIdInput, setRunIdInput] = useState(runIdParam);
   const [type, setType] = useState("");
+  const [view, setView] = useState<TraceView>("timeline");
   const debouncedRunId = useDebounce(runIdInput, 300);
 
   const query = useAuditTrail({
@@ -37,8 +43,20 @@ export default function AuditPage() {
     type: type || undefined,
   });
   const { data, isLoading, isError } = query;
-  const entries = data ?? [];
+  const entries = useMemo(() => data ?? [], [data]);
   const TraceIcon = semanticIcons.Trace;
+
+  // agent_id → name map for nicer collaboration-graph labels (Epic 2 data).
+  const { data: agentsData } = useAgents({});
+  const nameById = useMemo(() => {
+    const map = new Map<string, string>();
+    (agentsData ?? []).forEach((a) => map.set(a.id, a.name));
+    return map;
+  }, [agentsData]);
+  const graph = useMemo(
+    () => buildCollaborationGraph(entries, nameById),
+    [entries, nameById],
+  );
 
   function updateRunId(value: string) {
     setRunIdInput(value);
@@ -83,19 +101,61 @@ export default function AuditPage() {
         />
       );
     }
+    if (view === "graph") {
+      return (
+        <div>
+          {!debouncedRunId && (
+            <p
+              className="text-caption"
+              style={{ color: "var(--color-text-tertiary)", marginBottom: "var(--space-3)" }}
+            >
+              Showing agents across all runs — filter by Run id for one workflow's
+              collaboration.
+            </p>
+          )}
+          <CollaborationGraph graph={graph} />
+        </div>
+      );
+    }
     return <TraceTimeline entries={entries} />;
   }
 
   return (
     <div data-testid="vaic-audit-page">
-      <header style={{ marginBottom: "var(--space-4)" }}>
-        <h1 className="text-h1" style={{ marginBottom: "var(--space-1)" }}>
-          Trace Dashboard
-        </h1>
-        <p className="text-body" style={{ color: "var(--color-text-tertiary)" }}>
-          Per-step Audit Trail — every decomposition, dispatch, tool call, model
-          invocation and aggregation, in order.
-        </p>
+      <header
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: "var(--space-3)",
+          marginBottom: "var(--space-4)",
+        }}
+      >
+        <div>
+          <h1 className="text-h1" style={{ marginBottom: "var(--space-1)" }}>
+            Trace Dashboard
+          </h1>
+          <p className="text-body" style={{ color: "var(--color-text-tertiary)" }}>
+            Per-step Audit Trail — every decomposition, dispatch, tool call, model
+            invocation and aggregation, in order.
+          </p>
+        </div>
+        <div role="tablist" aria-label="Trace view" style={{ display: "flex", gap: "var(--space-1)" }}>
+          <Button
+            variant={view === "timeline" ? "primary" : "ghost"}
+            onClick={() => setView("timeline")}
+            aria-pressed={view === "timeline"}
+          >
+            Timeline
+          </Button>
+          <Button
+            variant={view === "graph" ? "primary" : "ghost"}
+            onClick={() => setView("graph")}
+            aria-pressed={view === "graph"}
+          >
+            Graph
+          </Button>
+        </div>
       </header>
 
       <div
