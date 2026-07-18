@@ -34,6 +34,7 @@ from app.modules.agent_builder.tool_routes import router as tools_router
 from app.modules.audit.routes import router as audit_router
 from app.modules.mini_app.database_routes import mini_app_databases_router
 from app.modules.mini_app.routes import mini_app_rows_router, mini_apps_router
+from app.modules.notification.routes import notifications_router
 from app.modules.orchestrator.file_routes import router as workflows_files_router
 from app.modules.orchestrator.graph_routes import router as workflows_graph_router
 from app.modules.orchestrator.routes import router as workflows_router
@@ -122,6 +123,9 @@ app.include_router(mini_app_rows_router)
 
 # Database page — Mini-App Database (reusable schema template) CRUD routes.
 app.include_router(mini_app_databases_router)
+
+# Actions/Events — per-user staff notifications.
+app.include_router(notifications_router)
 
 # Story 4-5 — serve built Mini-App bundles (sandbox runtime plane). Each
 # `build_mini_app` job writes `{bundle_root}/{app_id}/{index.html,bundle.js}`;
