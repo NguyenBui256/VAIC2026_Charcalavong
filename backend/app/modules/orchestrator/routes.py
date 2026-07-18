@@ -36,6 +36,8 @@ from app.modules.orchestrator.service import (
     update_workflow,
 )
 from app.modules.orchestrator.service import get_workflow as get_workflow_service
+from app.modules.orchestrator.graph_serialization import serialize_graph_snapshot
+from app.core.errors import NotFoundError
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 
@@ -183,3 +185,22 @@ def get_run_route(
     """GET /workflows/runs/{run_id} — single Run status/output (RLS 404s cross-tenant)."""
     run = get_run(session, run_id)
     return JSONResponse(status_code=200, content=_ok(serialize_run(run)))
+
+
+@router.get("/runs/{run_id}/graph")
+def get_run_graph_route(
+    run_id: uuid.UUID,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """GET /workflows/runs/{run_id}/graph — immutable graph topology (3C).
+
+    Returns the stored `graph_snapshot` verbatim (edges + per-node position/
+    label/agent_id/approvers) for the run-tracking canvas. `get_run` enforces
+    RLS + not-found; a graphless run (flat path) 404s here too.
+    """
+    run = get_run(session, run_id)
+    if run.graph_snapshot is None:
+        raise NotFoundError("run has no graph")
+    return JSONResponse(
+        status_code=200, content=_ok(serialize_graph_snapshot(run.graph_snapshot))
+    )
