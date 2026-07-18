@@ -16,6 +16,11 @@ export interface RFNodeData extends Record<string, unknown> {
   outDegree?: number;
 }
 
+/* Full React Flow node type for the "agent" custom node. The string
+ * discriminant must match the nodeTypes key so NodeProps<RFNode> is
+ * assignable to NodeTypes (React Flow v12 generic constraint). */
+export type RFNode = Node<RFNodeData, "agent">;
+
 export function toReactFlow(def: GraphDefinition): {
   nodes: Node<RFNodeData>[];
   edges: Edge[];

@@ -16,6 +16,10 @@ const proxyTargets = [
   "/agents",
   "/audit",
   "/departments",
+  "/mini-apps",
+  "/kb",
+  "/tools",
+  "/integrations",
 ] as const;
 
 // Shared proxy map — reused by both `dev` (server) and `preview` so that
@@ -24,8 +28,26 @@ const proxyTargets = [
 // preview, hence the explicit `preview.proxy` below. Setting `VITE_API_BASE`
 // at build time bypasses the proxy entirely (calls backend directly; CORS) —
 // this is the cross-origin deploy path (separate app/api hostnames).
+// The proxy prefixes above (/agents, /workflows, /audit, ...) collide with the
+// SPA's own client-side route paths. A browser page refresh (F5) on such a
+// route issues a *document navigation* GET with `Accept: text/html` — without
+// this bypass, Vite would proxy that navigation to the backend, which returns a
+// raw 401 "Missing or malformed Authorization header" JSON page (a plain
+// navigation carries no Authorization header). `bypass` returns `/index.html`
+// for HTML navigations so they fall through to the SPA router, while real API
+// traffic (fetch/XHR `*/*` or `application/json`, SSE `text/event-stream`) is
+// still proxied normally.
+function bypassHtmlNavigation(req: { headers: { accept?: string } }) {
+  if (req.headers.accept?.includes("text/html")) {
+    return "/index.html";
+  }
+}
+
 const proxy = Object.fromEntries(
-  proxyTargets.map((p) => [p, { target: backend, changeOrigin: true }]),
+  proxyTargets.map((p) => [
+    p,
+    { target: backend, changeOrigin: true, bypass: bypassHtmlNavigation },
+  ]),
 );
 
 // Function form so `loadEnv` picks up `VITE_ALLOWED_HOSTS` from BOTH the shell

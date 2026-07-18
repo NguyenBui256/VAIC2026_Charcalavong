@@ -90,7 +90,7 @@ export default function Button({
   const button = (
     <button className={classes} {...rest}>
       {icon}
-      {!isIcon && children}
+      {children}
     </button>
   );
 
