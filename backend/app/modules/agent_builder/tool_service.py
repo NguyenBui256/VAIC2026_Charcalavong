@@ -102,11 +102,17 @@ def _call_integration(
     if auth:
         name, _, value = auth.partition(":")
         headers[name.strip()] = value.strip()
-    resp = httpx.post(integ.base_url, json=arguments, headers=headers, timeout=30)
-    resp.raise_for_status()
+    try:
+        resp = httpx.post(integ.base_url, json=arguments, headers=headers, timeout=30)
+        resp.raise_for_status()
+        result = resp.json()
+    except httpx.HTTPError as exc:
+        return {"error": f"integration_call_failed: {exc}"}
+    except ValueError as exc:
+        return {"error": f"integration_call_failed: invalid JSON response ({exc})"}
     integ.last_used_at = datetime.now(UTC)
-    session.commit()
-    return resp.json()
+    session.flush()
+    return result
 
 
 def _execute(
