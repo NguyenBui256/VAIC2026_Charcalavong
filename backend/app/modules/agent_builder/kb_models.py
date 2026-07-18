@@ -2,9 +2,9 @@
 
 `KbDocument` — one row per document in the tenant-wide Knowledge Base store.
 No longer agent-owned; `owner_id` is the uploader (implicit manager) and
-`department_id` is now optional. Access is governed by `kb_document_grants`
-(user ACL); agents that may RAG over a doc are listed in
-`agent_kb_documents`.
+`department_id` is now optional. Access is role-based (`builder` manages the
+shared pool) plus per-agent grants: agents that may RAG over a doc are
+listed in `agent_kb_documents`.
 
 RLS policy (mirrors `agents`/`audit_trail`):
     tenant_id = current_setting('app.tenant_id')::uuid  (ENABLE + FORCE)
@@ -30,8 +30,8 @@ class KbDocument(Base):
     """A document in the tenant-wide Knowledge Base store (Sub-project A).
 
     No longer agent-owned. `owner_id` is the uploader (implicit manager).
-    Access is governed by `kb_document_grants` (user ACL); agents that may
-    RAG over a doc are listed in `agent_kb_documents`.
+    Access is role-based (`builder` manages the shared pool); agents that
+    may RAG over a doc are listed in `agent_kb_documents`.
     """
 
     __tablename__ = "kb_documents"
@@ -64,26 +64,6 @@ class KbDocument(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-
-class KbDocumentGrant(Base):
-    """User-level access grant on a KB document (spec D2)."""
-
-    __tablename__ = "kb_document_grants"
-
-    document_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("kb_documents.id", ondelete="CASCADE"), primary_key=True
-    )
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
-    )
-    role: Mapped[str] = mapped_column(String(16), nullable=False)  # viewer|manager
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
-    )
-    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
