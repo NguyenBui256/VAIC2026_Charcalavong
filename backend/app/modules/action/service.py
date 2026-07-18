@@ -110,8 +110,12 @@ def _name_taken(session: Session, tenant_id: uuid.UUID, name: str) -> bool:
 # --- Worker-side resolution (called from action/worker.py inside a job) -----
 
 # Terminal run statuses that should trigger a completion notification.
-# Confirm against orchestrator.models.RUN_STATUSES.
-TERMINAL_RUN_STATUSES = {"completed", "failed", "completed_with_failures"}
+# Mirrors the terminal branch of state.py's `_RUN_CAS_SET_CLAUSES` ended_at
+# CASE (orchestrator/state.py) — the subset of orchestrator.models.RUN_STATUSES
+# for which a run's `ended_at` gets set. Was missing "timed_out", which left
+# timed-out runs' action_events stuck at dispatched/completed_notified=false
+# forever, causing perpetual re-dispatch by the 5s cron fan-out.
+TERMINAL_RUN_STATUSES = {"completed", "completed_with_failures", "failed", "timed_out"}
 
 
 def _reassert(session: Session, tenant_id: uuid.UUID) -> None:
