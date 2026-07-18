@@ -134,6 +134,8 @@ describe("KnowledgeBaseTab", () => {
     renderTab();
 
     await waitFor(() => expect(screen.getByText("todelete.pdf")).toBeInTheDocument());
+    // Row actions surface only in edit mode.
+    fireEvent.click(screen.getByTestId("vaic-tab-edit"));
     fireEvent.click(screen.getByLabelText("Delete todelete.pdf"));
 
     expect(screen.getByTestId("vaic-confirm-dialog")).toBeInTheDocument();

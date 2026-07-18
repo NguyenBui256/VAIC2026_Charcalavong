@@ -110,10 +110,12 @@ describe("ModelTab", () => {
     renderModelTab();
     await waitFor(() => expect(screen.getByText("Anthropic")).toBeInTheDocument());
 
+    // Existing Agent starts in view mode — enter edit mode before mutating.
+    fireEvent.click(screen.getByTestId("vaic-tab-edit"));
     fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "anthropic" } });
     fireEvent.change(screen.getByLabelText("Model"), { target: { value: "claude-sonnet-4-5" } });
     fireEvent.change(screen.getByLabelText(/Max tokens/), { target: { value: "2048" } });
-    fireEvent.click(screen.getByText("Save"));
+    fireEvent.click(screen.getByTestId("vaic-tab-save"));
 
     await waitFor(() =>
       expect(mockUpdateAgent).toHaveBeenCalledWith("agent-1", {

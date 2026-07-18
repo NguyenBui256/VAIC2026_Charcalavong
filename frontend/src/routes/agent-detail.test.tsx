@@ -112,12 +112,14 @@ describe("AgentDetailPage", () => {
     renderDetail();
     await waitFor(() => expect(screen.getByTestId("vaic-identity-tab")).toBeInTheDocument());
 
+    // Identity tab is read-only by default — enter edit mode before mutating.
+    fireEvent.click(screen.getByTestId("vaic-tab-edit"));
     fireEvent.change(screen.getByLabelText("Name", { exact: false }), {
       target: { value: "Loan Screener v2" },
     });
     expect(screen.getByTestId("vaic-dirty-dot")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("Back to Agents"));
+    fireEvent.click(screen.getByText("Agents"));
     expect(screen.getByTestId("vaic-confirm-dialog")).toBeInTheDocument();
     expect(screen.queryByTestId("vaic-agents-page-stub")).not.toBeInTheDocument();
 
@@ -129,7 +131,7 @@ describe("AgentDetailPage", () => {
     renderDetail();
     await waitFor(() => expect(screen.getByTestId("vaic-identity-tab")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByText("Back to Agents"));
+    fireEvent.click(screen.getByText("Agents"));
     expect(screen.queryByTestId("vaic-confirm-dialog")).not.toBeInTheDocument();
     expect(screen.getByTestId("vaic-agents-page-stub")).toBeInTheDocument();
   });

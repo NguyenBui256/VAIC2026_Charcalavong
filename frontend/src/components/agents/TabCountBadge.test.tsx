@@ -10,18 +10,24 @@ describe("TabCountBadge", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders '0 documents' once the query resolves empty (not hidden)", () => {
+  it("renders just the number once the query resolves empty (not hidden)", () => {
     render(<TabCountBadge count={0} noun="document" />);
-    expect(screen.getByTestId("vaic-tab-count-badge")).toHaveTextContent("0 documents");
+    const badge = screen.getByTestId("vaic-tab-count-badge");
+    expect(badge).toHaveTextContent("0");
+    expect(badge).toHaveAttribute("aria-label", "0 documents");
   });
 
-  it("uses singular form for count===1", () => {
+  it("uses singular form in the aria-label for count===1", () => {
     render(<TabCountBadge count={1} noun="tool" />);
-    expect(screen.getByTestId("vaic-tab-count-badge")).toHaveTextContent("1 tool");
+    const badge = screen.getByTestId("vaic-tab-count-badge");
+    expect(badge).toHaveTextContent("1");
+    expect(badge).toHaveAttribute("aria-label", "1 tool");
   });
 
-  it("uses plural form for count>1", () => {
+  it("uses plural form in the aria-label for count>1", () => {
     render(<TabCountBadge count={3} noun="integration" />);
-    expect(screen.getByTestId("vaic-tab-count-badge")).toHaveTextContent("3 integrations");
+    const badge = screen.getByTestId("vaic-tab-count-badge");
+    expect(badge).toHaveTextContent("3");
+    expect(badge).toHaveAttribute("aria-label", "3 integrations");
   });
 });

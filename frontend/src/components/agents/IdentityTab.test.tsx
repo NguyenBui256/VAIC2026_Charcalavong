@@ -107,9 +107,11 @@ describe("IdentityTab", () => {
   it("Save fires updateAgent and shows a success toast", async () => {
     mockUpdateAgent.mockResolvedValueOnce({ ...baseAgent, name: "Loan Screener v2" });
     renderIdentityTab();
+    // Existing Agent starts in view mode — enter edit mode before mutating.
+    fireEvent.click(screen.getByTestId("vaic-tab-edit"));
     const nameInput = screen.getByLabelText("Name", { exact: false });
     fireEvent.change(nameInput, { target: { value: "Loan Screener v2" } });
-    fireEvent.click(screen.getByText("Save"));
+    fireEvent.click(screen.getByTestId("vaic-tab-save"));
 
     await waitFor(() => expect(mockUpdateAgent).toHaveBeenCalledWith("agent-1", {
       name: "Loan Screener v2",
@@ -123,8 +125,9 @@ describe("IdentityTab", () => {
   it("Save failure shows an inline error", async () => {
     mockUpdateAgent.mockRejectedValueOnce(new Error("Name already in use"));
     renderIdentityTab();
+    fireEvent.click(screen.getByTestId("vaic-tab-edit"));
     fireEvent.change(screen.getByLabelText("Name", { exact: false }), { target: { value: "Dup Name" } });
-    fireEvent.click(screen.getByText("Save"));
+    fireEvent.click(screen.getByTestId("vaic-tab-save"));
 
     await waitFor(() =>
       expect(screen.getByTestId("vaic-identity-save-error")).toHaveTextContent(
@@ -134,8 +137,9 @@ describe("IdentityTab", () => {
   });
 
   it("Save is blocked and shows all inline errors when required fields are empty", () => {
+    // isNew starts already in edit mode; primary button reads "Create Agent".
     renderIdentityTab({ agent: undefined, isNew: true });
-    fireEvent.click(screen.getByText("Save"));
+    fireEvent.click(screen.getByTestId("vaic-tab-save"));
     expect(screen.getByText("Name is required")).toBeInTheDocument();
     expect(screen.getByText("Department is required")).toBeInTheDocument();
     expect(screen.getByText("System prompt is required")).toBeInTheDocument();

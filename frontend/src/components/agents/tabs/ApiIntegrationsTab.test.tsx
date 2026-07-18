@@ -104,6 +104,8 @@ describe("ApiIntegrationsTab", () => {
     renderTab();
     await waitFor(() => expect(screen.getByTestId("vaic-empty-state")).toBeInTheDocument());
 
+    // List is read-only by default — enter edit mode to reveal the New Integration CTA.
+    await userEvent.click(screen.getByTestId("vaic-tab-edit"));
     await userEvent.click(screen.getByText("New Integration"));
     expect(screen.getByTestId("vaic-integration-editor")).toBeInTheDocument();
 
@@ -121,6 +123,7 @@ describe("ApiIntegrationsTab", () => {
     mockCreate.mockResolvedValue(makeIntegration());
     renderTab();
     await waitFor(() => expect(screen.getByTestId("vaic-empty-state")).toBeInTheDocument());
+    await userEvent.click(screen.getByTestId("vaic-tab-edit"));
     await userEvent.click(screen.getByText("New Integration"));
 
     const authInput = screen.getByLabelText(/Auth Header/) as HTMLInputElement;
@@ -171,6 +174,8 @@ describe("ApiIntegrationsTab", () => {
     renderTab();
 
     await waitFor(() => expect(screen.getByText("todelete")).toBeInTheDocument());
+    // Row actions surface only in edit mode.
+    await userEvent.click(screen.getByTestId("vaic-tab-edit"));
     await userEvent.click(screen.getByLabelText("Delete todelete"));
 
     expect(screen.getByTestId("vaic-confirm-dialog")).toBeInTheDocument();

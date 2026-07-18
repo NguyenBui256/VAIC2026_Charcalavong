@@ -100,52 +100,57 @@ describe("AgentDetailShell — Story 2.8 integration", () => {
 
     await waitFor(() => {
       const kbTab = screen.getByTestId("vaic-tab-knowledge-base");
-      expect(kbTab).toHaveTextContent("2 documents");
-    });
-    await waitFor(() => {
-      expect(screen.getByTestId("vaic-tab-tools")).toHaveTextContent("1 tool");
-    });
-    await waitFor(() => {
-      expect(screen.getByTestId("vaic-tab-api-integrations")).toHaveTextContent(
-        "0 integrations",
+      expect(within(kbTab).getByTestId("vaic-tab-count-badge")).toHaveTextContent("2");
+      expect(within(kbTab).getByTestId("vaic-tab-count-badge")).toHaveAttribute(
+        "aria-label",
+        "2 documents",
       );
+    });
+    await waitFor(() => {
+      const toolsTab = screen.getByTestId("vaic-tab-tools");
+      expect(within(toolsTab).getByTestId("vaic-tab-count-badge")).toHaveTextContent("1");
+    });
+    await waitFor(() => {
+      const apiTab = screen.getByTestId("vaic-tab-api-integrations");
+      expect(within(apiTab).getByTestId("vaic-tab-count-badge")).toHaveTextContent("0");
     });
   });
 
-  it("shows the Department badge + status pill + Save All (hidden when clean) in the header (AC #8)", async () => {
+  it("shows the Department badge in the header; Identity tab is read-only until Edit (AC #8)", async () => {
     renderShell();
     await waitFor(() => expect(screen.getByTestId("vaic-identity-tab")).toBeInTheDocument());
 
     expect(screen.getByTestId("vaic-department-badge")).toHaveTextContent("Retail Lending");
+    // Global "Save All" is gone — saving is per-tab (view → Edit → Save).
     expect(screen.queryByTestId("vaic-save-all")).not.toBeInTheDocument();
+    expect(screen.getByTestId("vaic-tab-edit")).toBeInTheDocument();
+    expect(screen.queryByTestId("vaic-tab-save")).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Name", { exact: false }), {
-      target: { value: "Loan Screener v2" },
-    });
+    fireEvent.click(screen.getByTestId("vaic-tab-edit"));
 
-    await waitFor(() => expect(screen.getByTestId("vaic-save-all")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("vaic-tab-save")).toBeInTheDocument());
   });
 
-  it("Save All persists the dirty tab and shows a success toast (AC #8)", async () => {
+  it("saves the dirty Identity tab per-tab and shows a success toast (AC #8)", async () => {
     mockUpdateAgent.mockResolvedValue({ ...agent, name: "Loan Screener v2" });
     renderShell();
     await waitFor(() => expect(screen.getByTestId("vaic-identity-tab")).toBeInTheDocument());
 
+    fireEvent.click(screen.getByTestId("vaic-tab-edit"));
     fireEvent.change(screen.getByLabelText("Name", { exact: false }), {
       target: { value: "Loan Screener v2" },
     });
-    await waitFor(() => expect(screen.getByTestId("vaic-save-all")).toBeInTheDocument());
-
-    fireEvent.click(screen.getByTestId("vaic-save-all"));
+    fireEvent.click(screen.getByTestId("vaic-tab-save"));
 
     await waitFor(() => expect(mockUpdateAgent).toHaveBeenCalled());
-    await waitFor(() => expect(screen.getByText("All changes saved")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Agent saved")).toBeInTheDocument());
   });
 
   it("opens a Save/Discard/Cancel dialog when switching away from a dirty tab (AC #4)", async () => {
     renderShell();
     await waitFor(() => expect(screen.getByTestId("vaic-identity-tab")).toBeInTheDocument());
 
+    fireEvent.click(screen.getByTestId("vaic-tab-edit"));
     fireEvent.change(screen.getByLabelText("Name", { exact: false }), {
       target: { value: "Loan Screener v2" },
     });
@@ -164,6 +169,7 @@ describe("AgentDetailShell — Story 2.8 integration", () => {
     renderShell();
     await waitFor(() => expect(screen.getByTestId("vaic-identity-tab")).toBeInTheDocument());
 
+    fireEvent.click(screen.getByTestId("vaic-tab-edit"));
     fireEvent.change(screen.getByLabelText("Name", { exact: false }), {
       target: { value: "Loan Screener v2" },
     });
@@ -177,6 +183,7 @@ describe("AgentDetailShell — Story 2.8 integration", () => {
     renderShell();
     await waitFor(() => expect(screen.getByTestId("vaic-identity-tab")).toBeInTheDocument());
 
+    fireEvent.click(screen.getByTestId("vaic-tab-edit"));
     fireEvent.change(screen.getByLabelText("Name", { exact: false }), {
       target: { value: "Loan Screener v2" },
     });

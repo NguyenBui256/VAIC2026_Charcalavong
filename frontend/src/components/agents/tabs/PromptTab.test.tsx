@@ -96,6 +96,8 @@ describe("PromptTab", () => {
   it("shows a non-blocking warning past the model's context window (AC7)", async () => {
     renderPromptTab();
     await waitFor(() => expect(mockListProviders).toHaveBeenCalled());
+    // Enter edit mode so the editor + Save button are available.
+    fireEvent.click(screen.getByTestId("vaic-tab-edit"));
 
     expect(screen.queryByTestId("vaic-prompt-context-warning")).not.toBeInTheDocument();
 
@@ -107,17 +109,18 @@ describe("PromptTab", () => {
       expect(screen.getByTestId("vaic-prompt-context-warning")).toBeInTheDocument(),
     );
     // Non-blocking: Save is still enabled.
-    expect(screen.getByText("Save")).not.toBeDisabled();
+    expect(screen.getByTestId("vaic-tab-save")).not.toBeDisabled();
   });
 
   it("Save fires updateAgent with system_prompt and shows a success toast (AC8)", async () => {
     mockUpdateAgent.mockResolvedValueOnce({ ...baseAgent, system_prompt: "New prompt" });
     renderPromptTab();
 
+    fireEvent.click(screen.getByTestId("vaic-tab-edit"));
     fireEvent.change(screen.getByLabelText("System prompt"), {
       target: { value: "New prompt" },
     });
-    fireEvent.click(screen.getByText("Save"));
+    fireEvent.click(screen.getByTestId("vaic-tab-save"));
 
     await waitFor(() =>
       expect(mockUpdateAgent).toHaveBeenCalledWith("agent-1", { system_prompt: "New prompt" }),
@@ -129,8 +132,9 @@ describe("PromptTab", () => {
     mockUpdateAgent.mockRejectedValueOnce(new Error("Prompt too long"));
     renderPromptTab();
 
+    fireEvent.click(screen.getByTestId("vaic-tab-edit"));
     fireEvent.change(screen.getByLabelText("System prompt"), { target: { value: "x" } });
-    fireEvent.click(screen.getByText("Save"));
+    fireEvent.click(screen.getByTestId("vaic-tab-save"));
 
     await waitFor(() =>
       expect(screen.getByTestId("vaic-prompt-save-error")).toHaveTextContent("Prompt too long"),

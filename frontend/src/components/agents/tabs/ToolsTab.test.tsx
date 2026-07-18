@@ -106,6 +106,8 @@ describe("ToolsTab", () => {
     renderTab();
     await waitFor(() => expect(screen.getByTestId("vaic-empty-state")).toBeInTheDocument());
 
+    // List is read-only by default — enter edit mode to reveal the New Tool CTA.
+    await userEvent.click(screen.getByTestId("vaic-tab-edit"));
     await userEvent.click(screen.getByText("New Tool"));
     expect(screen.getByTestId("vaic-tool-editor")).toBeInTheDocument();
   });
@@ -116,6 +118,8 @@ describe("ToolsTab", () => {
     renderTab();
 
     await waitFor(() => expect(screen.getByText("todelete")).toBeInTheDocument());
+    // Row actions surface only in edit mode.
+    await userEvent.click(screen.getByTestId("vaic-tab-edit"));
     await userEvent.click(screen.getByLabelText("Delete todelete"));
 
     expect(screen.getByTestId("vaic-confirm-dialog")).toBeInTheDocument();
