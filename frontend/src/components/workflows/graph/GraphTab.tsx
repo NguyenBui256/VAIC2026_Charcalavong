@@ -199,7 +199,9 @@ export default function GraphTab({ workflowId, onDirtyChange }: GraphTabProps) {
         if (from.id === to.id) return "Cannot connect a node to itself.";
         const dup = edges.some((e) => e.source === from.id && e.target === to.id);
         if (dup) return `Edge ${from.data.label} -> ${to.data.label} already exists.`;
-        setEdges((es) => addEdge({ source: from.id, target: to.id }, es));
+        setEdges((es) =>
+          addEdge({ id: `${from.id}->${to.id}`, source: from.id, target: to.id }, es),
+        );
         setDirty(true);
         return `Connected ${from.data.label} -> ${to.data.label}.`;
       }
