@@ -26,6 +26,9 @@ import uuid
 from sqlalchemy import select
 
 from app.core.auth import hash_password
+from app.modules.agent_builder.models import Agent
+from app.modules.agent_builder.service import Principal, create_agent, update_agent
+from scripts.demo_agent_specs import get_agent_model_ref
 from app.core.db import AdminSessionLocal
 from app.core.tenant_context import set_tenant_context
 from app.modules.tenant.models import Department, Tenant, User
@@ -98,13 +101,108 @@ def seed_people(session) -> dict:
     }
 
 
+AGENT_SPECS = [
+    {
+        "node_key": "rm_intake", "name": "RM Intake Agent", "dept": "Sale/RM",
+        "system_prompt": (
+            "Bạn là chuyên viên Quan hệ khách hàng (RM) ngân hàng SHB. Đầu vào là hồ sơ "
+            "vay mua ô tô thế chấp do khách nộp (JSON). Nhiệm vụ: kiểm tra tính đầy đủ của "
+            "bộ giấy tờ Bước 1 (CCCD 2 mặt, giấy tờ hôn nhân, HĐLĐ, sao kê lương 3–6 tháng, "
+            "hợp đồng mua bán xe, phiếu cọc, hóa đơn/thông báo giá; nếu xe cũ thêm cà vẹt cũ). "
+            "Trả về: danh sách giấy tờ ĐỦ, danh sách THIẾU, và kết luận 'đủ điều kiện chuyển "
+            "thẩm định' hay 'cần bổ sung'. Viết ngắn gọn tiếng Việt."
+        ),
+    },
+    {
+        "node_key": "credit_appraisal", "name": "Credit Appraisal Agent (CIC/DTI)",
+        "dept": "Thẩm định Tín dụng",
+        "system_prompt": (
+            "Bạn là chuyên viên Thẩm định Tín dụng SHB. Dựa trên thu nhập tháng, số tiền vay "
+            "đề nghị và thông tin khách, hãy ước tính tỷ lệ Nợ trên Thu nhập (DTI), nhận định "
+            "lịch sử tín dụng (CIC) ở mức giả định, và đề xuất: hạn mức vay, lãi suất, thời hạn. "
+            "Trả về một 'Tờ trình thẩm định tín dụng' ngắn gọn tiếng Việt kèm kết luận đạt/không đạt."
+        ),
+    },
+    {
+        "node_key": "collateral_valuation", "name": "Collateral Valuation Agent",
+        "dept": "Quản lý TSĐB",
+        "system_prompt": (
+            "Bạn là chuyên viên Quản lý Tài sản Đảm bảo SHB. Dựa trên hãng/dòng xe, giá xe và "
+            "loại xe (mới/cũ), hãy đưa ra giá trị định giá và tỷ lệ cho vay tối đa (70–80% giá "
+            "trị định giá). Nếu là xe cũ, nêu cần biên bản kiểm tra thực tế. Trả về 'Chứng thư "
+            "định giá' ngắn gọn tiếng Việt: giá trị định giá, LTV tối đa, mức vay tối đa gợi ý."
+        ),
+    },
+    {
+        "node_key": "credit_memo", "name": "Credit Memo Agent",
+        "dept": "Thẩm định Tín dụng",
+        "system_prompt": (
+            "Bạn là cán bộ tổng hợp phê duyệt SHB. Nhận Tờ trình thẩm định tín dụng và Chứng thư "
+            "định giá từ các bước trước. Hãy tổng hợp thành một 'Tờ trình phê duyệt khoản vay' "
+            "ngắn gọn tiếng Việt: tóm tắt năng lực trả nợ, giá trị TSĐB, đề xuất hạn mức/lãi "
+            "suất/thời hạn cuối cùng, và khuyến nghị PHÊ DUYỆT hay TỪ CHỐI để cấp thẩm quyền quyết định."
+        ),
+    },
+    {
+        "node_key": "back_office", "name": "Back Office Agent",
+        "dept": "Vận hành",
+        "system_prompt": (
+            "Bạn là chuyên viên Vận hành (Back Office) SHB. Sau khi khoản vay được phê duyệt, "
+            "hãy liệt kê danh mục hợp đồng và giấy tờ cần soạn/ký & hoàn thiện thủ tục TSĐB: "
+            "Hợp đồng tín dụng, Hợp đồng thế chấp xe, Giấy nhận nợ, Hóa đơn VAT mua xe, biên lai "
+            "trước bạ, cà vẹt/giấy hẹn, bảo hiểm vật chất xe (quyền thụ hưởng thuộc ngân hàng). "
+            "Trả về checklist tiếng Việt kèm trạng thái cần hoàn thiện."
+        ),
+    },
+    {
+        "node_key": "disbursement", "name": "Disbursement Agent",
+        "dept": "Vận hành",
+        "system_prompt": (
+            "Bạn là chuyên viên Vận hành phụ trách giải ngân SHB. Chuẩn bị bước đăng ký giao "
+            "dịch đảm bảo và giải ngân: soạn nội dung Ủy nhiệm chi/Lệnh chuyển tiền vào tài khoản "
+            "đại lý bán xe, phiếu yêu cầu đăng ký GDBĐ, biên bản bàn giao & lưu kho giấy tờ gốc, "
+            "và giấy đi đường cấp cho khách. Trả về checklist giải ngân ngắn gọn tiếng Việt."
+        ),
+    },
+]
+
+
+def seed_agents(session, people) -> dict:
+    tid = people["tenant_id"]
+    owner = people["owner"]
+    depts = people["depts"]
+    agents: dict = {}
+    for spec in AGENT_SPECS:
+        dept = depts[spec["dept"]]
+        existing = session.execute(
+            select(Agent).where(
+                Agent.tenant_id == tid, Agent.name == spec["name"],
+                Agent.is_deleted.is_(False),
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            agents[spec["node_key"]] = existing
+            continue
+        set_tenant_context(tid)
+        agent = create_agent(
+            session, owner_id=owner.id, role="builder", name=spec["name"],
+            department_id=dept.id, system_prompt=spec["system_prompt"],
+        )
+        principal = Principal(
+            user_id=owner.id, tenant_id=tid, department_id=dept.id, role="builder"
+        )
+        agent = update_agent(session, agent.id, principal, model=get_agent_model_ref())
+        agents[spec["node_key"]] = agent
+    return agents
+
+
 def main() -> int:
     with AdminSessionLocal() as session:
         people = seed_people(session)
-        print("[auto-loan] people seeded:")
-        for key in ("owner", "customer", "credit_mgr", "ops"):
-            u = people[key]
-            print(f"  - {key}: {u.email} (id={u.id}, role={u.role})")
+        agents = seed_agents(session, people)
+        print("[auto-loan] agents seeded:")
+        for key, a in agents.items():
+            print(f"  - {key}: {a.name} (id={a.id})")
     return 0
 
 
