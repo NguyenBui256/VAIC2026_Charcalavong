@@ -10,6 +10,7 @@ import { useWorkflow } from "../../hooks/useWorkflow";
 import { useUnsavedChangesGuard } from "../agents/useUnsavedChangesGuard";
 import DefinitionTab from "./DefinitionTab";
 import RunsTab from "./RunsTab";
+import GraphTab from "./graph/GraphTab";
 import { useState } from "react";
 import type { Workflow } from "../../lib/workflowsApi";
 
@@ -24,7 +25,7 @@ export default function WorkflowDetailShell({ workflowId }: WorkflowDetailShellP
     isNew ? undefined : workflowId,
   );
   const [isDirty, setIsDirty] = useState(false);
-  const [tab, setTab] = useState<"definition" | "runs">("definition");
+  const [tab, setTab] = useState<"definition" | "graph" | "runs">("definition");
 
   const { guardedNavigate, confirmProps } = useUnsavedChangesGuard(isDirty);
 
@@ -87,6 +88,13 @@ export default function WorkflowDetailShell({ workflowId }: WorkflowDetailShellP
               Definition
             </Button>
             <Button
+              variant={tab === "graph" ? "primary" : "ghost"}
+              disabled={isNew}
+              onClick={() => guardedNavigate(() => { setIsDirty(false); setTab("graph"); })}
+            >
+              Graph
+            </Button>
+            <Button
               variant={tab === "runs" ? "primary" : "ghost"}
               disabled={isNew}
               onClick={() => guardedNavigate(() => { setIsDirty(false); setTab("runs"); })}
@@ -103,6 +111,8 @@ export default function WorkflowDetailShell({ workflowId }: WorkflowDetailShellP
               onDirtyChange={setIsDirty}
               onSaved={handleSaved}
             />
+          ) : tab === "graph" ? (
+            <GraphTab workflowId={workflowId} />
           ) : (
             <RunsTab workflowId={workflowId} />
           )}
