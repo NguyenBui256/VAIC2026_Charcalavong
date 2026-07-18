@@ -93,12 +93,15 @@ class AgentExecutor(AgentProviderPort):
         )
         output, confidence, rationale = _parse_output(completion.content)
         tool_calls = self._run_required_tool(agent_id, task_payload, tenant_id, department_id)
+        failed = next((c for c in tool_calls if not c.get("success", True)), None)
         return TaskExecutionResult(
             output=output,
             confidence=confidence,
             rationale=rationale,
             tool_calls=tool_calls,
             kb_citations=[f"{p.document_name}#{p.chunk_reference}" for p in passages],
+            success=failed is None,
+            error=str(failed.get("error", "")) if failed else "",
         )
 
     def _run_required_tool(
@@ -121,4 +124,6 @@ class AgentExecutor(AgentProviderPort):
             department_id=department_id,
             audit=self._audit,
         )
-        return [{"tool": tool_name, "output": out.output, "success": out.success}]
+        return [
+            {"tool": tool_name, "output": out.output, "success": out.success, "error": out.error}
+        ]
