@@ -127,12 +127,12 @@ export default function LoginPage() {
   return (
     <div className="vaic-login-page" style={pageStyle} data-testid="vaic-login-page">
       <div className="vaic-login-card" style={cardStyle}>
-        <div style={wordmarkStyle}>VAIC</div>
+        <div style={wordmarkStyle}>Banking Agent Hub</div>
         <h1 className="text-display" style={{ marginBottom: "var(--space-2)" }}>
           Welcome back
         </h1>
         <p className="text-small" style={{ color: "var(--color-text-tertiary)", marginBottom: "var(--space-6)" }}>
-          Sign in to your VAIC workspace
+          Sign in to your Banking Agent Hub workspace
         </p>
 
         <form onSubmit={handleSubmit} noValidate>
