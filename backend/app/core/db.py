@@ -49,6 +49,7 @@ AdminSessionLocal: sessionmaker[Session] = sessionmaker(
 
 class Base(DeclarativeBase):
     """Shared declarative base. All models subclass this."""
+
     pass
 
 

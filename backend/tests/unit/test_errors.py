@@ -30,6 +30,7 @@ from app.core.errors import (
 
 # -- DomainError base --------------------------------------------------------
 
+
 def test_domain_error_is_exception() -> None:
     """DomainError subclasses Exception."""
     assert issubclass(DomainError, Exception)
@@ -57,6 +58,7 @@ def test_domain_error_defaults_details_to_empty_dict() -> None:
 
 # -- HTTP status code mapping ------------------------------------------------
 
+
 @pytest.mark.parametrize(
     ("exc_cls", "expected_status", "expected_code"),
     [
@@ -71,7 +73,9 @@ def test_domain_error_defaults_details_to_empty_dict() -> None:
     ],
 )
 def test_error_subclass_http_status_and_code(
-    exc_cls: type[DomainError], expected_status: int, expected_code: str,
+    exc_cls: type[DomainError],
+    expected_status: int,
+    expected_code: str,
 ) -> None:
     """Each DomainError subclass maps to the correct HTTP status and code."""
     err = exc_cls("test message")
@@ -87,6 +91,7 @@ def test_validation_error_accepts_details() -> None:
 
 
 # -- ErrorEnvelope shape -----------------------------------------------------
+
 
 def test_error_envelope_has_correct_shape() -> None:
     """ErrorEnvelope serialises to {error: {code, message, details, trace_id}}."""
@@ -108,12 +113,16 @@ def test_error_envelope_trace_id_accepts_uuid() -> None:
     """ErrorEnvelope.trace_id accepts a UUID object."""
     trace_id = uuid.uuid4()
     envelope = ErrorEnvelope(
-        code="x", message="y", details={}, trace_id=trace_id,
+        code="x",
+        message="y",
+        details={},
+        trace_id=trace_id,
     )
     assert envelope.trace_id == trace_id
 
 
 # -- TraceIdContext ----------------------------------------------------------
+
 
 def test_trace_id_context_starts_none() -> None:
     """TraceIdContext defaults to None when no value has been set."""
@@ -148,6 +157,7 @@ def test_trace_id_context_is_isolated_per_context() -> None:
     trace_id = uuid.uuid4()
     token = TraceIdContext.set(trace_id)
     try:
+
         def child_get() -> uuid.UUID | None:
             return TraceIdContext.get()
 

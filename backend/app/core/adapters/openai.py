@@ -1,77 +1,99 @@
-"""Placeholder OpenAI LLM adapter (AD-7).
-
-Raises ``NotImplementedError`` on every call. Real implementation lands in a
-later sprint; this file exists so that the provider-selector code can route
-to it without ``ImportError`` and so that contributors have a clear extension
-point.
-
-Domain code MUST NOT import this module directly; it works against
-``LlmPort`` and the adapter is selected at runtime from Agent config.
-"""
+"""OpenAI-compatible LLM adapter, including custom base URLs."""
 
 from __future__ import annotations
 
+import os
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
-from app.core.ports.llm import (
-    CompletionResult,
-    EmbeddingResult,
-    Message,
-    ModelRef,
-    StreamChunk,
-)
+from openai import AsyncOpenAI, OpenAI
+
+from app.core.ports.llm import CompletionResult, EmbeddingResult, Message, ModelRef, StreamChunk
 
 __all__ = ["OpenAiLlmAdapter"]
 
-_PROVIDER_NAME = "openai"
-
 
 class OpenAiLlmAdapter:
-    """Placeholder adapter for OpenAI. Not yet implemented.
-
-    Construction is cheap and never raises -- per FR-5, a missing/unconfigured
-    provider surfaces at run time, not config time. All calls raise
-    ``NotImplementedError`` so that misconfigured Agents fail loudly.
-    """
-
     def __init__(
         self,
         api_key: str | None = None,
-        **_kwargs: Any,
+        base_url: str | None = None,
+        timeout: float = 180.0,
+        **_: Any,
     ) -> None:
-        self._api_key = api_key
+        # Legacy fallback keeps the current deployment working while the generic
+        # VAIC_LLM_API_KEY name is rolled out.
+        key = (
+            api_key
+            or os.getenv("VAIC_LLM_API_KEY")
+            or os.getenv("OPENAI_API_KEY")
+            or os.getenv("ANTHROPIC_API_KEY")
+        )
+        if not key:
+            raise RuntimeError("OpenAI-compatible API key is not configured")
+        self._sync = OpenAI(
+            api_key=key,
+            base_url=base_url or os.getenv("VAIC_LLM_BASE_URL") or None,
+            timeout=timeout,
+            max_retries=1,
+        )
+        self._async = AsyncOpenAI(
+            api_key=key,
+            base_url=base_url or os.getenv("VAIC_LLM_BASE_URL") or None,
+            timeout=timeout,
+            max_retries=1,
+        )
+
+    @staticmethod
+    def _payload(
+        messages: list[Message], model: ModelRef, parameters: dict[str, Any] | None
+    ) -> dict[str, Any]:
+        merged = {**model.parameters, **(parameters or {})}
+        return {
+            "model": model.model_name,
+            "messages": [message.model_dump() for message in messages],
+            **merged,
+        }
 
     def complete(
-        self,
-        messages: list[Message],
-        model: ModelRef,
-        parameters: dict[str, Any] | None = None,
+        self, messages: list[Message], model: ModelRef, parameters: dict[str, Any] | None = None
     ) -> CompletionResult:
-        raise NotImplementedError(
-            f"{_PROVIDER_NAME} adapter is not yet implemented (Story 1.6 only "
-            "delivers the Anthropic adapter). Provider selection for this "
-            f"Agent was '{_PROVIDER_NAME}'; either reconfigure the Agent to use "
-            "'anthropic' or wait for the OpenAI stream."
+        started = time.perf_counter()
+        response = self._sync.chat.completions.create(**self._payload(messages, model, parameters))
+        choice = response.choices[0]
+        usage = response.usage
+        return CompletionResult(
+            content=choice.message.content or "",
+            model=response.model or model.model_name,
+            latency_ms=int((time.perf_counter() - started) * 1000),
+            usage={
+                "input_tokens": int(getattr(usage, "prompt_tokens", 0) or 0),
+                "output_tokens": int(getattr(usage, "completion_tokens", 0) or 0),
+                "cached_tokens": int(
+                    getattr(getattr(usage, "prompt_tokens_details", None), "cached_tokens", 0) or 0
+                ),
+            },
+            finish_reason=choice.finish_reason or "",
         )
 
     async def stream(
-        self,
-        messages: list[Message],
-        model: ModelRef,
-        parameters: dict[str, Any] | None = None,
+        self, messages: list[Message], model: ModelRef, parameters: dict[str, Any] | None = None
     ) -> AsyncIterator[StreamChunk]:
-        raise NotImplementedError(
-            f"{_PROVIDER_NAME} adapter is not yet implemented."
+        stream = await self._async.chat.completions.create(
+            **self._payload(messages, model, parameters), stream=True
         )
-        # Unreachable: satisfy the async-generator type contract.
-        yield StreamChunk(delta="")  # pragma: no cover
+        async for chunk in stream:
+            choice = chunk.choices[0]
+            yield StreamChunk(
+                delta=choice.delta.content or "", finish_reason=choice.finish_reason or ""
+            )
 
-    def embed(
-        self,
-        texts: list[str],
-        model: ModelRef,
-    ) -> EmbeddingResult:
-        raise NotImplementedError(
-            f"{_PROVIDER_NAME} adapter is not yet implemented."
+    def embed(self, texts: list[str], model: ModelRef) -> EmbeddingResult:
+        started = time.perf_counter()
+        response = self._sync.embeddings.create(model=model.model_name, input=texts)
+        return EmbeddingResult(
+            vectors=[item.embedding for item in response.data],
+            model=response.model,
+            latency_ms=int((time.perf_counter() - started) * 1000),
         )

@@ -38,9 +38,7 @@ class Tenant(Base):
         default=uuid7,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    audit_key_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True
-    )
+    audit_key_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

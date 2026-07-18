@@ -31,6 +31,7 @@ from app.core.errors import (
 
 # -- Test app with error-raising routes --------------------------------------
 
+
 def _make_test_app() -> FastAPI:
     """Build a minimal FastAPI app with error handlers and raising routes."""
     app = FastAPI()
@@ -76,7 +77,9 @@ def _make_test_app() -> FastAPI:
     @app.get("/raise/custom-domain")
     def _raise_custom() -> dict[str, str]:
         raise DomainError(
-            code="custom_code", message="custom message", http_status=422,
+            code="custom_code",
+            message="custom message",
+            http_status=422,
         )
 
     @app.get("/ok")
@@ -97,6 +100,7 @@ def client() -> TestClient:
 
 
 # -- Helper ------------------------------------------------------------------
+
 
 def _assert_envelope_shape(body: dict) -> dict:
     """Assert the response body matches {error: {code, message, details, trace_id}}."""
@@ -119,6 +123,7 @@ def _assert_trace_id_is_uuid_v7(err: dict) -> uuid.UUID:
 
 # -- Status code mapping tests -----------------------------------------------
 
+
 @pytest.mark.parametrize(
     ("path", "expected_status", "expected_code"),
     [
@@ -133,7 +138,10 @@ def _assert_trace_id_is_uuid_v7(err: dict) -> uuid.UUID:
     ],
 )
 def test_domain_error_returns_correct_status_and_envelope(
-    client: TestClient, path: str, expected_status: int, expected_code: str,
+    client: TestClient,
+    path: str,
+    expected_status: int,
+    expected_code: str,
 ) -> None:
     """Each DomainError subclass produces the correct HTTP status and envelope code."""
     response = client.get(path)
@@ -158,6 +166,7 @@ def test_custom_domain_error_returns_422(client: TestClient) -> None:
 
 # -- Unhandled exception → 500 internal_error --------------------------------
 
+
 def test_unhandled_exception_returns_500_internal_error(client: TestClient) -> None:
     """An unhandled Exception → 500 with code 'internal_error', no stack trace."""
     response = client.get("/raise/generic")
@@ -175,6 +184,7 @@ def test_unhandled_exception_returns_500_internal_error(client: TestClient) -> N
 
 # -- trace_id is UUID v7 on every error --------------------------------------
 
+
 def test_trace_id_present_on_every_error(client: TestClient) -> None:
     """Every error response includes a trace_id that is a valid UUID v7."""
     for path in [
@@ -189,6 +199,7 @@ def test_trace_id_present_on_every_error(client: TestClient) -> None:
 
 
 # -- X-Trace-Id header -------------------------------------------------------
+
 
 def test_trace_id_in_response_header(client: TestClient) -> None:
     """The trace_id is also set as the X-Trace-Id response header."""
@@ -205,6 +216,7 @@ def test_trace_id_in_response_header(client: TestClient) -> None:
 
 # -- Success path is unaffected ----------------------------------------------
 
+
 def test_success_route_still_works(client: TestClient) -> None:
     """Non-error routes still return their normal response."""
     response = client.get("/ok")
@@ -213,6 +225,7 @@ def test_success_route_still_works(client: TestClient) -> None:
 
 
 # -- ValidationError carries details -----------------------------------------
+
 
 def test_validation_error_carries_details(client: TestClient) -> None:
     """ValidationError details are surfaced in the envelope."""

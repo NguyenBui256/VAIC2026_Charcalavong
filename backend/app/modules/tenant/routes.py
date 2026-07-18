@@ -39,6 +39,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 # Request schemas
 # ---------------------------------------------------------------------------
 
+
 class LoginRequest(BaseModel):
     email: str = Field(..., min_length=3, max_length=320)
     password: str = Field(..., min_length=1, max_length=1024)
@@ -51,6 +52,7 @@ class RefreshRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Envelope helpers
 # ---------------------------------------------------------------------------
+
 
 def _ok(data: Any) -> dict[str, Any]:
     return {"data": data, "error": None, "meta": {}}
@@ -80,6 +82,7 @@ def _trace(request: Request) -> uuid.UUID:
 # Session dependencies
 # ---------------------------------------------------------------------------
 
+
 def _assume_app_role(session: Session) -> None:
     """Drop superuser privileges for this transaction.
 
@@ -93,9 +96,8 @@ def _assume_app_role(session: Session) -> None:
     membership implicitly by creating `vaic_app` from a superuser
     context; `vaic` can SET ROLE to it.
     """
-    app_role = get_settings().app_db_role
-    if app_role:
-        session.execute(text(f"SET LOCAL ROLE {app_role}"))
+    app_role = get_settings().app_db_role or "vaic_app"
+    session.execute(text(f"SET LOCAL ROLE {app_role}"))
 
 
 def get_tenant_session() -> Session:
@@ -119,6 +121,7 @@ def get_tenant_session() -> Session:
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
 
 @router.post("/login")
 def login(body: LoginRequest, request: Request) -> JSONResponse:

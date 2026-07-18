@@ -48,12 +48,18 @@ from arq.cron import cron
 from sqlalchemy import select, text
 
 from app.core.db import AdminSessionLocal, SessionLocal
+from app.core.ports.audit import ExecutionContext
 from app.core.settings import get_settings
 from app.core.tenant_context import (
     reset_tenant_context,
     set_tenant_context,
     set_tenant_session_var,
     tenant_context,
+)
+from app.modules.audit.context import (
+    execution_context,
+    reset_execution_context,
+    set_execution_context,
 )
 from app.modules.tenant.models import Tenant
 
@@ -73,6 +79,7 @@ _logger = logging.getLogger(__name__)
 
 # Kwarg key used to serialize `tenant_id` into the arq payload.
 TENANT_ID_KWARG = "_tenant_id"
+AUDIT_CONTEXT_KWARG = "_audit_context"
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +140,9 @@ async def enqueue_job_with_context(
             "and may not be passed explicitly."
         )
     payload = {**kwargs, TENANT_ID_KWARG: str(tenant_id)}
+    audit_context = execution_context.get()
+    if audit_context is not None:
+        payload[AUDIT_CONTEXT_KWARG] = audit_context.model_dump(mode="json")
     _logger.debug(
         "arq enqueue job_name=%s tenant_id=%s kwargs_keys=%s",
         job_name,
@@ -176,6 +186,7 @@ def tenant_aware_job(
     @functools.wraps(fn)
     async def wrapper(ctx: dict[str, Any], **kwargs: Any) -> Any:
         raw = kwargs.pop(TENANT_ID_KWARG, None)
+        raw_audit_context = kwargs.pop(AUDIT_CONTEXT_KWARG, None)
         if not raw:
             raise MissingTenantContextError(f"worker entry:{fn.__name__}")
         try:
@@ -185,7 +196,16 @@ def tenant_aware_job(
                 f"worker entry:{fn.__name__} (invalid uuid: {raw!r})"
             ) from e
 
+        audit_token = None
+        if raw_audit_context is not None:
+            audit_context = ExecutionContext.model_validate(raw_audit_context)
+            if audit_context.tenant_id != tenant_id:
+                raise MissingTenantContextError(
+                    f"worker entry:{fn.__name__} (audit tenant mismatch)"
+                )
         set_tenant_context(tenant_id)
+        if raw_audit_context is not None:
+            audit_token = set_execution_context(audit_context)
         session: Session = SessionLocal()
         ctx = {**ctx, "session": session}
         try:
@@ -194,9 +214,8 @@ def tenant_aware_job(
             # to bite. If `database_url` already authenticates as a
             # non-superuser, leave `app_db_role` empty (SET LOCAL ROLE is
             # a no-op then).
-            role = get_settings().app_db_role
-            if role:
-                session.execute(text(f"SET LOCAL ROLE {role}"))
+            role = get_settings().app_db_role or "vaic_app"
+            session.execute(text(f"SET LOCAL ROLE {role}"))
             # set_config('app.tenant_id', ..., true) — must run inside txn
             set_tenant_session_var(session, tenant_id)
             return await fn(ctx, **kwargs)
@@ -209,6 +228,8 @@ def tenant_aware_job(
             except Exception:  # noqa: BLE001
                 _logger.exception("session.close() failed during worker teardown")
             reset_tenant_context()
+            if audit_token is not None:
+                reset_execution_context(audit_token)
 
     return wrapper
 

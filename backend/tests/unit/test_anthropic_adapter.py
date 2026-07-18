@@ -20,7 +20,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.core.adapters.anthropic import AnthropicLlmAdapter
-from app.core.ports.audit import AuditEntry
+from app.core.ids import uuid7
+from app.core.ports.audit import ExecutionContext, SpanEnd, SpanStart
 from app.core.ports.llm import (
     CompletionResult,
     EmbeddingResult,
@@ -34,13 +35,20 @@ from app.core.ports.llm import (
 
 
 class FakeAuditSink:
-    """Captures AuditEntry instances for assertions."""
+    """Captures Audit V2 span lifecycle for assertions."""
 
     def __init__(self) -> None:
-        self.entries: list[AuditEntry] = []
+        self.starts: list[SpanStart] = []
+        self.ends: list[SpanEnd] = []
 
-    def log(self, entry: AuditEntry) -> None:
-        self.entries.append(entry)
+    def start_span(self, value: SpanStart) -> ExecutionContext:
+        self.starts.append(value)
+        return value.context.model_copy(
+            update={"parent_span_id": value.context.span_id, "span_id": uuid7()}
+        )
+
+    def end_span(self, value: SpanEnd) -> None:
+        self.ends.append(value)
 
 
 def _make_messages() -> list[Message]:
@@ -182,7 +190,9 @@ async def test_stream_yields_stream_chunks() -> None:
     fake_text_stream = _fake_text_stream(["Hello", " world"])
     fake_stream.text_stream = fake_text_stream
     fake_stream.get_final_message.return_value = _fake_message_response(
-        content="Hello world", input_tokens=8, output_tokens=2,
+        content="Hello world",
+        input_tokens=8,
+        output_tokens=2,
     )
 
     fake_cm = MagicMock()
@@ -203,6 +213,7 @@ async def test_stream_yields_stream_chunks() -> None:
 
 def _fake_text_stream(deltas: list[str]) -> Any:
     """Build a fake async iterator over text deltas."""
+
     class _AsyncIter:
         def __init__(self, items: list[str]) -> None:
             self._items = list(items)
@@ -248,24 +259,34 @@ def test_embed_returns_embedding_result() -> None:
 
 
 def test_complete_logs_audit_entry() -> None:
-    """complete() logs an AuditEntry via audit_port.log() (NFR-5)."""
+    """complete() records an Audit V2 LLM span with usage (NFR-5)."""
+    from app.modules.audit.context import reset_execution_context, set_execution_context
+
     audit = FakeAuditSink()
     adapter = AnthropicLlmAdapter(api_key="sk-test", audit_port=audit)
     fake_resp = _fake_message_response(input_tokens=11, output_tokens=4)
 
     mock_client = _bypass_client_resolution(adapter)
     mock_client.messages.create.return_value = fake_resp
-    adapter.complete(_make_messages(), _make_model())
+    root = ExecutionContext(
+        tenant_id=uuid7(),
+        session_id=uuid7(),
+        run_id=uuid7(),
+        trace_id=uuid7(),
+        correlation_id=uuid7(),
+    )
+    token = set_execution_context(root)
+    try:
+        adapter.complete(_make_messages(), _make_model())
+    finally:
+        reset_execution_context(token)
 
-    assert len(audit.entries) == 1
-    entry = audit.entries[0]
-    assert isinstance(entry, AuditEntry)
-    assert entry.type == "model_invocation"
-    assert entry.model == "claude-sonnet-4-5"
-    assert entry.output["prompt_token_count"] == 11
-    assert entry.output["completion_token_count"] == 4
-    assert "latency_ms" in entry.output
-    assert entry.input["provider"] == "anthropic"
+    assert len(audit.starts) == 1
+    assert audit.starts[0].node_type == "llm"
+    assert audit.starts[0].provider == "anthropic"
+    assert audit.starts[0].model == "claude-sonnet-4-5"
+    assert audit.ends[0].input_tokens == 11
+    assert audit.ends[0].output_tokens == 4
 
 
 def test_audit_port_is_optional() -> None:
@@ -377,8 +398,7 @@ def test_adapter_imports_anthropic_sdk_only_in_adapters_module() -> None:
             if stripped.startswith("import anthropic") or "import anthropic" in stripped:
                 violations.append(f"{rel}:{lineno}: {stripped}")
     assert not violations, (
-        "AD-7 violation: domain code imports anthropic SDK directly:\n"
-        + "\n".join(violations)
+        "AD-7 violation: domain code imports anthropic SDK directly:\n" + "\n".join(violations)
     )
 
 
@@ -409,35 +429,50 @@ def test_adapter_latency_is_measured() -> None:
     assert result.latency_ms >= 40
 
 
-# -- AC: Placeholder adapters raise NotImplementedError ----------------------
+# -- AC: OpenAI-compatible adapter -------------------------------------------
 
 
-def test_openai_adapter_raises_not_implemented() -> None:
-    """OpenAiLlmAdapter is a placeholder; calls raise NotImplementedError."""
+def test_openai_adapter_complete_maps_response() -> None:
     from app.core.adapters.openai import OpenAiLlmAdapter
 
-    adapter = OpenAiLlmAdapter()
-    with pytest.raises(NotImplementedError):
-        adapter.complete(_make_messages(), _make_model())
+    adapter = OpenAiLlmAdapter(api_key="test-key")
+    adapter._sync = MagicMock()  # noqa: SLF001
+    adapter._sync.chat.completions.create.return_value = MagicMock(  # noqa: SLF001
+        model="judge-model",
+        choices=[MagicMock(message=MagicMock(content="result"), finish_reason="stop")],
+        usage=MagicMock(prompt_tokens=12, completion_tokens=4, prompt_tokens_details=None),
+    )
+
+    result = adapter.complete(_make_messages(), _make_model())
+
+    assert result.content == "result"
+    assert result.usage["input_tokens"] == 12
+    assert result.usage["output_tokens"] == 4
 
 
-@pytest.mark.asyncio
-async def test_openai_adapter_stream_raises_not_implemented() -> None:
-    """OpenAi stream() also raises NotImplementedError."""
+def test_openai_adapter_builds_openai_compatible_payload() -> None:
     from app.core.adapters.openai import OpenAiLlmAdapter
 
-    adapter = OpenAiLlmAdapter()
-    with pytest.raises(NotImplementedError):
-        async for _ in adapter.stream(_make_messages(), _make_model()):
-            pass
+    payload = OpenAiLlmAdapter._payload(  # noqa: SLF001
+        _make_messages(), _make_model(), {"temperature": 0}
+    )
+
+    assert payload["messages"][0]["role"] == "system"
+    assert payload["temperature"] == 0
 
 
-def test_openai_adapter_embed_raises_not_implemented() -> None:
+def test_openai_adapter_embed_maps_vectors() -> None:
     from app.core.adapters.openai import OpenAiLlmAdapter
 
-    adapter = OpenAiLlmAdapter()
-    with pytest.raises(NotImplementedError):
-        adapter.embed(["hi"], ModelRef(provider="openai", model_name="x"))
+    adapter = OpenAiLlmAdapter(api_key="test-key")
+    adapter._sync = MagicMock()  # noqa: SLF001
+    adapter._sync.embeddings.create.return_value = MagicMock(  # noqa: SLF001
+        model="embed-model", data=[MagicMock(embedding=[0.1, 0.2])]
+    )
+
+    result = adapter.embed(["hi"], ModelRef(provider="openai", model_name="x"))
+
+    assert result.vectors == [[0.1, 0.2]]
 
 
 def test_google_adapter_raises_not_implemented() -> None:
@@ -474,24 +509,26 @@ def test_ollama_adapter_embed_raises_not_implemented() -> None:
         adapter.embed(["hi"], ModelRef(provider="ollama", model_name="x"))
 
 
-def test_placeholder_adapter_construction_does_not_raise() -> None:
+def test_adapter_construction_does_not_raise(monkeypatch: pytest.MonkeyPatch) -> None:
     """Placeholder adapters must be cheap to construct (FR-5 consequence)."""
     from app.core.adapters.google import GoogleLlmAdapter
     from app.core.adapters.ollama import OllamaLlmAdapter
     from app.core.adapters.openai import OpenAiLlmAdapter
 
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     assert OpenAiLlmAdapter() is not None
     assert GoogleLlmAdapter() is not None
     assert OllamaLlmAdapter() is not None
 
 
-def test_all_placeholder_adapters_satisfy_llm_port() -> None:
+def test_all_adapters_satisfy_llm_port(monkeypatch: pytest.MonkeyPatch) -> None:
     """Placeholder adapters structurally satisfy LlmPort so the selector can
     instantiate them before the NotImplementedError surfaces."""
     from app.core.adapters.google import GoogleLlmAdapter
     from app.core.adapters.ollama import OllamaLlmAdapter
     from app.core.adapters.openai import OpenAiLlmAdapter
 
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     assert isinstance(OpenAiLlmAdapter(), LlmPort)
     assert isinstance(GoogleLlmAdapter(), LlmPort)
     assert isinstance(OllamaLlmAdapter(), LlmPort)

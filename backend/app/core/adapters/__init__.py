@@ -1,7 +1,7 @@
 """Hexagonal adapter implementations for the core ports.
 
 Story 1.5:
-- ``audit_postgres.PostgresAuditSink`` -- concrete AuditPort backed by Postgres ``audit_trail``
+- ``audit_postgres.PostgresAuditSink`` -- Audit V2 trace/event sink backed by PostgreSQL
 
 Story 1.6:
 - ``anthropic.AnthropicLlmAdapter`` -- concrete LlmPort backed by anthropic 0.114.0

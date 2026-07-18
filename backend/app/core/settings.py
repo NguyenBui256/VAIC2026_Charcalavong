@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     app_db_role: str = Field(default="", description="Postgres role for the app")
 
     redis_url: str = Field(default="redis://localhost:6379/0")
+    audit_master_key: str = Field(
+        default="", description="Base64-encoded 32-byte AES key for audit signing keys"
+    )
 
     # Auth — used starting in Story 1.3
     jwt_secret: str = Field(default="replace-with-32-byte-hex-from-openssl-rand-hex-32")
@@ -52,6 +55,13 @@ class Settings(BaseSettings):
     # time (FR-5 consequence).
     anthropic_api_key: str = Field(default="", description="Anthropic API key")
     openai_api_key: str = Field(default="", description="OpenAI API key")
+    llm_provider: str = Field(default="openai")
+    llm_base_url: str = Field(default="")
+    llm_model: str = Field(default="DeepSeek-V4-Flash")
+    llm_api_key: str = Field(default="")
+    llm_timeout_seconds: float = Field(default=180.0, ge=10, le=600)
+    evaluation_max_context_tokens: int = Field(default=32000, ge=4000, le=200000)
+    evaluation_chunk_tokens: int = Field(default=8000, ge=2000, le=32000)
     google_api_key: str = Field(default="", description="Google Gemini API key")
     ollama_base_url: str = Field(
         default="http://localhost:11434",

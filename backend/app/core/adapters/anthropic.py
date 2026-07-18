@@ -26,10 +26,9 @@ from __future__ import annotations
 import os
 import time
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from app.core.ports.audit import AuditEntry, AuditPort
+from app.core.ports.audit import AuditPort, EventRecord, ExecutionContext, SpanEnd, SpanStart
 from app.core.ports.llm import (
     CompletionResult,
     EmbeddingResult,
@@ -37,6 +36,8 @@ from app.core.ports.llm import (
     ModelRef,
     StreamChunk,
 )
+from app.modules.audit.context import get_execution_context
+from app.modules.audit.cost import estimate_cost
 
 if TYPE_CHECKING:
     from anthropic import Anthropic
@@ -74,9 +75,7 @@ class AnthropicLlmAdapter:
     @staticmethod
     def _resolve_api_key() -> str | None:
         """Resolve the API key from env vars, preferring the VAIC-prefixed one."""
-        return os.environ.get(_ANTHROPIC_API_KEY_ENV) or os.environ.get(
-            _FALLBACK_ENV
-        )
+        return os.environ.get(_ANTHROPIC_API_KEY_ENV) or os.environ.get(_FALLBACK_ENV)
 
     @property
     def _client(self) -> Anthropic:
@@ -98,9 +97,7 @@ class AnthropicLlmAdapter:
         # the missing-key path raise our error rather than the SDK's.
         from anthropic import Anthropic as _Anthropic
 
-        self._client_instance = _Anthropic(
-            api_key=self._api_key, **self._extra_client_kwargs
-        )
+        self._client_instance = _Anthropic(api_key=self._api_key, **self._extra_client_kwargs)
         return self._client_instance
 
     # -- LlmPort.complete ----------------------------------------------------
@@ -113,9 +110,13 @@ class AnthropicLlmAdapter:
     ) -> CompletionResult:
         """Single-shot completion via ``messages.create``."""
         payload = self._build_payload(messages, model, parameters)
-        client = self._client  # may raise RuntimeError
+        audit_ctx = self._begin_audit(messages, model, parameters, "completion")
         start = time.perf_counter()
-        resp = client.messages.create(**payload)
+        try:
+            resp = self._client.messages.create(**payload)
+        except Exception as exc:
+            self._fail_audit(audit_ctx, exc)
+            raise
         latency_ms = int((time.perf_counter() - start) * 1000)
 
         content = self._extract_text(resp)
@@ -129,13 +130,14 @@ class AnthropicLlmAdapter:
             finish_reason=getattr(resp, "stop_reason", "") or "",
         )
 
-        self._audit(
-            model=model.model_name,
+        self._complete_audit(
+            audit_ctx,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             latency_ms=latency_ms,
-            prompt_messages=messages,
             response_content=content,
+            finish_reason=result.finish_reason,
+            pricing=model.parameters,
         )
         return result
 
@@ -153,31 +155,51 @@ class AnthropicLlmAdapter:
         latency are audited at stream end (best-effort).
         """
         payload = self._build_payload(messages, model, parameters)
-        client = self._client  # may raise RuntimeError
+        audit_ctx = self._begin_audit(messages, model, parameters, "stream")
         start = time.perf_counter()
-        stream_cm = client.messages.stream(**payload)
+        try:
+            stream_cm = self._client.messages.stream(**payload)
+        except Exception as exc:
+            self._fail_audit(audit_ctx, exc)
+            raise
         # Enter the context manager synchronously (SDK pattern); iterate
         # text_stream asynchronously.
         active = stream_cm.__enter__()
+        chunks: list[str] = []
+        first_token_ms: int | None = None
         try:
             async for delta in active.text_stream:  # type: ignore[attr-defined]
+                if first_token_ms is None:
+                    first_token_ms = int((time.perf_counter() - start) * 1000)
+                    if self._audit_port is not None and audit_ctx is not None:
+                        self._audit_port.emit_event(
+                            EventRecord(
+                                context=audit_ctx,
+                                event_type="llm.first_token",
+                                phase="progress",
+                                status="running",
+                                attributes={"ttft_ms": first_token_ms},
+                            )
+                        )
+                chunks.append(delta)
                 yield StreamChunk(delta=delta)
-            try:
-                final = active.get_final_message()  # type: ignore[attr-defined]
-                latency_ms = int((time.perf_counter() - start) * 1000)
-                input_tokens = getattr(final.usage, "input_tokens", 0)
-                output_tokens = getattr(final.usage, "output_tokens", 0)
-                self._audit(
-                    model=model.model_name,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    latency_ms=latency_ms,
-                    prompt_messages=messages,
-                    response_content="<stream>",
-                )
-            except Exception:
-                # Best-effort audit; streaming may not expose final usage.
-                pass
+            final = active.get_final_message()  # type: ignore[attr-defined]
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            input_tokens = getattr(final.usage, "input_tokens", 0)
+            output_tokens = getattr(final.usage, "output_tokens", 0)
+            self._complete_audit(
+                audit_ctx,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                latency_ms=latency_ms,
+                response_content="".join(chunks),
+                finish_reason=getattr(final, "stop_reason", "") or "",
+                ttft_ms=first_token_ms,
+                pricing=model.parameters,
+            )
+        except Exception as exc:
+            self._fail_audit(audit_ctx, exc)
+            raise
         finally:
             stream_cm.__exit__(None, None, None)
 
@@ -195,12 +217,13 @@ class AnthropicLlmAdapter:
         ``embeddings.create`` if/when it becomes available; until then a
         provider-specific error will surface from the SDK at runtime.
         """
-        client = self._client  # may raise RuntimeError
+        audit_ctx = self._begin_audit([], model, {"text_count": len(texts)}, "embedding")
         start = time.perf_counter()
-        resp = client.embeddings.create(
-            model=model.model_name,
-            input=texts,
-        )
+        try:
+            resp = self._client.embeddings.create(model=model.model_name, input=texts)
+        except Exception as exc:
+            self._fail_audit(audit_ctx, exc)
+            raise
         latency_ms = int((time.perf_counter() - start) * 1000)
 
         vectors = list(getattr(resp, "embeddings", []) or [])
@@ -210,13 +233,14 @@ class AnthropicLlmAdapter:
             latency_ms=latency_ms,
         )
 
-        self._audit(
-            model=model.model_name,
+        self._complete_audit(
+            audit_ctx,
             input_tokens=len(texts),
             output_tokens=0,
             latency_ms=latency_ms,
-            prompt_messages=[],
-            response_content="<embeddings>",
+            response_content={"vector_count": len(vectors)},
+            finish_reason="completed",
+            pricing=model.parameters,
         )
         return result
 
@@ -274,41 +298,80 @@ class AnthropicLlmAdapter:
                 parts.append(text)
         return "".join(parts)
 
-    def _audit(
+    def _begin_audit(
         self,
+        messages: list[Message],
+        model: ModelRef,
+        parameters: dict[str, Any] | None,
+        operation: str,
+    ) -> ExecutionContext | None:
+        if self._audit_port is None:
+            return None
+        parent = get_execution_context(required=True)
+        assert parent is not None
+        return self._audit_port.start_span(
+            SpanStart(
+                context=parent,
+                node_type="llm",
+                name=f"Anthropic {operation}",
+                actor_type="agent" if parent.agent_id else "orchestrator",
+                provider=_PROVIDER_NAME,
+                model=model.model_name,
+                input={
+                    "messages": [m.model_dump() for m in messages],
+                    "parameters": {**model.parameters, **(parameters or {})},
+                },
+                attributes={
+                    "operation": operation,
+                    "provider": _PROVIDER_NAME,
+                    "model": model.model_name,
+                },
+            )
+        )
+
+    def _complete_audit(
+        self,
+        context: ExecutionContext | None,
         *,
-        model: str,
         input_tokens: int,
         output_tokens: int,
         latency_ms: int,
-        prompt_messages: list[Message],
-        response_content: str,
+        response_content: Any,
+        finish_reason: str,
+        ttft_ms: int | None = None,
+        pricing: dict[str, Any] | None = None,
     ) -> None:
-        """Emit a ``model_invocation`` AuditEntry (NFR-5). Best-effort."""
-        if self._audit_port is None:
+        if self._audit_port is None or context is None:
             return
-        entry = AuditEntry(
-            run_id="",
-            step_id="",
-            agent_id="",
-            ts=datetime.now(UTC).isoformat(timespec="milliseconds"),
-            type="model_invocation",
-            input={
-                "provider": _PROVIDER_NAME,
-                "model": model,
-                "messages": [m.model_dump() for m in prompt_messages],
-            },
-            output={
-                "provider": _PROVIDER_NAME,
-                "model": model,
-                "prompt_token_count": input_tokens,
-                "completion_token_count": output_tokens,
-                "latency_ms": latency_ms,
-                "content_preview": response_content[:200],
-            },
-            latency_ms=latency_ms,
-            model=model,
+        cost, snapshot = estimate_cost(
+            input_tokens=input_tokens, output_tokens=output_tokens, pricing=pricing
         )
-        # Per AD-4, an audit.log() failure MUST crash the calling Run.
-        # We call it directly and let any exception propagate.
-        self._audit_port.log(entry)
+        self._audit_port.end_span(
+            SpanEnd(
+                context=context,
+                output={"content": response_content, "finish_reason": finish_reason},
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                estimated_cost_usd=cost,
+                ttft_ms=ttft_ms,
+                attributes={
+                    "latency_ms": latency_ms,
+                    "finish_reason": finish_reason,
+                    "provider": _PROVIDER_NAME,
+                    "pricing_snapshot": snapshot,
+                },
+            )
+        )
+
+    def _fail_audit(self, context: ExecutionContext | None, exc: Exception) -> None:
+        if self._audit_port is None or context is None:
+            return
+        self._audit_port.end_span(
+            SpanEnd(
+                context=context,
+                status="failed",
+                error_code=type(exc).__name__,
+                error_message=str(exc),
+                attributes={"provider": _PROVIDER_NAME},
+            )
+        )

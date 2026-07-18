@@ -37,9 +37,9 @@ def uuid7(timestamp_ms: int | None = None) -> uuid.UUID:
 
     uuid_int = (
         (timestamp_ms & 0xFFFFFFFFFFFF) << 80
-        | 0x7 << 76           # version
+        | 0x7 << 76  # version
         | rand_a << 64
-        | 0b10 << 62          # variant
+        | 0b10 << 62  # variant
         | rand_b
     )
     # NOTE: Python's stdlib uuid.UUID rejects version=7 (only 1–5 supported,
@@ -51,6 +51,4 @@ def uuid7(timestamp_ms: int | None = None) -> uuid.UUID:
 
 def utcnow_iso_ms() -> str:
     """UTC now as ISO 8601 with milliseconds — AR-14 timestamp convention."""
-    return datetime.now(UTC).isoformat(timespec="milliseconds").replace(
-        "+00:00", "Z"
-    )
+    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
