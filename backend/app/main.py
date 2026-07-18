@@ -27,6 +27,7 @@ from app.core.db import SessionLocal
 from app.core.errors import register_error_handlers
 from app.core.miniapp_cors import MiniAppNullOriginCORSMiddleware
 from app.core.settings import get_settings
+from app.modules.agent_builder.kb_routes import router as kb_documents_router
 from app.modules.agent_builder.routes import router as agents_router
 from app.modules.audit.routes import router as audit_router
 from app.modules.mini_app.routes import mini_app_rows_router, mini_apps_router
@@ -90,6 +91,9 @@ app.include_router(departments_router)
 
 # Story 2.1 — Agent Builder CRUD routes.
 app.include_router(agents_router)
+
+# Sub-project A (Task 4) — tenant-wide KB store + owner/grants ACL routes.
+app.include_router(kb_documents_router)
 
 # Story 3.1 — Orchestrator Workflow CRUD routes.
 app.include_router(workflows_router)
