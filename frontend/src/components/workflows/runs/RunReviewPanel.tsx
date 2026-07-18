@@ -8,6 +8,7 @@ import { Button, Card, useToast } from "../../ui";
 import NodeIoViewer from "./NodeIoViewer";
 import RollbackConfirmCard from "./RollbackConfirmCard";
 import RunStatusBadge from "./RunStatusBadge";
+import TypedValueInput from "./TypedValueInput";
 import { parentsOf, type MergedNode } from "./mergeNodes";
 import type {
   DecisionRequest,
@@ -15,6 +16,7 @@ import type {
   RollbackRequest,
 } from "../../../lib/runsApi";
 import type { UseRunMutationsResult } from "../../../hooks/useRunMutations";
+import { emptyDraft, resolveDraft } from "../../../lib/typedValue";
 
 export interface RunReviewPanelProps {
   node: MergedNode | null;
@@ -33,7 +35,7 @@ export default function RunReviewPanel({
 }: RunReviewPanelProps) {
   const toast = useToast();
   const [guidance, setGuidance] = useState("");
-  const [overrideText, setOverrideText] = useState("{}");
+  const [overrideDraft, setOverrideDraft] = useState(emptyDraft());
   const [reason, setReason] = useState("");
   const [target, setTarget] = useState("");
 
@@ -75,14 +77,12 @@ export default function RunReviewPanel({
   }
 
   function onOverride() {
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(overrideText);
-    } catch {
-      toast.show("Override must be valid JSON", "error");
+    const resolved = resolveDraft(overrideDraft);
+    if (!resolved.ok) {
+      toast.show(resolved.error, "error");
       return;
     }
-    submit({ action: "override", output: parsed });
+    submit({ action: "override", output: resolved.value as Record<string, unknown> });
   }
 
   function onReject() {
@@ -156,13 +156,8 @@ export default function RunReviewPanel({
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
-              <label className="text-body">Override output (JSON)</label>
-              <textarea
-                className="vaic-form-input vaic-focusable"
-                value={overrideText}
-                onChange={(e) => setOverrideText(e.target.value)}
-                rows={3}
-              />
+              <label className="text-body">Override output</label>
+              <TypedValueInput value={overrideDraft} onChange={setOverrideDraft} />
               <Button variant="secondary" disabled={pending} onClick={onOverride}>
                 Override
               </Button>
