@@ -17,6 +17,7 @@ export default function ChatPage() {
     selectConversation,
     newConversation,
     deleteConversation,
+    renameConversation,
     sendMessage,
   } = useChat();
 
@@ -28,6 +29,7 @@ export default function ChatPage() {
         onSelect={selectConversation}
         onNew={newConversation}
         onDelete={deleteConversation}
+        onRename={renameConversation}
       />
       <div
         style={{
