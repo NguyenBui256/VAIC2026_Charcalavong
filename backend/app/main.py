@@ -32,6 +32,7 @@ from app.modules.agent_builder.routes import router as agents_router
 from app.modules.agent_builder.tool_routes import router as tools_router
 from app.modules.audit.routes import router as audit_router
 from app.modules.mini_app.routes import mini_app_rows_router, mini_apps_router
+from app.modules.orchestrator.graph_routes import router as workflows_graph_router
 from app.modules.orchestrator.routes import router as workflows_router
 from app.modules.tenant.routes import departments_router
 from app.modules.tenant.routes import router as tenant_router
@@ -101,6 +102,9 @@ app.include_router(kb_documents_router)
 
 # Story 3.1 — Orchestrator Workflow CRUD routes.
 app.include_router(workflows_router)
+
+# Sub-project 3B (Task 7) — graph run review/rollback endpoints.
+app.include_router(workflows_graph_router)
 
 # Epic 6 (FR-22) — Trace Dashboard read API (/audit).
 app.include_router(audit_router)
