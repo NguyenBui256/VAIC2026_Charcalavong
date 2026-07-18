@@ -91,12 +91,15 @@ Two tables, RLS on both. New Alembic migration `create_mini_apps_rls`.
 | data | jsonb **NOT NULL** | schema-defined fields |
 | created_at, updated_at | timestamptz | CAS target |
 
-**RLS (AD-5):** policy on `mini_app_rows` joins to parent `mini_apps` and evaluates the tier against the session GUCs the auth/tenant middleware already sets:
-- `public` → same `tenant_id`.
-- `need_auth` → same `tenant_id` AND same `department_id`.
-- `private` → same tenant AND (`owner_id = current_user` OR `current_user = ANY(mini_apps.whitelist_user_ids)`).
+**Two-layer enforcement (revised after codebase check):** the platform only propagates **`app.tenant_id`** as a DB session GUC (`core/tenant_context.py`); `user_id`/`department_id`/`role` live on `request.state`/`Principal`, *not* as GUCs. Pushing tier logic into an RLS policy would require adding `app.user_id`/`app.department_id` GUCs to the core auth/session path — a HIGH-impact edit to a shared boundary (`get_tenant_session`, `tenant_context`, arq `jobs.py`) touching every module. We avoid that:
 
-Enforced at DB; re-checked at the API layer (defense in depth, and to distinguish 401 vs 403).
+- **DB layer (RLS, AD-5):** `mini_app_rows` gets the *same* tenant-isolation policy as every other table — `tenant_id = current_setting('app.tenant_id')::uuid`, ENABLE + FORCE. This is the hard cross-tenant boundary.
+- **App layer (`visibility.py`):** the visibility tier (`public`/`need_auth`/`private` + whitelist) is enforced in the service/crud path using the caller's `Principal(user_id, department_id, role)` (already on `request.state`). This mirrors how role checks (`builder`/`admin`) are *already* enforced at the app layer in existing services — authorization, not tenant isolation, lives in the service.
+  - `public` → any user in the same tenant (RLS already guarantees tenant).
+  - `need_auth` → `principal.department_id == app.department_id`, else 403 (401 if anonymous — the auth middleware already blocks anon on protected paths).
+  - `private` → `principal.user_id == app.owner_id` OR `principal.user_id in app.whitelist_user_ids`, else 403.
+
+Defense in depth: tenant isolation is guaranteed at the DB even if an app-layer check is bypassed; the tier check produces the exact 401/403 distinctions FR-16 requires.
 
 ## 5. Schema Meta-Schema (Story 4-1)
 
