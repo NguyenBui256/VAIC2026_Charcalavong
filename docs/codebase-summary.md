@@ -13,7 +13,7 @@ latency_ms, model}` — append-only (INSERT/SELECT only; UPDATE/DELETE revoked).
 
 | Module | Status | Purpose |
 |---|---|---|
-| `agent_builder` | DONE (Epic 2) | Agent CRUD, KB upload/retrieval, Tool config, model catalog, `AgentExecutor` (runs an Agent's prompt+model+KB+Tool for a Task — added Epic 3), `list_routable_agents` public selector for Orchestrator |
+| `agent_builder` | DONE (Epic 2); re-platformed Sub-project A | Agent CRUD, model catalog, `AgentExecutor`, `list_routable_agents`. **Tools + KB are now tenant-wide shared resources** (Sub-project A): `tools` = built-in catalog (`rag`/`gmail`/`calendar`) referenced via `agent_tools` (M2M); `kb_documents` = tenant store with `owner_id` + `kb_document_grants` (user ACL viewer/manager) + `agent_kb_documents` (per-agent RAG grant). Services: `tool_catalog_service`, `kb_service`, `kb_grants_service`, `agent_kb_service`; routes `tool_routes` (`/tools`), `kb_routes` (`/kb/documents` + grants). KB retrieval is **two-gate** (agent must reference `rag` tool AND have granted docs; `rag.search` scoped to those doc ids). `gmail`/`calendar` execution is MCP-stubbed. |
 | `orchestrator` | DONE, thin-slice (Epic 3) | Workflow CRUD, Run lifecycle (CAS state machine), decomposition (`decompose_run`), dispatch/aggregate (`execute_task_row`, `aggregate_run`, `orchestrate_run`) |
 | `tenant` | DONE (Epic 1) | Tenant/department/user foundation, RLS context |
 | `audit` | DONE (Epic 6) | Write: `PostgresAuditSink` — sole writer to `audit_trail` (AD-4). Read: `service.list_audit_entries` / `export_audit_entries` / `entries_to_csv`, `routes.py` — `GET /audit`, `GET /audit/export` |
@@ -75,6 +75,8 @@ Chain includes (chronological, Epic 3 additions):
 - `1ad51bb8e8cb` — `create_workflows_rls` (Story 3.1)
 - `39dfa51cec0c` — `create_workflow_runs_tasks_rls` (Story 3.2; `workflow_runs` + `tasks` + RLS)
 - `c4f1a9d3e7b2` — `create_mini_apps_rls` (Epic 4; `mini_apps` + `mini_app_rows`, tenant RLS ENABLE+FORCE on both; `mini_app_rows` four access fields NOT NULL)
+- `a1b2c3d4e5f6` — `reshape_tools_catalog` (Sub-project A; tenant-wide `tools` catalog + `agent_tools` M2M, RLS; greenfield DROP+CREATE of `tools`)
+- `b2c3d4e5f6a7` — `reshape_kb_store_grants` (Sub-project A; `kb_documents` store + `owner_id`, `kb_document_grants` user ACL, `agent_kb_documents` M2M, RLS on all three)
 
 ## Testing
 
