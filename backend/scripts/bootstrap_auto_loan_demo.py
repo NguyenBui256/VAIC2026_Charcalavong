@@ -36,6 +36,12 @@ from scripts.bootstrap_demo_tenant import bootstrap_demo_tenant
 from app.modules.orchestrator.models import Workflow
 from app.modules.orchestrator.graph_authoring import replace_workflow_graph
 from app.modules.orchestrator.service import create_workflow
+from app.modules.mini_app import database_service
+from app.modules.mini_app import service as mini_app_service
+from app.modules.mini_app.database_models import MiniAppDatabase
+from app.modules.mini_app.models import MiniApp
+from app.modules.mini_app.schema_validation import validate_entity_schema, validate_ui_spec
+from app.modules.mini_app.visibility import MiniAppPrincipal
 
 DEMO_PASSWORD = "Password123!"
 TENANT_NAME = "SHB Demo"
@@ -46,6 +52,36 @@ WORKFLOW_DESC = (
     "thẩm định tín dụng (CIC/DTI), định giá TSĐB, phê duyệt (duyệt thật), ký hợp đồng & "
     "hoàn thiện TSĐB, đăng ký GDBĐ & giải ngân (duyệt thật)."
 )
+
+DATABASE_NAME = "Hồ sơ vay thế chấp ô tô"
+APP_NAME = "Đăng ký vay mua ô tô (SHB)"
+
+LOAN_ENTITY_SCHEMA = {
+    "fields": [
+        {"name": "ho_ten", "type": "string", "label": "Họ và tên người vay", "required": True, "maxLength": 255},
+        {"name": "cccd", "type": "string", "label": "Số CCCD", "required": True, "maxLength": 20},
+        {"name": "sdt", "type": "string", "label": "Số điện thoại", "required": True, "maxLength": 15},
+        {"name": "tinh_trang_hon_nhan", "type": "enum", "label": "Tình trạng hôn nhân",
+         "required": True, "options": ["Độc thân", "Đã kết hôn"]},
+        {"name": "thu_nhap_thang", "type": "number", "label": "Thu nhập/tháng (VND)", "required": True, "min": 0},
+        {"name": "loai_xe", "type": "enum", "label": "Loại xe", "required": True,
+         "options": ["Xe mới", "Xe cũ"]},
+        {"name": "hang_dong_xe", "type": "string", "label": "Hãng/Dòng xe", "required": True, "maxLength": 255},
+        {"name": "gia_xe", "type": "number", "label": "Giá xe (VND)", "required": True, "min": 0},
+        {"name": "so_tien_vay_de_nghi", "type": "number", "label": "Số tiền vay đề nghị (VND)",
+         "required": True, "min": 0},
+        {"name": "gt_cccd", "type": "boolean", "label": "Đã nộp CCCD (2 mặt)"},
+        {"name": "gt_hon_nhan", "type": "boolean", "label": "Đã nộp giấy tờ hôn nhân/độc thân"},
+        {"name": "gt_hdld", "type": "boolean", "label": "Đã nộp HĐ lao động"},
+        {"name": "gt_sao_ke_luong", "type": "boolean", "label": "Đã nộp sao kê lương 3–6 tháng"},
+        {"name": "gt_hd_mua_ban_xe", "type": "boolean", "label": "Đã nộp HĐ mua bán xe"},
+        {"name": "gt_phieu_coc", "type": "boolean", "label": "Đã nộp phiếu cọc/vốn tự có"},
+        {"name": "gt_hoa_don_gia", "type": "boolean", "label": "Đã nộp hóa đơn/thông báo giá (xe mới)"},
+        {"name": "gt_ca_vet_cu", "type": "boolean", "label": "Đã nộp cà vẹt cũ (xe cũ)"},
+        {"name": "link_ho_so", "type": "longtext", "label": "Link ảnh/scan hồ sơ"},
+    ],
+    "primary_display": "ho_ten",
+}
 
 
 def _get_or_create_department(session, tenant_id: uuid.UUID, name: str) -> Department:
@@ -177,6 +213,43 @@ AGENT_SPECS = [
 ]
 
 
+def seed_mini_app(session, people):
+    tid = people["tenant_id"]
+    owner = people["owner"]
+    principal = MiniAppPrincipal(
+        user_id=owner.id, tenant_id=tid,
+        department_id=owner.department_id, role="builder",
+    )
+
+    db = session.execute(
+        select(MiniAppDatabase).where(
+            MiniAppDatabase.tenant_id == tid, MiniAppDatabase.name == DATABASE_NAME
+        )
+    ).scalar_one_or_none()
+    if db is None:
+        set_tenant_context(tid)
+        db = database_service.create_database(
+            session, principal=principal, name=DATABASE_NAME,
+            description="Hồ sơ khách nộp để vay thế chấp mua ô tô.",
+            entity_schema=LOAN_ENTITY_SCHEMA,
+        )
+
+    app = session.execute(
+        select(MiniApp).where(MiniApp.tenant_id == tid, MiniApp.name == APP_NAME)
+    ).scalar_one_or_none()
+    if app is None:
+        set_tenant_context(tid)
+        schema = validate_entity_schema(db.entity_schema)
+        ui_spec = validate_ui_spec({})
+        app = mini_app_service.create_app_from_schema(
+            session, principal=principal, name=APP_NAME,
+            description="Biểu mẫu khách hàng đăng ký vay mua ô tô.",
+            schema=schema, ui_spec=ui_spec, visibility_tier="public",
+            whitelist_user_ids=[], database_id=db.id,
+        )
+    return db, app
+
+
 def seed_agents(session, people) -> dict:
     tid = people["tenant_id"]
     owner = people["owner"]
@@ -262,6 +335,10 @@ def main() -> int:
             print(f"  - {key}: {a.name} (id={a.id})")
         workflow = seed_workflow(session, people, agents)
         print(f"[auto-loan] workflow: {workflow.name} (id={workflow.id})")
+        db, app = seed_mini_app(session, people)
+        print(f"[auto-loan] database: {db.name} (id={db.id})")
+        print(f"[auto-loan] mini-app: {app.name} (id={app.id}, database_id={app.database_id}, "
+              f"build_status={app.build_status})")
     return 0
 
 
