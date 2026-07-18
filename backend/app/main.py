@@ -27,6 +27,7 @@ from app.core.db import SessionLocal
 from app.core.errors import register_error_handlers
 from app.core.miniapp_cors import MiniAppNullOriginCORSMiddleware
 from app.core.settings import get_settings
+from app.modules.action.routes import actions_router
 from app.modules.agent_builder.kb_routes import router as kb_documents_router
 from app.modules.agent_builder.routes import integrations_router
 from app.modules.agent_builder.routes import router as agents_router
@@ -126,6 +127,9 @@ app.include_router(mini_app_databases_router)
 
 # Actions/Events — per-user staff notifications.
 app.include_router(notifications_router)
+
+# Actions/Events — Mini-App Database event -> Workflow binding CRUD.
+app.include_router(actions_router)
 
 # Story 4-5 — serve built Mini-App bundles (sandbox runtime plane). Each
 # `build_mini_app` job writes `{bundle_root}/{app_id}/{index.html,bundle.js}`;
