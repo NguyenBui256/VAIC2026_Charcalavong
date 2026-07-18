@@ -50,9 +50,42 @@ def clean_db(_migrations_applied: None) -> Iterator[None]:
     test_rls.py / test_auth.py when they run after us. The session-scoped
     `_migrations_applied` fixture downgrades to base at session end for
     full cleanup.
+
+    Epic 7 extension: `bootstrap_demo_tenant()` now also seeds Agents/Tools/
+    Workflows owned by the demo tenant's Users (`owner_id` FK is
+    `ondelete=RESTRICT`, not CASCADE — see `agents.owner_id`/
+    `workflows.owner_id`). Those rows (+ any Runs/Tasks/audit_trail a smoke
+    test created against them) MUST be deleted before `users`/`departments`
+    or the `DELETE FROM users` below raises a FK violation.
     """
     with AdminSessionLocal() as s:
-        # Cascade from the tenant down: users → departments → tenant.
+        # Cascade from the tenant down: audit_trail/tasks/runs → tools →
+        # agents → workflows → users → departments → tenant.
+        tenant_id_subq = "(SELECT id FROM tenants WHERE name = :name)"
+        s.execute(
+            text(f"DELETE FROM audit_trail WHERE tenant_id IN {tenant_id_subq}"),
+            {"name": DEMO_TENANT_NAME},
+        )
+        s.execute(
+            text(f"DELETE FROM tasks WHERE tenant_id IN {tenant_id_subq}"),
+            {"name": DEMO_TENANT_NAME},
+        )
+        s.execute(
+            text(f"DELETE FROM workflow_runs WHERE tenant_id IN {tenant_id_subq}"),
+            {"name": DEMO_TENANT_NAME},
+        )
+        s.execute(
+            text(f"DELETE FROM workflows WHERE tenant_id IN {tenant_id_subq}"),
+            {"name": DEMO_TENANT_NAME},
+        )
+        s.execute(
+            text(f"DELETE FROM tools WHERE tenant_id IN {tenant_id_subq}"),
+            {"name": DEMO_TENANT_NAME},
+        )
+        s.execute(
+            text(f"DELETE FROM agents WHERE tenant_id IN {tenant_id_subq}"),
+            {"name": DEMO_TENANT_NAME},
+        )
         s.execute(
             text(
                 "DELETE FROM users WHERE tenant_id IN "

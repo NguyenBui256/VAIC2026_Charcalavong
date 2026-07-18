@@ -89,6 +89,24 @@ def seed_data(_migrations_applied: None) -> dict[str, dict[str, Any]]:
     user_b_id = uuid.uuid4()
 
     with AdminSessionLocal() as s:
+        # Epic 7: `test_bootstrap_demo_tenant.py`'s last test intentionally
+        # leaves a live "SHB Demo" Tenant (+ Agents/Tools/Workflow) behind
+        # for the smoke test. Those rows' `owner_id`/`agent_id` FKs are
+        # `ondelete=RESTRICT` -- a bare `DELETE FROM users` below would
+        # raise a RestrictViolation whenever this fixture resolves AFTER
+        # that file has run (pytest collection order is alphabetical:
+        # `test_bootstrap_demo_tenant.py` sorts before most other test
+        # files). Clear the FK-dependent tables first, globally -- this
+        # fixture already wipes the ENTIRE `users`/`departments`/`tenants`
+        # tables unconditionally, so cascading the same wipe to their
+        # dependents is consistent with its existing "reset everything"
+        # contract.
+        s.execute(text("DELETE FROM audit_trail"))
+        s.execute(text("DELETE FROM tasks"))
+        s.execute(text("DELETE FROM workflow_runs"))
+        s.execute(text("DELETE FROM workflows"))
+        s.execute(text("DELETE FROM tools"))
+        s.execute(text("DELETE FROM agents"))
         s.execute(text("DELETE FROM users"))
         s.execute(text("DELETE FROM departments"))
         s.execute(text("DELETE FROM tenants"))
