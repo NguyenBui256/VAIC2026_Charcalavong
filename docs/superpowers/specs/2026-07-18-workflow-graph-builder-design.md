@@ -57,8 +57,8 @@ Replace the whole graph. Body = the same `{nodes, edges}` shape (approvers embed
 
 Referential guard: agent_ids and approver user_ids must belong to the tenant (RLS + explicit existence check → 422 on unknown id) so a bad reference fails at authoring time, not at run creation.
 
-### 3.3 `GET /users` (tenant module)
-New tenant-scoped, RLS-filtered users list for the approver picker. Minimal shape `[{id, name, email}]`, active users of the caller's tenant. Placed in `modules/tenant` (owns the `users` table). Read-only; any authenticated tenant member may call it (approver assignment itself stays Builder-gated via the `PUT`).
+### 3.3 Users list for the approver picker — reuse existing `GET /auth/users`
+No new endpoint. The tenant module already exposes `GET /auth/users` (`list_tenant_users`, RLS-scoped), returning `{id, email, tenant_id, department_id, role}` per user. The approver picker consumes it directly; the frontend only needs a thin `usersApi.ts` wrapper. Picker shows `email` as the label (no `name` field on the User record). Approver assignment stays Builder-gated via the `PUT`.
 
 ## 4. Frontend
 
@@ -113,5 +113,5 @@ Per project working-preference (no tests unless requested), tests are **out of s
 Not built here; captured so this design stays aligned with it. Chat will be a thin conversational shell over the existing run pipeline: a target picker (a saved **Workflow** or a single **Agent**), each user message creating a run whose progress is shown by **embedding the 3C `RunTrackingView`** (graph + polling + `RunReviewPanel` approve/reject) inside the chat bubble — the "real experience" (notify + human approval + in-chat graph). It depends on this Graph Builder so that selected workflows have real graphs to render. New pieces there: `chat_sessions` / `chat_messages` tables, chat routes (session, post-message→create-run, list), and a Chat page. Reuses: orchestrator pipeline, run-tracking components, decision/approval endpoints, audit.
 
 ## 10. Open Questions
-- `GET /users` scope: all tenant users, or only those with an approver-eligible role? v1 assumes all active tenant users; tighten if a role model dictates otherwise.
+- Approver picker source: reuses `GET /auth/users` (all tenant users). If a role model later restricts who may approve, filter there or client-side; v1 lists all.
 - `node_key` UX: auto-only vs. user-editable. v1 allows editing with a uniqueness guard; may lock to auto if it causes edge-integrity confusion in testing.
