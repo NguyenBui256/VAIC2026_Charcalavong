@@ -130,51 +130,43 @@ class ApiIntegration(Base):
 
 
 class Tool(Base):
-    """A Tool registered against an Agent (Story 2.6).
+    """A shared, tenant-wide Tool in the catalog (Sub-project A).
 
-    `embedded_python` NULL => MCP-routed tool; non-NULL => sandbox-routed
-    (AR-14). `header` (incl. auth) is stored but NEVER echoed to the client
-    in full (NFR-9) — routes mask it in serialization.
+    Tools are no longer agent-owned; agents reference them via `agent_tools`.
+    Only the built-in catalog types exist for now (`rag`/`gmail`/`calendar`) —
+    seeded per tenant, not user-authored (spec D4). `params_schema` is the
+    call interface the LLM reads; `description` is LLM- and human-facing (D5).
+    Execution of `gmail`/`calendar` is stubbed (spec §5); `rag` is consumed
+    via the two-gate KB path, not `invoke_tool`.
     """
 
     __tablename__ = "tools"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid7,
-    )
-    agent_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("agents.id", ondelete="CASCADE"),
-        nullable=False,
+        UUID(as_uuid=True), primary_key=True, default=uuid7
     )
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("tenants.id", ondelete="CASCADE"),
         nullable=False,
     )
-    department_id: Mapped[uuid.UUID] = mapped_column(
+    owner_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("departments.id", ondelete="RESTRICT"),
+        ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
     )
 
+    tool_type: Mapped[str] = mapped_column(String(32), nullable=False)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    header: Mapped[dict[str, Any]] = mapped_column(
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    params_schema: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    output_schema: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, default=dict, server_default="{}"
     )
-    input_schema: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    output_schema: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    embedded_python: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Story 2.8 (carried item #1) — optional link to a registered
-    # ApiIntegration this Tool calls through. NULL => the Tool doesn't use a
-    # registered Integration (e.g. embedded_python or a standalone MCP call).
-    integration_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("api_integrations.id", ondelete="SET NULL"),
-        nullable=True,
+    config: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default="{}"
     )
+    credential_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     is_deleted: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false", default=False
@@ -186,5 +178,30 @@ class Tool(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class AgentTool(Base):
+    """M2M: an Agent references a catalog Tool (Sub-project A)."""
+
+    __tablename__ = "agent_tools"
+
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    tool_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tools.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
