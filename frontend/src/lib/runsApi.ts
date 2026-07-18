@@ -83,6 +83,7 @@ export interface RollbackRequest {
   requester_node_key: string;
   target_node_key: string;
   reason: string | null;
+  refuse_reason?: string | null;
   status: string;
 }
 
@@ -142,9 +143,10 @@ export function confirmRollback(
   runId: string,
   rollbackId: string,
   accept: boolean,
+  reason?: string,
 ): Promise<{ id: string; status: string }> {
   return apiFetch<{ id: string; status: string }>(
     `/workflows/runs/${runId}/rollbacks/${rollbackId}/confirm`,
-    { method: "POST", body: JSON.stringify({ accept }) },
+    { method: "POST", body: JSON.stringify({ accept, reason }) },
   );
 }
