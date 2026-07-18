@@ -38,6 +38,10 @@ from app.core.settings import get_settings
 from app.core.tenant_context import set_tenant_session_var, tenant_context
 from app.modules.agent_builder.agent_executor import AgentExecutor
 from app.modules.agent_builder.service import get_agent, list_routable_agents
+from app.modules.orchestrator.graph_snapshot import (
+    build_graph_snapshot,
+    create_run_node_executions,
+)
 from app.modules.orchestrator.models import Task, Workflow, WorkflowRun
 from app.modules.orchestrator.schemas import TaskSchemaModel
 from app.modules.orchestrator.state import (
@@ -238,14 +242,19 @@ def create_run(
         )
     workflow = get_workflow(session, workflow_id)
     tenant_id = tenant_context.get()
+    snapshot = build_graph_snapshot(session, workflow.id)
     run = WorkflowRun(
         id=uuid7(),
         tenant_id=tenant_id,
         workflow_id=workflow.id,
         status="pending",
         input=input or {},
+        graph_snapshot=snapshot,
     )
     session.add(run)
+    session.flush()  # assign run.id before inserting child node-execution rows
+    if snapshot is not None:
+        create_run_node_executions(session, run, snapshot)
     session.commit()
     session.refresh(run)
     return run
@@ -505,12 +514,18 @@ async def _run_with_retry(
     delay = 2
     for attempt in range(retries + 1):
         try:
+            # `timeout_s` is enforced primarily by the provider SDK client
+            # (`Settings.llm_timeout_seconds`), which aborts the blocking HTTP
+            # call and raises. `wait_for` here is a secondary guard given a
+            # small buffer so the provider's clean timeout error surfaces
+            # first (a synchronous blocking call has no await boundary for
+            # `wait_for` to cancel at mid-call anyway).
             return await asyncio.wait_for(
                 executor.execute_task(
                     task.target_agent_id, task.schema_payload,
                     tenant_id=task.tenant_id, department_id=dept_id,
                 ),
-                timeout=timeout_s,
+                timeout=timeout_s + 5,
             )
         except Exception:
             if attempt == retries:
@@ -521,10 +536,20 @@ async def _run_with_retry(
 
 async def execute_task_row(
     session: Session, task: Task, *, executor: Any | None = None,
-    timeout_s: int = 60, retries: int = 2,
+    timeout_s: int | None = None, retries: int | None = None,
 ) -> None:
     """CAS-claim + run + complete/fail one Task (Story 3.4a). AD-6: caller
-    never proceeds on a lost CAS race."""
+    never proceeds on a lost CAS race.
+
+    `timeout_s`/`retries` default to `Settings.llm_timeout_seconds` and
+    `Settings.llm_max_attempts - 1` (=> `llm_max_attempts` total requests)
+    when unset, so the backend-configured level drives both.
+    """
+    settings = get_settings()
+    if timeout_s is None:
+        timeout_s = settings.llm_timeout_seconds
+    if retries is None:
+        retries = max(0, settings.llm_max_attempts - 1)
     _reassert_rls(session)
     if not transition_task_status(session, task.id, from_status="pending", to_status="claimed"):
         return  # lost race / not pending (AD-6)
