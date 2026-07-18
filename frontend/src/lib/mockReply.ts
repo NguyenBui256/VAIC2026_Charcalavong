@@ -15,25 +15,25 @@ export function generateMockReply(
 ): string {
   const trimmed = userText.trim();
   const targetLine = target
-    ? [`> Đang chat với **${target.type === "agent" ? "agent" : "workflow"}** \`${target.name}\``, ""]
+    ? [`> Chatting with **${target.type === "agent" ? "agent" : "workflow"}** \`${target.name}\``, ""]
     : [];
   return [
     ...targetLine,
-    `Bạn vừa nói: **${trimmed || "(trống)"}**`,
+    `You said: **${trimmed || "(empty)"}**`,
     "",
-    "Đây là phản hồi *demo* (chưa nối backend). Mình hỗ trợ:",
+    "This is a *demo* reply (no backend yet). It supports:",
     "",
-    "- Định dạng **đậm**, *nghiêng*, `inline code`",
-    "- Danh sách và tiêu đề",
-    "- Khối code có syntax highlight:",
+    "- **Bold**, *italic*, `inline code` formatting",
+    "- Lists and headings",
+    "- Code blocks with syntax highlighting:",
     "",
     "```ts",
     "function greet(name: string) {",
-    "  return `Xin chào, ${name}!`;",
+    "  return `Hello, ${name}!`;",
     "}",
     "```",
     "",
-    "> Kết nối agent/backend sẽ được thêm sau.",
+    "> Agent/backend integration is coming later.",
   ].join("\n");
 }
 
@@ -47,7 +47,7 @@ export function streamText(
   onChunk: (partial: string) => void,
   onDone: () => void,
 ): () => void {
-  const STEP = 3; // ký tự mỗi tick
+  const STEP = 3; // characters per tick
   const INTERVAL_MS = 16;
   let i = 0;
   const timer = setInterval(() => {

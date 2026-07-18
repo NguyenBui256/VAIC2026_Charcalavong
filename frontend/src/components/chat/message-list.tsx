@@ -36,7 +36,7 @@ export default function MessageList({ messages, isTyping }: Props) {
           color: "var(--color-text-tertiary)",
         }}
       >
-        <p className="text-body">Bắt đầu cuộc trò chuyện…</p>
+        <p className="text-body">Start the conversation…</p>
       </div>
     );
   }
@@ -57,7 +57,7 @@ export default function MessageList({ messages, isTyping }: Props) {
           className="text-caption"
           style={{ color: "var(--color-text-tertiary)", margin: "var(--space-2) 0" }}
         >
-          Đang trả lời…
+          Thinking…
         </p>
       )}
       <div ref={endRef} />

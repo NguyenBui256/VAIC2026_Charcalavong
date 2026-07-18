@@ -6,6 +6,7 @@
 import { useState, type KeyboardEvent } from "react";
 import { Plus, MessageSquare, Trash2 } from "lucide-react";
 import type { Conversation } from "../../lib/chatStore";
+import { ConfirmDialog } from "../ui";
 
 interface Props {
   conversations: Conversation[];
@@ -26,6 +27,7 @@ export default function ConversationList({
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [confirmId, setConfirmId] = useState<string | null>(null);
 
   function startEdit(c: Conversation) {
     setEditingId(c.id);
@@ -52,6 +54,8 @@ export default function ConversationList({
       cancelEdit();
     }
   }
+
+  const pending = conversations.find((c) => c.id === confirmId) ?? null;
 
   return (
     <div
@@ -99,7 +103,7 @@ export default function ConversationList({
               textAlign: "center",
             }}
           >
-            Chưa có hội thoại
+            No conversations
           </p>
         ) : (
           conversations.map((c) => {
@@ -133,7 +137,7 @@ export default function ConversationList({
                     onKeyDown={onEditKeyDown}
                     onBlur={commitEdit}
                     onClick={(e) => e.stopPropagation()}
-                    aria-label="Đổi tên hội thoại"
+                    aria-label="Rename conversation"
                     style={{
                       flex: 1,
                       minWidth: 0,
@@ -153,7 +157,7 @@ export default function ConversationList({
                       e.stopPropagation();
                       startEdit(c);
                     }}
-                    title="Double-click để đổi tên"
+                    title="Double-click to rename"
                     style={{
                       flex: 1,
                       overflow: "hidden",
@@ -170,10 +174,10 @@ export default function ConversationList({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onDelete(c.id);
+                      setConfirmId(c.id);
                     }}
-                    aria-label="Xóa hội thoại"
-                    title="Xóa"
+                    aria-label="Delete conversation"
+                    title="Delete"
                     style={{
                       display: "inline-flex",
                       background: "none",
@@ -192,6 +196,23 @@ export default function ConversationList({
           })
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmId !== null}
+        title="Delete conversation?"
+        body={
+          pending
+            ? `Delete “${pending.title}”? This can’t be undone.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={() => {
+          if (confirmId) onDelete(confirmId);
+          setConfirmId(null);
+        }}
+        onCancel={() => setConfirmId(null)}
+      />
     </div>
   );
 }

@@ -35,12 +35,12 @@ export default function ChatSidePanel({ targetType }: Props) {
       }}
     >
       <section>
-        <div style={SECTION_HEADER_STYLE}>Tiến độ (Progress)</div>
+        <div style={SECTION_HEADER_STYLE}>Progress</div>
         <ProgressPanel targetType={targetType} />
       </section>
 
       <section>
-        <div style={SECTION_HEADER_STYLE}>Kết quả (Outputs)</div>
+        <div style={SECTION_HEADER_STYLE}>Outputs</div>
         <OutputsPanel />
       </section>
     </div>

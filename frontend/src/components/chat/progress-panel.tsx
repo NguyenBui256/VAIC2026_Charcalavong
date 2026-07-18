@@ -11,10 +11,10 @@ interface SampleStep {
 }
 
 const SAMPLE_STEPS: SampleStep[] = [
-  { label: "Thu thập dữ liệu", status: "completed" },
-  { label: "Phân tích yêu cầu", status: "running" },
-  { label: "Chờ phê duyệt", status: "awaiting_approval" },
-  { label: "Tổng hợp kết quả", status: "pending" },
+  { label: "Collect data", status: "completed" },
+  { label: "Analyze request", status: "running" },
+  { label: "Awaiting approval", status: "awaiting_approval" },
+  { label: "Compile results", status: "pending" },
 ];
 
 const STATUS_COLOR: Record<NodeStatus, string> = {
@@ -39,7 +39,7 @@ export default function ProgressPanel({ targetType }: Props) {
         className="text-caption"
         style={{ color: "var(--color-text-tertiary)", padding: "var(--space-2) 0" }}
       >
-        Chưa có run — chọn workflow để xem tiến độ.
+        No run yet — pick a workflow to see progress.
       </p>
     );
   }
@@ -79,7 +79,7 @@ export default function ProgressPanel({ targetType }: Props) {
         className="text-caption"
         style={{ color: "var(--color-text-tertiary)", marginTop: "var(--space-3)" }}
       >
-        Dữ liệu mẫu (chưa nối run thật)
+        Sample data (not wired to a real run)
       </p>
     </div>
   );

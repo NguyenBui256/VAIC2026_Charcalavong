@@ -82,20 +82,28 @@ export function useChat() {
     setActiveId(id);
   }, []);
 
-  const newConversation = useCallback(() => {
-    cancelRef.current?.();
-    setIsTyping(false);
-    const now = Date.now();
-    const conv: Conversation = {
-      id: uid(),
-      title: "New chat",
-      messages: [],
-      createdAt: now,
-      updatedAt: now,
-    };
-    setConversations((prev) => [conv, ...prev]);
-    setActiveId(conv.id);
-  }, []);
+  // Create a conversation with its target already chosen (from the new-chat
+  // modal). The target is locked for the conversation's lifetime.
+  const createConversation = useCallback(
+    (targetType: "agent" | "workflow", targetId: string, targetName: string) => {
+      cancelRef.current?.();
+      setIsTyping(false);
+      const now = Date.now();
+      const conv: Conversation = {
+        id: uid(),
+        title: targetName || "New chat",
+        messages: [],
+        createdAt: now,
+        updatedAt: now,
+        targetType,
+        targetId,
+        targetName,
+      };
+      setConversations((prev) => [conv, ...prev]);
+      setActiveId(conv.id);
+    },
+    [],
+  );
 
   const deleteConversation = useCallback(
     (id: string) => {
@@ -234,7 +242,7 @@ export function useChat() {
     activeConversation,
     isTyping,
     selectConversation,
-    newConversation,
+    createConversation,
     deleteConversation,
     renameConversation,
     setTarget,

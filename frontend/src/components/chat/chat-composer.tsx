@@ -56,7 +56,7 @@ export default function ChatComposer({ onSend, disabled }: Props) {
         }}
         onKeyDown={onKeyDown}
         rows={1}
-        placeholder="Nhập tin nhắn… (Enter gửi, Shift+Enter xuống dòng)"
+        placeholder="Type a message… (Enter to send, Shift+Enter for a new line)"
         style={{
           flex: 1,
           resize: "none",
@@ -76,7 +76,7 @@ export default function ChatComposer({ onSend, disabled }: Props) {
         type="button"
         onClick={submit}
         disabled={disabled || !value.trim()}
-        aria-label="Gửi"
+        aria-label="Send"
         style={{
           display: "inline-flex",
           alignItems: "center",

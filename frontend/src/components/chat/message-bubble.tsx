@@ -68,8 +68,8 @@ export default function MessageBubble({ message }: { message: ChatMessage }) {
           <button
             type="button"
             onClick={handleCopy}
-            aria-label={copied ? "Đã copy" : "Copy tin nhắn"}
-            title={copied ? "Đã copy" : "Copy"}
+            aria-label={copied ? "Copied" : "Copy message"}
+            title={copied ? "Copied" : "Copy"}
             style={{
               display: "inline-flex",
               alignItems: "center",

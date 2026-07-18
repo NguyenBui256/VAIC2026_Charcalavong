@@ -11,8 +11,8 @@ interface SampleOutput {
 }
 
 const SAMPLE_OUTPUTS: SampleOutput[] = [
-  { name: "bao-cao-tong-hop.pdf", type: "PDF", size: "182 KB" },
-  { name: "du-lieu-phan-tich.csv", type: "CSV", size: "44 KB" },
+  { name: "report-summary.pdf", type: "PDF", size: "182 KB" },
+  { name: "analysis-data.csv", type: "CSV", size: "44 KB" },
 ];
 
 export default function OutputsPanel() {
@@ -68,7 +68,7 @@ export default function OutputsPanel() {
         className="text-caption"
         style={{ color: "var(--color-text-tertiary)", marginTop: "var(--space-3)" }}
       >
-        Dữ liệu mẫu
+        Sample data
       </p>
     </div>
   );
