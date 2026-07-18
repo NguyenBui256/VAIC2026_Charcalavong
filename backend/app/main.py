@@ -25,6 +25,7 @@ from app.core.arq_pool import close_arq_pool, init_arq_pool
 from app.core.auth import AuthMiddleware
 from app.core.db import SessionLocal
 from app.core.errors import register_error_handlers
+from app.core.miniapp_cors import MiniAppNullOriginCORSMiddleware
 from app.core.settings import get_settings
 from app.modules.agent_builder.routes import router as agents_router
 from app.modules.audit.routes import router as audit_router
@@ -70,6 +71,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Final review fix — the sandboxed Mini-App iframe (`sandbox="allow-scripts
+# allow-forms"`, no `allow-same-origin`) has an OPAQUE origin, so its fetches
+# to `/apps/{app_id}/rows*` send `Origin: null`, which the fixed allow-list
+# above never matches. Added LAST so it wraps OUTERMOST (runs first), ahead
+# of AuthMiddleware and the global CORSMiddleware — see
+# `app/core/miniapp_cors.py` for the full rationale and scoping. It only
+# touches `Origin: null` requests to mini-app row routes; everything else
+# passes through unchanged.
+app.add_middleware(MiniAppNullOriginCORSMiddleware)
 
 # Story 1.3 — tenant module routes (login, refresh, me, users).
 app.include_router(tenant_router)
