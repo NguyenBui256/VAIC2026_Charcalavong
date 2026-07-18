@@ -572,8 +572,8 @@ git commit -m "fix(kb): translate platform doc ids to vaic external ids for retr
 Thêm vào `backend/.env` (KHÔNG commit):
 ```
 VAIC_VAIC_TOOLS_ENABLED=true
-VAIC_VAIC_TOOLS_BASE_URL=http://localhost:8000
-VAIC_VAIC_TOOLS_MCP_URL=http://localhost:8000/mcp/
+VAIC_VAIC_TOOLS_BASE_URL=http://localhost:8002
+VAIC_VAIC_TOOLS_MCP_URL=http://localhost:8002/mcp/
 VAIC_VAIC_TOOLS_API_KEY=<khớp MCP_API_KEYS của vaic_tools>
 ```
 
