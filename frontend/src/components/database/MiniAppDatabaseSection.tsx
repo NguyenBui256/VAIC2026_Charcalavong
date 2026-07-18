@@ -10,6 +10,7 @@ import { useMiniAppDatabases, useMiniAppDatabaseMutations, useMiniAppDatabaseRow
 import type { EntitySchema, MiniAppDatabase, MiniAppDatabaseRow } from "../../lib/miniAppDatabasesApi";
 
 const EMPTY_SCHEMA: EntitySchema = { fields: [{ name: "", type: "string", required: false }] };
+const FIELD_NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 
 interface DraftState {
   id: string | null;         // null = creating
@@ -42,6 +43,11 @@ export default function MiniAppDatabaseSection() {
     if (!draft.name.trim()) { show("Name is required", "error"); return; }
     if (draft.schema.fields.length === 0 || draft.schema.fields.some((f) => !f.name.trim())) {
       show("Every field needs a name", "error"); return;
+    }
+    const badField = draft.schema.fields.find((f) => !FIELD_NAME_PATTERN.test(f.name));
+    if (badField) {
+      show(`Field name "${badField.name}" must be lowercase letters, digits, or underscores, starting with a letter`, "error");
+      return;
     }
     const input = { name: draft.name, description: draft.description, entity_schema: draft.schema };
     if (draft.id === null) {
