@@ -20,6 +20,9 @@ import {
   mockDashboardErrorFactory,
   type DashboardData,
 } from "../lib/mockData";
+import { auditApi } from "../features/audit/api";
+import type { AuditStatus } from "../features/audit/types";
+import type { RunState } from "../lib/icons";
 
 export type DashboardMockMode = "populated" | "empty" | "error";
 
@@ -46,9 +49,35 @@ async function fetchDashboard(): Promise<DashboardData> {
   if (artificialDelayMs > 0) {
     await new Promise((r) => setTimeout(r, artificialDelayMs));
   }
-  if (mockMode === "empty") return mockDashboardEmpty;
-  if (mockMode === "error") mockDashboardErrorFactory()();
-  return mockDashboardPopulated;
+  if (import.meta.env.MODE === "test") {
+    if (mockMode === "empty") return mockDashboardEmpty;
+    if (mockMode === "error") mockDashboardErrorFactory()();
+    return mockDashboardPopulated;
+  }
+  const sessions = await auditApi.sessions("limit=20");
+  const stateMapping: Record<AuditStatus, RunState> = {
+    pending: "pending", running: "running", awaiting_human: "escalated",
+    completed: "success", failed: "error", timed_out: "error",
+    cancelled: "error", skipped: "draft",
+  };
+  const state = (value: AuditStatus): RunState => stateMapping[value];
+  return {
+    kpis: {
+      activeRuns: sessions.filter((item) => item.status === "running").length,
+      pendingEscalations: sessions.filter((item) => item.status === "awaiting_human").length,
+      todayMiniAppEvents: sessions.filter((item) => item.trigger_type === "app_event").length,
+    },
+    escalations: sessions.filter((item) => item.status === "awaiting_human").map((item) => ({
+      id: `escalation-${item.id}`, runId: item.id, runName: item.name,
+      reason: item.failure_summary || "Human decision required",
+      createdAtOffsetMs: new Date(item.started_at ?? item.created_at).getTime() - Date.now(),
+    })),
+    recentRuns: sessions.slice(0, 5).map((item) => ({
+      id: item.id, name: item.name || "Workflow run", state: state(item.status),
+      durationMs: item.started_at && item.ended_at ? new Date(item.ended_at).getTime() - new Date(item.started_at).getTime() : 0,
+      startedAtOffsetMs: new Date(item.started_at ?? item.created_at).getTime() - Date.now(),
+    })),
+  };
 }
 
 export interface UseDashboardDataResult {

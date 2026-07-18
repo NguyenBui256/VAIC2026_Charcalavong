@@ -42,7 +42,8 @@ SEED_PASSWORD = "Password123!"
 
 # -- Session-scoped migrations ---------------------------------------------
 
-@pytest.fixture(scope="session")
+
+@pytest.fixture(scope="session", autouse=True)
 def _migrations_applied() -> Iterator[None]:
     """Apply Alembic migrations once per test session, then stamp back to base.
 
@@ -74,6 +75,7 @@ def _migrations_applied() -> Iterator[None]:
 
 
 # -- Cross-tenant seed data ------------------------------------------------
+
 
 @pytest.fixture(scope="session")
 def seed_data(_migrations_applied: None) -> dict[str, dict[str, Any]]:
@@ -150,6 +152,7 @@ def seed_data(_migrations_applied: None) -> dict[str, dict[str, Any]]:
 
 # -- Per-test app session (RLS subject) ------------------------------------
 
+
 @pytest.fixture()
 def app_session(seed_data: dict[str, dict[str, Any]]) -> Iterator[Session]:
     """Yield a fresh Session against the runtime engine.
@@ -172,6 +175,7 @@ _ = (engine, admin_engine)
 
 
 # -- Story 1.3 additions ---------------------------------------------------
+
 
 @pytest.fixture(scope="session")
 def auth_seed(seed_data: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:

@@ -54,6 +54,7 @@ _pwd = CryptContext(schemes=["argon2"], deprecated="auto")
 # Error — minimal until Story 1.4 lands the shared envelope.
 # ---------------------------------------------------------------------------
 
+
 class AuthError(Exception):
     """Authentication failure carrying a stable code + http_status."""
 
@@ -81,6 +82,7 @@ class AuthError(Exception):
 # Password hashing (Argon2)
 # ---------------------------------------------------------------------------
 
+
 def hash_password(plain: str) -> str:
     """Argon2 hash a plaintext password."""
     return _pwd.hash(plain)
@@ -97,6 +99,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 # ---------------------------------------------------------------------------
 # JWT
 # ---------------------------------------------------------------------------
+
 
 def create_access_token(
     claims: dict[str, Any],
@@ -119,9 +122,7 @@ def decode_access_token(token: str) -> dict[str, Any]:
     """Decode + verify a JWT. Raises AuthError on any failure."""
     s = get_settings()
     try:
-        payload: dict[str, Any] = jwt.decode(
-            token, s.jwt_secret, algorithms=[s.jwt_algorithm]
-        )
+        payload: dict[str, Any] = jwt.decode(token, s.jwt_secret, algorithms=[s.jwt_algorithm])
     except JWTError as exc:
         raise AuthError("Invalid or expired token") from exc
 
@@ -137,15 +138,17 @@ def decode_access_token(token: str) -> dict[str, Any]:
 
 # Paths that bypass authentication. Public endpoints must not depend on the
 # tenant contextvar being set.
-PUBLIC_PATHS: frozenset[str] = frozenset({
-    "/health",
-    "/ready",
-    "/auth/login",
-    "/auth/refresh",
-    "/openapi.json",
-    "/docs",
-    "/redoc",
-})
+PUBLIC_PATHS: frozenset[str] = frozenset(
+    {
+        "/health",
+        "/ready",
+        "/auth/login",
+        "/auth/refresh",
+        "/openapi.json",
+        "/docs",
+        "/redoc",
+    }
+)
 
 
 def _is_public(path: str) -> bool:
@@ -190,7 +193,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(
-        self, request: Request, call_next: Any  # noqa: ANN401 -- ASGI contract
+        self,
+        request: Request,
+        call_next: Any,  # noqa: ANN401 -- ASGI contract
     ) -> Any:  # noqa: ANN401
         path = request.url.path
         trace_id = uuid.uuid4()
@@ -203,7 +208,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
             return _unauthenticated(trace_id, "Missing or malformed Authorization header")
-        token = auth_header[len("Bearer "):].strip()
+        token = auth_header[len("Bearer ") :].strip()
         if not token:
             return _unauthenticated(trace_id, "Empty bearer token")
 

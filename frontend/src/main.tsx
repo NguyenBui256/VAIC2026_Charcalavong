@@ -12,6 +12,7 @@ import "./styles/components.css";
 import "./styles/agents.css";
 import "./styles/workflows.css";
 import "./styles/motion.css";
+import "./styles/audit.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {

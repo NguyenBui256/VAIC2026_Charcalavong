@@ -44,9 +44,9 @@ export default function DashboardPage() {
   };
 
   // Click-to-trace: navigate to the trace view for the run.
-  // `/audit` reads the `run_id` query param to pre-fill its Run filter.
+  // Audit V2 — open the run's trace/session in the Audit Explorer detail page.
   const handleOpenRun = (runId: string) => {
-    navigate(`/audit?run_id=${runId}`);
+    navigate(`/audit/${runId}`);
   };
 
   return (

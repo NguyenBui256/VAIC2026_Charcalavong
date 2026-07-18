@@ -11,11 +11,13 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.0",
+    "@tanstack/react-virtual": "^3.14.6",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@xyflow/react": "^12.11.2",
     "clsx": "^2.1.1",
+    "html-to-image": "^1.11.13",
     "jsdom": "^29.1.1",
     "lucide-react": "^1.25.0",
     "react": "^19.1.0",

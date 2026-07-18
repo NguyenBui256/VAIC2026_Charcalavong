@@ -100,13 +100,21 @@ def list_tenant_users(session: Session) -> list[dict[str, Any]]:
     does this via get_session_with_tenant). RLS enforces isolation; no
     Python-side filter.
     """
-    rows = session.execute(select(User)).scalars().all()
+    from app.core.tenant_context import tenant_context
+
+    tenant_id = tenant_context.get()
+    if tenant_id is None:
+        return []
+    rows = session.execute(select(User).where(User.tenant_id == tenant_id)).scalars().all()
     return [user_profile(u) for u in rows]
 
 
 def user_by_id(session: Session, user_id: uuid.UUID | str) -> User | None:
     """Fetch a single user by id — subject to RLS isolation."""
-    stmt = select(User).where(User.id == uuid.UUID(str(user_id)))
+    from app.core.tenant_context import tenant_context
+
+    tenant_id = tenant_context.get()
+    stmt = select(User).where(User.id == uuid.UUID(str(user_id)), User.tenant_id == tenant_id)
     return session.execute(stmt).scalar_one_or_none()
 
 

@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     app_db_role: str = Field(default="", description="Postgres role for the app")
 
     redis_url: str = Field(default="redis://localhost:6379/0")
+    audit_master_key: str = Field(
+        default="", description="Base64-encoded 32-byte AES key for audit signing keys"
+    )
 
     # Auth — used starting in Story 1.3
     jwt_secret: str = Field(default="replace-with-32-byte-hex-from-openssl-rand-hex-32")
@@ -82,8 +85,13 @@ class Settings(BaseSettings):
     # LLM provider keys — Story 1.6 (AD-7). Loaded at runtime; a missing key
     # surfaces as a clear error when the adapter is *called*, not at import
     # time (FR-5 consequence).
+    # Audit Evaluation (V2) — provider keys + judge context sizing. The fuller
+    # llm_* field definitions (base_url/api_key/provider/model/timeout) live
+    # below; only the fields unique to the evaluation feature are declared here.
     anthropic_api_key: str = Field(default="", description="Anthropic API key")
     openai_api_key: str = Field(default="", description="OpenAI API key")
+    evaluation_max_context_tokens: int = Field(default=32000, ge=4000, le=200000)
+    evaluation_chunk_tokens: int = Field(default=8000, ge=2000, le=32000)
     google_api_key: str = Field(default="", description="Google Gemini API key")
     ollama_base_url: str = Field(
         default="http://localhost:11434",

@@ -41,6 +41,7 @@ from scripts.bootstrap_demo_tenant import (
 # Fixtures — isolated bootstrap state per test.
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def clean_db(_migrations_applied: None) -> Iterator[None]:
     """Remove only the demo tenant's rows so each test starts clean for 1.12.
@@ -88,8 +89,7 @@ def clean_db(_migrations_applied: None) -> Iterator[None]:
         )
         s.execute(
             text(
-                "DELETE FROM users WHERE tenant_id IN "
-                "(SELECT id FROM tenants WHERE name = :name)"
+                "DELETE FROM users WHERE tenant_id IN (SELECT id FROM tenants WHERE name = :name)"
             ),
             {"name": DEMO_TENANT_NAME},
         )
@@ -121,19 +121,15 @@ def api_client(clean_db: None) -> Iterator[TestClient]:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _fetch_demo_tenant(session: Session) -> Tenant | None:
-    return (
-        session.execute(
-            select(Tenant).where(Tenant.name == DEMO_TENANT_NAME)
-        )
-        .scalars()
-        .first()
-    )
+    return session.execute(select(Tenant).where(Tenant.name == DEMO_TENANT_NAME)).scalars().first()
 
 
 # ---------------------------------------------------------------------------
 # AC: Script runs on a clean DB and creates a Tenant.
 # ---------------------------------------------------------------------------
+
 
 def test_bootstrap_creates_demo_tenant(clean_db: None) -> None:
     """Bootstrap creates exactly one Tenant named DEMO_TENANT_NAME."""
@@ -155,9 +151,7 @@ def test_tenant_has_32_byte_hex_audit_key(clean_db: None) -> None:
         assert tenant.audit_key_id is not None
         # audit_key_id is stored as UUID; the 32-byte hex form is the str().
         hex_str = str(tenant.audit_key_id).replace("-", "")
-        assert len(hex_str) == 32, (
-            f"audit_key_id must be 32 hex chars, got {len(hex_str)}"
-        )
+        assert len(hex_str) == 32, f"audit_key_id must be 32 hex chars, got {len(hex_str)}"
         # Must parse as a UUID.
         uuid.UUID(hex_str)
 
@@ -166,17 +160,14 @@ def test_tenant_has_32_byte_hex_audit_key(clean_db: None) -> None:
 # AC: At least 2 Departments.
 # ---------------------------------------------------------------------------
 
+
 def test_bootstrap_creates_at_least_two_departments(clean_db: None) -> None:
     bootstrap_demo_tenant()
     with AdminSessionLocal() as s:
         tenant = _fetch_demo_tenant(s)
         assert tenant is not None
         depts = (
-            s.execute(
-                select(Department).where(Department.tenant_id == tenant.id)
-            )
-            .scalars()
-            .all()
+            s.execute(select(Department).where(Department.tenant_id == tenant.id)).scalars().all()
         )
         assert len(depts) >= 2, f"Expected >=2 departments, got {len(depts)}"
         dept_names = {d.name for d in depts}
@@ -189,16 +180,13 @@ def test_bootstrap_creates_at_least_two_departments(clean_db: None) -> None:
 # AC: At least 3 Users, one per role.
 # ---------------------------------------------------------------------------
 
+
 def test_bootstrap_creates_at_least_three_users(clean_db: None) -> None:
     bootstrap_demo_tenant()
     with AdminSessionLocal() as s:
         tenant = _fetch_demo_tenant(s)
         assert tenant is not None
-        users = (
-            s.execute(select(User).where(User.tenant_id == tenant.id))
-            .scalars()
-            .all()
-        )
+        users = s.execute(select(User).where(User.tenant_id == tenant.id)).scalars().all()
         assert len(users) >= 3, f"Expected >=3 users, got {len(users)}"
 
 
@@ -210,11 +198,7 @@ def test_bootstrap_covers_required_roles(clean_db: None) -> None:
     with AdminSessionLocal() as s:
         tenant = _fetch_demo_tenant(s)
         assert tenant is not None
-        users = (
-            s.execute(select(User).where(User.tenant_id == tenant.id))
-            .scalars()
-            .all()
-        )
+        users = s.execute(select(User).where(User.tenant_id == tenant.id)).scalars().all()
         roles = {u.role for u in users}
         assert "builder" in roles, f"builder role missing; roles={roles}"
         assert "manager" in roles, f"manager role missing; roles={roles}"
@@ -227,35 +211,24 @@ def test_each_user_has_department(clean_db: None) -> None:
     with AdminSessionLocal() as s:
         tenant = _fetch_demo_tenant(s)
         assert tenant is not None
-        users = (
-            s.execute(select(User).where(User.tenant_id == tenant.id))
-            .scalars()
-            .all()
-        )
+        users = s.execute(select(User).where(User.tenant_id == tenant.id)).scalars().all()
         for u in users:
-            assert u.department_id is not None, (
-                f"User {u.email} has no department"
-            )
+            assert u.department_id is not None, f"User {u.email} has no department"
 
 
 # ---------------------------------------------------------------------------
 # AC: All password hashes are Argon2.
 # ---------------------------------------------------------------------------
 
+
 def test_all_users_have_argon2_hash(clean_db: None) -> None:
     bootstrap_demo_tenant()
     with AdminSessionLocal() as s:
         tenant = _fetch_demo_tenant(s)
         assert tenant is not None
-        users = (
-            s.execute(select(User).where(User.tenant_id == tenant.id))
-            .scalars()
-            .all()
-        )
+        users = s.execute(select(User).where(User.tenant_id == tenant.id)).scalars().all()
         for u in users:
-            assert u.password_hash is not None, (
-                f"User {u.email} has NULL password_hash"
-            )
+            assert u.password_hash is not None, f"User {u.email} has NULL password_hash"
             assert u.password_hash.startswith("$argon2"), (
                 f"User {u.email} hash is not Argon2: {u.password_hash!r}"
             )
@@ -267,11 +240,7 @@ def test_seeded_password_verifies(clean_db: None) -> None:
     with AdminSessionLocal() as s:
         tenant = _fetch_demo_tenant(s)
         assert tenant is not None
-        users = (
-            s.execute(select(User).where(User.tenant_id == tenant.id))
-            .scalars()
-            .all()
-        )
+        users = s.execute(select(User).where(User.tenant_id == tenant.id)).scalars().all()
         for u in users:
             assert verify_password(DEFAULT_PASSWORD, u.password_hash), (
                 f"Default password did not verify for {u.email}"
@@ -282,6 +251,7 @@ def test_seeded_password_verifies(clean_db: None) -> None:
 # AC: Idempotency — second run does not duplicate rows.
 # ---------------------------------------------------------------------------
 
+
 def test_bootstrap_is_idempotent(clean_db: None) -> None:
     """Running twice must yield the same row counts (no duplicates)."""
     bootstrap_demo_tenant()
@@ -289,15 +259,13 @@ def test_bootstrap_is_idempotent(clean_db: None) -> None:
         tenant = _fetch_demo_tenant(s)
         assert tenant is not None
         first_counts = {
-            "tenants": s.execute(
-                select(Tenant).where(Tenant.name == DEMO_TENANT_NAME)
-            ).scalars().all(),
-            "departments": s.execute(
-                select(Department).where(Department.tenant_id == tenant.id)
-            ).scalars().all(),
-            "users": s.execute(
-                select(User).where(User.tenant_id == tenant.id)
-            ).scalars().all(),
+            "tenants": s.execute(select(Tenant).where(Tenant.name == DEMO_TENANT_NAME))
+            .scalars()
+            .all(),
+            "departments": s.execute(select(Department).where(Department.tenant_id == tenant.id))
+            .scalars()
+            .all(),
+            "users": s.execute(select(User).where(User.tenant_id == tenant.id)).scalars().all(),
         }
 
     # Run a second time.
@@ -308,15 +276,13 @@ def test_bootstrap_is_idempotent(clean_db: None) -> None:
         assert tenant2 is not None
         assert tenant2.id == tenant.id, "Tenant id changed on second run"
         second_counts = {
-            "tenants": s.execute(
-                select(Tenant).where(Tenant.name == DEMO_TENANT_NAME)
-            ).scalars().all(),
-            "departments": s.execute(
-                select(Department).where(Department.tenant_id == tenant2.id)
-            ).scalars().all(),
-            "users": s.execute(
-                select(User).where(User.tenant_id == tenant2.id)
-            ).scalars().all(),
+            "tenants": s.execute(select(Tenant).where(Tenant.name == DEMO_TENANT_NAME))
+            .scalars()
+            .all(),
+            "departments": s.execute(select(Department).where(Department.tenant_id == tenant2.id))
+            .scalars()
+            .all(),
+            "users": s.execute(select(User).where(User.tenant_id == tenant2.id)).scalars().all(),
         }
 
     for table in ("tenants", "departments", "users"):
@@ -333,10 +299,7 @@ def test_bootstrap_is_idempotent_email_stable(clean_db: None) -> None:
         tenant = _fetch_demo_tenant(s)
         assert tenant is not None
         emails_first = {
-            row[0]
-            for row in s.execute(
-                select(User.email).where(User.tenant_id == tenant.id)
-            )
+            row[0] for row in s.execute(select(User.email).where(User.tenant_id == tenant.id))
         }
 
     bootstrap_demo_tenant()
@@ -345,10 +308,7 @@ def test_bootstrap_is_idempotent_email_stable(clean_db: None) -> None:
         tenant2 = _fetch_demo_tenant(s)
         assert tenant2 is not None
         emails_second = {
-            row[0]
-            for row in s.execute(
-                select(User.email).where(User.tenant_id == tenant2.id)
-            )
+            row[0] for row in s.execute(select(User.email).where(User.tenant_id == tenant2.id))
         }
 
     assert emails_first == emails_second
@@ -358,6 +318,7 @@ def test_bootstrap_is_idempotent_email_stable(clean_db: None) -> None:
 # AC: Seeded users can authenticate via POST /auth/login.
 # ---------------------------------------------------------------------------
 
+
 def test_seeded_users_can_login(api_client: TestClient) -> None:
     """The builder/admin user can authenticate via the real /auth/login endpoint."""
     bootstrap_demo_tenant()
@@ -365,11 +326,7 @@ def test_seeded_users_can_login(api_client: TestClient) -> None:
         tenant = _fetch_demo_tenant(s)
         assert tenant is not None
         admin_user = (
-            s.execute(
-                select(User).where(
-                    User.tenant_id == tenant.id, User.role == "builder"
-                )
-            )
+            s.execute(select(User).where(User.tenant_id == tenant.id, User.role == "builder"))
             .scalars()
             .first()
         )

@@ -181,8 +181,7 @@ def test_domain_code_does_not_import_concrete_adapters() -> None:
     forbidden = ["Anthropic", "OpenAi", "Google", "Ollama", "anthropic", "openai"]
     for word in forbidden:
         assert word not in src, (
-            f"FakeAgent source references '{word}' — domain code must be "
-            "provider-agnostic (AD-7)."
+            f"FakeAgent source references '{word}' — domain code must be provider-agnostic (AD-7)."
         )
 
 

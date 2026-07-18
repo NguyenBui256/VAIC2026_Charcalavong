@@ -16,7 +16,8 @@ import WorkflowDetailPage from "./routes/workflow-detail";
 import RunTrackingPage from "./routes/orchestrator/RunTrackingPage";
 import MiniAppsPage from "./routes/mini-apps";
 import MiniAppHostPage from "./routes/mini-app-host";
-import AuditPage from "./routes/audit";
+import AuditExplorerPage from "./routes/audit-explorer";
+import AuditSessionPage from "./routes/audit-session";
 import ToolsPage from "./routes/tools/ToolsPage";
 import KnowledgeBasePage from "./routes/knowledge-base/KnowledgeBasePage";
 import ChatPage from "./routes/chat/ChatPage";
@@ -81,8 +82,9 @@ export function AppRoutes() {
         <Route path="/mini-apps/:appId" element={<MiniAppHostPage />} />
         {/* Placeholder routes for nav — real surfaces arrive in later stories */}
         <Route path="/actions" element={<ActionsPage />} />
-        {/* Epic 6 (FR-22) — Trace Dashboard. */}
-        <Route path="/audit" element={<AuditPage />} />
+        {/* Epic 6 (FR-22) — Audit V2 Trace Explorer + session evaluation. */}
+        <Route path="/audit" element={<AuditExplorerPage />} />
+        <Route path="/audit/:sessionId" element={<AuditSessionPage />} />
         <Route path="/settings" element={<ComingSoon title="Settings" />} />
       </Route>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
