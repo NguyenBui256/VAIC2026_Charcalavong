@@ -48,9 +48,18 @@ def _load_run(session: Session, run_id: uuid.UUID | str) -> WorkflowRun:
 def _load_node_execs(
     session: Session, run_id: uuid.UUID | str
 ) -> dict[str, RunNodeExecution]:
+    # `populate_existing()` is required here (mirrors `aggregate_run` in
+    # service.py, M-3): the identity-mapped `RunNodeExecution` rows get
+    # mutated via raw-SQL CAS commits in `transition_node_status`, which
+    # never expires the cached ORM instances. Without this, a second loop
+    # iteration in `graph_orchestrate` can return a stale cached `status`
+    # (e.g. `pending` after a committed `completed`), causing the engine to
+    # re-pick an already-finished node, lose the pending->running CAS, and
+    # spin forever.
     rows = (
         session.query(RunNodeExecution)
         .filter(RunNodeExecution.run_id == uuid.UUID(str(run_id)))
+        .execution_options(populate_existing=True)
         .all()
     )
     return {r.node_key: r for r in rows}
@@ -189,7 +198,16 @@ def finalize_run(session: Session, run_id: uuid.UUID | str, node_keys: list[str]
 async def graph_orchestrate(
     session: Session, run_id: uuid.UUID | str, *, executor: Any | None = None
 ) -> None:
-    """Engine entrypoint. Re-enterable; recomputes state each call."""
+    """Engine entrypoint. Re-enterable; recomputes state each call.
+
+    Caller contract: the run must already be in `running` status before
+    (re)entry. `_set_run_awaiting_human` and `finalize_run` both CAS the run
+    with `from_status="running"`, so on a paused (`awaiting_human`) run the
+    worker (`app/workers/orchestrator_worker.py::run_workflow`) is
+    responsible for CAS'ing `awaiting_human -> running` before re-invoking
+    this function on the `resume=True` path. This module does not perform
+    that transition itself.
+    """
     _reassert_rls(session)
     run = _load_run(session, run_id)
     snapshot = run.graph_snapshot
