@@ -21,6 +21,8 @@ import { semanticIcons, ICON_STROKE_WIDTH } from "../../lib/icons";
 import { useKbPool, useKbPoolMutations } from "../../hooks/useKbPool";
 import { useIsBuilder } from "../../hooks/useIsBuilder";
 import KbStatusPill from "../../components/agents/KbStatusPill";
+import KbPoolStats from "./KbPoolStats";
+import { formatBytes, friendlyType, FileNameCell } from "./kb-file-presentation";
 import {
   KB_MAX_BYTES,
   KB_ACCEPTED_EXTENSIONS,
@@ -28,10 +30,17 @@ import {
   type KbDocument,
 } from "../../lib/kbApi";
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+const numericCellStyle = { fontVariantNumeric: "tabular-nums" } as const;
+
+/** Compact upload timestamp, e.g. "Jul 19, 2026, 02:45". */
+function formatUploaded(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function hasAcceptedExtension(filename: string): boolean {
@@ -88,25 +97,47 @@ export default function KnowledgeBasePage() {
   }
 
   const columns: TableColumn<KbDocument>[] = [
-    { key: "filename", header: "Name" },
-    { key: "content_type", header: "Type" },
-    { key: "size_bytes", header: "Size", render: (d) => formatBytes(d.size_bytes) },
-    { key: "chunk_count", header: "Chunks" },
+    { key: "filename", header: "Name", render: (d) => <FileNameCell doc={d} /> },
+    { key: "content_type", header: "Type", render: (d) => friendlyType(d) },
+    {
+      key: "size_bytes",
+      header: "Size",
+      align: "center",
+      render: (d) => <span style={numericCellStyle}>{formatBytes(d.size_bytes)}</span>,
+    },
+    {
+      key: "chunk_count",
+      header: "Chunks",
+      align: "center",
+      render: (d) =>
+        d.chunk_count > 0 ? (
+          <span style={numericCellStyle}>{d.chunk_count.toLocaleString()}</span>
+        ) : (
+          <span style={{ color: "var(--color-text-tertiary)" }}>—</span>
+        ),
+    },
     {
       key: "status",
       header: "Status",
+      align: "center",
       render: (d) => <KbStatusPill status={d.status} failureReason={d.failure_reason} />,
     },
     {
       key: "created_at",
       header: "Uploaded",
-      render: (d) => new Date(d.created_at).toLocaleString(),
+      render: (d) => (
+        <span style={{ color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
+          {formatUploaded(d.created_at)}
+        </span>
+      ),
     },
     ...(isBuilder
       ? [
           {
             key: "actions",
             header: "",
+            width: "1%",
+            align: "right" as const,
             render: (d: KbDocument) => (
               <Button
                 variant="icon"
@@ -212,6 +243,8 @@ export default function KnowledgeBasePage() {
         onChange={handleInputChange}
         data-testid="vaic-kb-file-input"
       />
+
+      {documents.length > 0 && <KbPoolStats documents={documents} />}
 
       <Card>{renderBody()}</Card>
 
