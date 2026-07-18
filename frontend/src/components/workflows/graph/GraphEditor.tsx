@@ -14,6 +14,7 @@ import {
   type OnNodesChange,
   type OnEdgesChange,
   type OnConnect,
+  type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import AgentNode from "./AgentNode";
@@ -41,7 +42,7 @@ function Canvas(props: GraphEditorProps) {
     nodes, edges, edgeMode,
     onNodesChange, onEdgesChange, onConnect, onSelectNode, onDropNode,
   } = props;
-  const nodeTypes = useMemo(() => ({ agent: AgentNode }), []);
+  const nodeTypes = useMemo<NodeTypes>(() => ({ agent: AgentNode }), []);
   const { screenToFlowPosition } = useReactFlow();
 
   const renderedEdges = useMemo(() => {
