@@ -28,6 +28,7 @@ from app.core.errors import register_error_handlers
 from app.core.miniapp_cors import MiniAppNullOriginCORSMiddleware
 from app.core.settings import get_settings
 from app.modules.agent_builder.kb_routes import router as kb_documents_router
+from app.modules.agent_builder.routes import integrations_router
 from app.modules.agent_builder.routes import router as agents_router
 from app.modules.agent_builder.tool_routes import router as tools_router
 from app.modules.audit.routes import router as audit_router
@@ -96,6 +97,9 @@ app.include_router(agents_router)
 
 # Sub-project A — tenant-wide Tool catalog + KB store.
 app.include_router(tools_router)
+
+# Shared Pool reshape — tenant-level Integration CRUD (builder-managed).
+app.include_router(integrations_router)
 
 # Sub-project A (Task 4) — tenant-wide KB store + owner/grants ACL routes.
 app.include_router(kb_documents_router)
