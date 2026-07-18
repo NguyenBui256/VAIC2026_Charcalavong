@@ -22,3 +22,8 @@ export const rebuildMiniApp = (id: string) =>
   apiFetch<{ app_id: string; build_status: string }>(`/mini-apps/${id}/rebuild`, { method: "POST" });
 export const getScopedToken = (id: string) =>
   apiFetch<{ token: string }>(`/mini-apps/${id}/session-token`, { method: "POST" });
+export const editMiniApp = (id: string, instruction: string) =>
+  apiFetch<{ message: string; app: MiniApp }>(`/mini-apps/${id}/edit`, {
+    method: "POST",
+    body: JSON.stringify({ instruction }),
+  });
