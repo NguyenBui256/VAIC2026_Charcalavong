@@ -13,7 +13,7 @@
 | 3 | Workflow Orchestrator + HITL | §4.2 | 🚧 IN PROGRESS | **Agent khác.** 3.1 CRUD+UI ✅; 3.2 Run lifecycle đang chạy; 3.3/3.4 queued |
 | 4 | Mini-App Builder | §4.3 | ⛔ DEFER | Stub; cần migration → tránh tranh migration-head khi Epic 3 đang land |
 | 5 | Actions / Triggers | §4.4 | ⛔ DEFER | Stub; phụ thuộc Epic 4 |
-| 6 | Trace Dashboard + Provenance | §4.5 | 🟡 PARTIAL | **FR-22 Timeline ✅ (lát cắt này).** FR-23 graph (SHOULD) + FR-24 export (DEFER) chưa làm |
+| 6 | Trace Dashboard + Provenance | §4.5 | 🟡 PARTIAL | **FR-22 Timeline ✅ + FR-23 Collaboration graph ✅ (lát cắt này).** FR-24 export (DEFER) chưa làm |
 | 7 | Integration & Demo Readiness | — | 🟡 PARTIAL | **Seed Agent+KB+Tool ✅ (lát cắt này).** Router wiring do Epic 3 agent; warm-run pre-provision chờ bảng runs |
 
 ## Rubric bar (SHB)
@@ -23,7 +23,7 @@
 | 1 — 2–3 specialist collab | Epic 3 dispatch ≥2 Agent (seed cung cấp 3 Agent) | ⏳ chờ Epic 3.4 |
 | 2 — planner decompose | Epic 3.3 | ⏳ chờ Epic 3.3 |
 | 3 — real tool use | Epic 3.4 gọi Tool (seed cung cấp Tool) | ⏳ chờ Epic 3.4 |
-| 4 — trace dashboard | **Epic 6 Timeline `/audit`** | ✅ bề mặt sẵn sàng, sáng đủ khi Epic 3 Run chạy |
+| 4 — trace dashboard | **Epic 6 Timeline + Collaboration graph `/audit`** | ✅ bề mặt sẵn sàng, sáng đủ khi Epic 3 Run chạy |
 
 ## Đã hoàn thành trong lát cắt này (PR #1 → rebuild)
 
@@ -39,14 +39,14 @@
 - BE `backend/app/main.py` — include additive `audit_router`
 - FE `frontend/src/routes/audit.tsx` — dashboard filter run_id (deep-link `/audit?run_id=`) + type
 - FE `frontend/src/components/audit/{TraceTimeline,TraceEntryCard}.tsx` — timeline dọc, dot màu theo type, expand ra input/output JSON
+- FE `frontend/src/components/audit/CollaborationGraph.tsx` + `lib/collaborationGraph.ts` — **FR-23 graph** (SVG thuần): Orchestrator→Agents, edge = số step; toggle Timeline⇄Graph
 - FE `frontend/src/lib/{auditApi,auditEntryMeta}.ts`, `hooks/useAuditTrail.ts`
 - FE `frontend/src/App.tsx` — wire `/audit`
 
 **Verify:** `tsc --noEmit` PASS · `npm run build` PASS · backend `py_compile` OK.
 
 ## Runway độc lập còn lại (không đụng Epic 3, không migration mới)
-- 🟡 **FR-23 Collaboration graph** — graph view trên `/audit` (Orchestrator→Agents), SVG thuần. SHOULD.
-- 🟡 **FR-24 Audit export** — export `audit_trail` JSON/CSV. DEFER (không ảnh hưởng demo).
+- 🟡 **FR-24 Audit export** — export `audit_trail` JSON/CSV. DEFER (không ảnh hưởng demo). Chưa làm.
 - ❌ Dashboard real-wiring, run-view trace embed, Epic 4/5 — **phụ thuộc Epic 3** (runs endpoint) hoặc cần migration → chờ Epic 3 land thêm.
 
 ## Lưu ý điều phối

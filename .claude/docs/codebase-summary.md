@@ -52,10 +52,10 @@ Chạy: `cd backend && uv run python -m scripts.bootstrap_demo_tenant`
 | `components/ui/` | Primitives: Button, Card, Table, StatusPill, FormField, EmptyState, ErrorState, Skeleton, CodeBlock, ConfirmDialog, Toast, Tooltip |
 | `components/agents/` | Agent Builder shell + tabs |
 | `components/dashboard/` | KpiStrip, RecentRuns, EscalationInbox (hiện dùng mock) |
-| **`components/audit/`** | **TraceTimeline, TraceEntryCard (mới)** |
+| **`components/audit/`** | **TraceTimeline, TraceEntryCard, CollaborationGraph (mới — FR-22 timeline + FR-23 graph)** |
 | `components/CommandPalette/` | Cmd+K palette |
 | `hooks/` | TanStack Query hooks (useAgents, useDepartments, …, **useAuditTrail** mới) |
-| `lib/` | `api.ts` (apiFetch, unwrap envelope, JWT+tenant headers), `agentsApi`, …, **`auditApi` + `auditEntryMeta`** mới; `icons.tsx` (semantic icons + RunState locked) |
+| `lib/` | `api.ts` (apiFetch, unwrap envelope, JWT+tenant headers), `agentsApi`, …, **`auditApi` + `auditEntryMeta` + `collaborationGraph`** mới; `icons.tsx` (semantic icons + RunState locked) |
 
 ### Convention FE (bám theo)
 - API: `apiFetch<T>` tự bơm JWT + `X-Tenant-Id`, unwrap `data`. Mỗi resource 1 file `lib/*Api.ts` + 1 hook `hooks/use*.ts`.
