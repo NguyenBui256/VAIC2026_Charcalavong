@@ -61,7 +61,7 @@ function Canvas(props: GraphEditorProps) {
   }, [nodes, edges, edgeMode]);
 
   return (
-    <div style={{ height: 560, border: "1px solid var(--color-border)", borderRadius: 8 }}>
+    <div style={{ height: "100%", border: "1px solid var(--color-border)", borderRadius: 8 }}>
       <ReactFlow
         nodes={nodes}
         edges={renderedEdges}

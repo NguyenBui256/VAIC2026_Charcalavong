@@ -151,7 +151,17 @@ export default function GraphTab({ workflowId, onDirtyChange }: GraphTabProps) {
   if (graph.isError) return <ErrorState message={graph.error?.message ?? "Failed to load graph"} />;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "var(--space-3)",
+        // Fill the space below the shell header + tab bar. Tune the offset to
+        // the running shell if the toolbar/header height changes.
+        height: "calc(100vh - 240px)",
+        minHeight: 480,
+      }}
+    >
       <GraphToolbar
         onAddNode={addNode}
         onDeleteSelected={() => selectedId && deleteNode(selectedId)}
@@ -161,13 +171,21 @@ export default function GraphTab({ workflowId, onDirtyChange }: GraphTabProps) {
         dirty={dirty}
         error={error}
       />
-      <div style={{ display: "flex", gap: "var(--space-4)", alignItems: "flex-start" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: "var(--space-4)",
+          alignItems: "stretch",
+          flex: 1,
+          minHeight: 0,
+        }}
+      >
         <PaletteSidebar
           edgeMode={edgeMode}
           onEdgeModeChange={setEdgeMode}
           onAutoLayout={autoLayout}
         />
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
           <GraphUsersProvider users={users.data ?? []}>
             <GraphEditor
               nodes={nodes}
