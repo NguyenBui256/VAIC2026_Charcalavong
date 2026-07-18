@@ -26,7 +26,7 @@ export function useAuditStream(sessionId: string, enabled: boolean, lastSequence
 
     async function connect() {
       try {
-        const response = await fetch(`/api/audit/sessions/${sessionId}/stream?after=${sequence.current}`, {
+        const response = await fetch(`/audit/sessions/${sessionId}/stream?after=${sequence.current}`, {
           headers: { ...authHeaders(), Accept: "text/event-stream" },
           signal: controller.signal,
         });
