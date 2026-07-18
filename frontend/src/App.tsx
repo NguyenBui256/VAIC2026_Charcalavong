@@ -19,6 +19,7 @@ import MiniAppHostPage from "./routes/mini-app-host";
 import AuditPage from "./routes/audit";
 import ToolsPage from "./routes/tools/ToolsPage";
 import KnowledgeBasePage from "./routes/knowledge-base/KnowledgeBasePage";
+import DatabasePage from "./routes/database";
 import { isAuthenticated } from "./lib/auth";
 import { CommandPaletteProvider } from "./components/CommandPalette/CommandPaletteContext";
 import CommandPalette from "./components/CommandPalette/CommandPalette";
@@ -66,6 +67,7 @@ export function AppRoutes() {
         {/* Task 9 — shared Tools + Knowledge Base pages. */}
         <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
         <Route path="/tools" element={<ToolsPage />} />
+        <Route path="/database" element={<DatabasePage />} />
         {/* Story 3.1 — Workflow list + Definition tab detail. */}
         <Route path="/workflows" element={<WorkflowsPage />} />
         <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
