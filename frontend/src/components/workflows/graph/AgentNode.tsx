@@ -157,7 +157,6 @@ export default function AgentNode({ data, selected }: NodeProps<Node<RFNodeData>
               color: "var(--color-warning, #b45309)",
             }}
           >
-            <span>● human-gated</span>
             <ApproverAvatars userIds={approvers} />
           </div>
         )}

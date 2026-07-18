@@ -10,6 +10,10 @@ export interface RFNodeData extends Record<string, unknown> {
   agentId: string;
   nodeKey: string;
   approverUserIds: string[];
+  // Free-form node config round-tripped to the API. Holds the node I/O notes
+  // (input_description / output_description) edited in the inspector, plus any
+  // other keys the backend may attach. Optional so node-creation sites can omit.
+  config?: Record<string, unknown>;
   // Display-only activity-diagram metadata, injected at render time by
   // activityDiagram.withActivityMeta (never serialized to the API).
   inDegree?: number;
@@ -34,6 +38,7 @@ export function toReactFlow(def: GraphDefinition): {
       agentId: n.agent_id,
       nodeKey: n.node_key,
       approverUserIds: n.approver_user_ids,
+      config: n.config ?? {},
     },
   }));
   const edges = def.edges.map((e) => ({
@@ -57,7 +62,7 @@ export function toDefinition(
       node_key: n.data.nodeKey,
       label: n.data.label,
       agent_id: n.data.agentId,
-      config: {},
+      config: n.data.config ?? {},
       position: { x: n.position.x, y: n.position.y },
       approver_user_ids: n.data.approverUserIds,
     })),
