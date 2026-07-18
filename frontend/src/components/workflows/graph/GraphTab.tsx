@@ -90,6 +90,14 @@ export default function GraphTab({ workflowId, onDirtyChange }: GraphTabProps) {
     setDirty(true);
   }
 
+  function resetGraph() {
+    if (!graph.data) return;
+    const rf = toReactFlow(graph.data);
+    setNodes(allPositionsZero(rf.nodes) ? layoutVertical(rf.nodes, rf.edges) : rf.nodes);
+    setEdges(rf.edges);
+    setDirty(false);
+  }
+
   function addNodeFromDrop(payload: DropPayload, position: { x: number; y: number }) {
     const key = nextNodeKey(nodes.map((n) => n.data.nodeKey));
     const isAgent = payload.kind === "agent";
@@ -148,8 +156,7 @@ export default function GraphTab({ workflowId, onDirtyChange }: GraphTabProps) {
         onAddNode={addNode}
         onDeleteSelected={() => selectedId && deleteNode(selectedId)}
         onSave={save}
-        onReset={() => graph.data && (setNodes(toReactFlow(graph.data).nodes),
-          setEdges(toReactFlow(graph.data).edges), setDirty(false))}
+        onReset={resetGraph}
         saving={isPending}
         dirty={dirty}
         error={error}
