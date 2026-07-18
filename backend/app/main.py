@@ -23,6 +23,7 @@ from app.core.auth import AuthMiddleware
 from app.core.db import SessionLocal
 from app.core.errors import register_error_handlers
 from app.modules.agent_builder.routes import router as agents_router
+from app.modules.audit.routes import router as audit_router
 from app.modules.orchestrator.routes import router as workflows_router
 from app.modules.tenant.routes import departments_router
 from app.modules.tenant.routes import router as tenant_router
@@ -61,6 +62,9 @@ app.include_router(agents_router)
 
 # Story 3.1 — Orchestrator Workflow CRUD routes.
 app.include_router(workflows_router)
+
+# Epic 6 (FR-22) — Trace Dashboard read API (/audit).
+app.include_router(audit_router)
 
 # Story 1.4 — wire the error envelope exception handlers.
 register_error_handlers(app)
