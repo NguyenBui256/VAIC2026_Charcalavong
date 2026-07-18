@@ -9,7 +9,7 @@ import { NavLink } from "react-router-dom";
 import {
   LayoutGrid,
   Bot,
-  BookOpen,
+  Database,
   Wrench,
   Workflow,
   AppWindow,
@@ -35,7 +35,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
   { to: "/agents", label: "Agents", icon: Bot },
-  { to: "/knowledge-base", label: "Knowledge Base", icon: BookOpen },
+  { to: "/database", label: "Database", icon: Database },
   { to: "/tools", label: "Tools", icon: Wrench },
   { to: "/workflows", label: "Workflows", icon: Workflow },
   { to: "/mini-apps", label: "Mini-Apps", icon: AppWindow },
