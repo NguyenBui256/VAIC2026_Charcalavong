@@ -15,6 +15,7 @@ import {
 import type { AuthUser } from "../lib/auth";
 import ThemeToggle from "./ThemeToggle";
 import { useCommandPalette } from "../hooks/useCommandPalette";
+import NotificationsBell from "./NotificationsBell";
 
 interface TopbarProps {
   user: AuthUser | null;
@@ -212,6 +213,8 @@ export default function Topbar({ user, onLogout }: TopbarProps) {
             <ChevronDown size={14} strokeWidth={1.5} />
           </span>
         </button>
+
+        <NotificationsBell />
 
         <button
           type="button"
