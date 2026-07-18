@@ -1,0 +1,25 @@
+- dialog "Create Mini-App" [ref=f13e162]:
+  - generic [ref=f13e164]:
+    - generic [ref=f13e165]:
+      - heading "Create Mini-App" [level=3] [ref=f13e167]
+      - button "Close" [ref=f13e169] [cursor=pointer]
+    - generic [ref=f13e170]:
+      - generic [ref=f13e171]:
+        - generic [ref=f13e172]: Name*
+        - textbox "Namerequired" [active] [invalid] [ref=f13e173]
+        - alert [ref=f13e213]: Name is required
+      - generic [ref=f13e174]:
+        - generic [ref=f13e175]: Database
+        - combobox "Database" [ref=f13e176]:
+          - option "— None (describe below) —"
+          - option "Loan Applications E2E" [selected]
+        - paragraph [ref=f13e177]: Pick a Database to reuse its schema, or leave blank and describe the app below.
+      - generic [ref=f13e184]:
+        - generic [ref=f13e185]: Visibility tier
+        - combobox "Visibility tier" [ref=f13e186]:
+          - option "Public" [selected]
+          - option "Need Auth"
+          - option "Private"
+      - generic [ref=f13e187]:
+        - button "Create Mini-App" [ref=f13e188] [cursor=pointer]
+        - button "Cancel" [ref=f13e189] [cursor=pointer]
