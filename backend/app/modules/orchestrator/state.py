@@ -39,7 +39,8 @@ _RUN_CAS_SET_CLAUSES = [
     "status=CAST(:to AS varchar)",
     "started_at = CASE WHEN CAST(:to AS varchar)='running' "
     "THEN now() ELSE started_at END",
-    "ended_at = CASE WHEN CAST(:to AS varchar) IN ('completed','failed','timed_out') "
+    "ended_at = CASE WHEN CAST(:to AS varchar) "
+    "IN ('completed','completed_with_failures','failed','timed_out') "
     "THEN now() ELSE ended_at END",
 ]
 
