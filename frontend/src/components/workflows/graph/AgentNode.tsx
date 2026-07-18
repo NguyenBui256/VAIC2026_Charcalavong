@@ -1,9 +1,11 @@
-/* 3D — custom React Flow node: label + bound-agent name + gated badge. */
+/* 3D — custom React Flow node: label + bound-agent name + gated badge + approvers. */
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type { RFNodeData } from "../../../lib/graphEditorState";
+import ApproverAvatars from "./ApproverAvatars";
 
 export default function AgentNode({ data, selected }: NodeProps<RFNodeData>) {
-  const gated = (data.approverUserIds?.length ?? 0) > 0;
+  const approvers = data.approverUserIds ?? [];
+  const gated = approvers.length > 0;
   return (
     <div
       style={{
@@ -19,8 +21,18 @@ export default function AgentNode({ data, selected }: NodeProps<RFNodeData>) {
       <div style={{ fontWeight: 600 }}>{data.label || data.nodeKey}</div>
       <div style={{ opacity: 0.7, fontSize: 11 }}>{data.nodeKey}</div>
       {gated && (
-        <div style={{ marginTop: 4, fontSize: 11, color: "var(--color-warning, #b45309)" }}>
-          ● human-gated
+        <div
+          style={{
+            marginTop: 4,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 11,
+            color: "var(--color-warning, #b45309)",
+          }}
+        >
+          <span>● human-gated</span>
+          <ApproverAvatars userIds={approvers} />
         </div>
       )}
       <Handle type="source" position={Position.Bottom} />
