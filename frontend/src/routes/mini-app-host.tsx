@@ -13,6 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button, Card, ErrorState, Skeleton } from "../components/ui";
 import { getMiniApp, getScopedToken, type MiniApp } from "../lib/miniAppsApi";
 import { useMiniAppDatabases } from "../hooks/useMiniAppDatabases";
+import MiniAppChatPanel from "../components/mini-apps/MiniAppChatPanel";
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -70,15 +71,14 @@ export function MiniAppHostPage() {
   }
 
   return (
-    <div data-testid="vaic-mini-app-host-page">
-      <header style={{ marginBottom: "var(--space-4)" }}>
-        <h1 className="text-h1" style={{ marginBottom: "var(--space-1)" }}>
-          {app.name}
-        </h1>
+    <div
+      data-testid="vaic-mini-app-host-page"
+      style={{ display: "flex", flexDirection: "column", height: "calc(100vh - var(--topbar-h, 64px) - 2 * var(--space-4))", gap: "var(--space-3)" }}
+    >
+      <header>
+        <h1 className="text-h1" style={{ marginBottom: "var(--space-1)" }}>{app.name}</h1>
         {app.description && (
-          <p className="text-body" style={{ color: "var(--color-text-tertiary)" }}>
-            {app.description}
-          </p>
+          <p className="text-body" style={{ color: "var(--color-text-tertiary)" }}>{app.description}</p>
         )}
         {app.database_id && (
           <p className="text-small" style={{ color: "var(--color-text-tertiary)", marginTop: "var(--space-1)" }}>
@@ -90,49 +90,41 @@ export function MiniAppHostPage() {
         )}
       </header>
 
-      {(app.build_status === "pending" || app.build_status === "building") && (
-        <div data-testid="vaic-mini-app-host-building">
-          <Card title="Building your Mini-App…">
-            <p className="text-body" style={{ color: "var(--color-text-tertiary)" }}>
-              This usually takes a few moments. This page refreshes automatically.
-            </p>
-            <Skeleton height="14px" width="60%" style={{ marginTop: "var(--space-3)" }} />
-          </Card>
+      <div
+        style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "minmax(320px, 2fr) 3fr", gap: "var(--space-3)" }}
+      >
+        <div style={{ minHeight: 0 }}>
+          {appId && <MiniAppChatPanel app={app} appId={appId} />}
         </div>
-      )}
 
-      {app.build_status === "failed" && (
-        <ErrorState
-          message="Mini-App build failed"
-          detail={app.build_error ?? undefined}
-          retry={
-            <Button variant="secondary" onClick={() => appQuery.refetch()}>
-              Retry
-            </Button>
-          }
-        />
-      )}
-
-      {isReady && tokenQuery.isLoading && (
-        <div data-testid="vaic-mini-app-host-token-loading">
-          <Skeleton height="480px" />
+        <div style={{ minHeight: 0, display: "flex", flexDirection: "column" }} data-testid="vaic-mini-app-preview">
+          {(app.build_status === "pending" || app.build_status === "building") && (
+            <Card title="Building your Mini-App…">
+              <p className="text-body" style={{ color: "var(--color-text-tertiary)" }}>
+                This usually takes a few moments. The preview refreshes automatically.
+              </p>
+              <Skeleton height="14px" width="60%" style={{ marginTop: "var(--space-3)" }} />
+            </Card>
+          )}
+          {app.build_status === "failed" && (
+            <ErrorState
+              message="Mini-App build failed"
+              detail={app.build_error ?? undefined}
+              retry={<Button variant="secondary" onClick={() => appQuery.refetch()}>Retry</Button>}
+            />
+          )}
+          {isReady && tokenQuery.isLoading && <Skeleton height="100%" />}
+          {isReady && tokenQuery.isError && (
+            <ErrorState
+              message={tokenQuery.error?.message ?? "Failed to obtain a session token"}
+              retry={<Button variant="secondary" onClick={() => tokenQuery.refetch()}>Retry</Button>}
+            />
+          )}
+          {isReady && tokenQuery.data && appId && (
+            <MiniAppIframe app={app} appId={appId} token={tokenQuery.data.token} />
+          )}
         </div>
-      )}
-
-      {isReady && tokenQuery.isError && (
-        <ErrorState
-          message={tokenQuery.error?.message ?? "Failed to obtain a session token"}
-          retry={
-            <Button variant="secondary" onClick={() => tokenQuery.refetch()}>
-              Retry
-            </Button>
-          }
-        />
-      )}
-
-      {isReady && tokenQuery.data && appId && (
-        <MiniAppIframe app={app} appId={appId} token={tokenQuery.data.token} />
-      )}
+      </div>
     </div>
   );
 }
@@ -140,10 +132,11 @@ export function MiniAppHostPage() {
 function MiniAppIframe({ app, appId, token }: { app: MiniApp; appId: string; token: string }) {
   const apiBase = import.meta.env.VITE_API_BASE ?? "";
   const src = `${apiBase}/mini-app-runtime/${appId}/index.html`;
-  const hash = new URLSearchParams({ appId, token, apiBase }).toString();
+  const hash = new URLSearchParams({ appId, token, apiBase, cb: app.updated_at }).toString();
 
   return (
     <iframe
+      key={app.updated_at}
       title={app.name}
       data-testid="vaic-mini-app-host-iframe"
       src={`${src}#${hash}`}
@@ -152,12 +145,7 @@ function MiniAppIframe({ app, appId, token }: { app: MiniApp; appId: string; tok
       // holds; allow-same-origin would let it read the parent's localStorage
       // (and thus the platform auth token).
       sandbox="allow-scripts allow-forms"
-      style={{
-        width: "100%",
-        height: "80vh",
-        border: "1px solid var(--color-border)",
-        borderRadius: "var(--radius-control)",
-      }}
+      style={{ flex: 1, width: "100%", minHeight: 0, border: "1px solid var(--color-border)", borderRadius: "var(--radius-control)" }}
     />
   );
 }
