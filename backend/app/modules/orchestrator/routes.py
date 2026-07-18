@@ -28,6 +28,8 @@ from app.modules.orchestrator.service import (
     Principal,
     create_run,
     create_workflow,
+    get_run,
+    list_runs,
     list_workflows,
     serialize_run,
     serialize_workflow,
@@ -161,3 +163,23 @@ async def create_run_route(
     run = create_run(session, workflow_id, role=principal.role, input=body.input)
     await enqueue_job_with_context(pool, "run_workflow", run_id=str(run.id))
     return JSONResponse(status_code=201, content=_ok(serialize_run(run)))
+
+
+@router.get("/{workflow_id}/runs")
+def list_runs_route(
+    workflow_id: uuid.UUID,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """GET /workflows/{id}/runs — Runs for a Workflow, newest first (RLS-scoped)."""
+    runs = list_runs(session, workflow_id=workflow_id)
+    return JSONResponse(status_code=200, content=_ok([serialize_run(r) for r in runs]))
+
+
+@router.get("/runs/{run_id}")
+def get_run_route(
+    run_id: uuid.UUID,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """GET /workflows/runs/{run_id} — single Run status/output (RLS 404s cross-tenant)."""
+    run = get_run(session, run_id)
+    return JSONResponse(status_code=200, content=_ok(serialize_run(run)))

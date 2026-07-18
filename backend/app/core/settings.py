@@ -1,15 +1,33 @@
 """Application settings — pydantic-settings, env-prefixed `VAIC_`.
 
 Env vars follow the form `VAIC_<UPPER_FIELD>` (e.g. `VAIC_DATABASE_URL`).
-A root `.env` is auto-loaded; never commit it (NFR-6).
+The env file is chosen by `VAIC_ENV` (see `_resolve_env_file`): `.env` for
+dev (default), `.env.production` for production. Never commit either (NFR-6).
+Real OS env vars always win over the file, so container/CI overrides still work.
 """
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Production values (values in {"production", "prod"}) load `.env.production`;
+# anything else — including unset — loads the dev `.env`. Read from the raw OS
+# environment (not a Settings field) because it must be known BEFORE the file
+# is picked. Set it in the shell before launching: `$env:VAIC_ENV="production"`.
+_PROD_ENV_VALUES = {"production", "prod"}
+
+
+def _resolve_env_file() -> str:
+    """Return the dotenv filename for the current `VAIC_ENV` (dev vs prod)."""
+    return (
+        ".env.production"
+        if os.getenv("VAIC_ENV", "").strip().lower() in _PROD_ENV_VALUES
+        else ".env"
+    )
 
 
 class Settings(BaseSettings):
@@ -17,7 +35,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="VAIC_",
-        env_file=".env",
+        env_file=_resolve_env_file(),
         env_file_encoding="utf-8",
         extra="ignore",
         # Allows constructing `Settings(llm_api_key=...)` by field name in
@@ -50,6 +68,16 @@ class Settings(BaseSettings):
     jwt_secret: str = Field(default="replace-with-32-byte-hex-from-openssl-rand-hex-32")
     jwt_algorithm: str = Field(default="HS256")
     jwt_ttl_minutes: int = Field(default=480)
+
+    # CORS — browser origins allowed to call the API cross-origin (Vite dev
+    # server on :5173 by default). Comma-separated in `VAIC_CORS_ORIGINS`.
+    # In dev the frontend usually reaches the API via the Vite proxy (same
+    # origin, no CORS needed); this covers direct `VITE_API_BASE` calls and
+    # production deploys served from a different origin.
+    cors_origins: str = Field(
+        default="http://localhost:5173,http://127.0.0.1:5173",
+        description="Comma-separated allowed CORS origins",
+    )
 
     # LLM provider keys — Story 1.6 (AD-7). Loaded at runtime; a missing key
     # surfaces as a clear error when the adapter is *called*, not at import

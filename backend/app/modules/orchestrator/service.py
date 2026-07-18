@@ -54,6 +54,8 @@ __all__ = [
     "update_workflow",
     "serialize_workflow",
     "create_run",
+    "get_run",
+    "list_runs",
     "serialize_run",
     "decompose_run",
     "execute_task_row",
@@ -248,6 +250,27 @@ def create_run(
     session.commit()
     session.refresh(run)
     return run
+
+
+def get_run(session: Session, run_id: uuid.UUID) -> WorkflowRun:
+    """Fetch a single Run. RLS hides cross-tenant rows (mirrors get_workflow)."""
+    run = session.execute(
+        select(WorkflowRun).where(WorkflowRun.id == run_id)
+    ).scalar_one_or_none()
+    if run is None:
+        raise NotFoundError("WorkflowRun not found")
+    return run
+
+
+def list_runs(
+    session: Session, *, workflow_id: uuid.UUID | None = None
+) -> list[WorkflowRun]:
+    """List Runs, newest first. Tenant scoping is RLS-only (mirrors list_workflows)."""
+    stmt = select(WorkflowRun)
+    if workflow_id is not None:
+        stmt = stmt.where(WorkflowRun.workflow_id == workflow_id)
+    stmt = stmt.order_by(WorkflowRun.created_at.desc())
+    return list(session.execute(stmt).scalars().all())
 
 
 def serialize_run(run: WorkflowRun) -> dict:

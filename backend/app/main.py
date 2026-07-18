@@ -16,12 +16,14 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.core.arq_pool import close_arq_pool, init_arq_pool
 from app.core.auth import AuthMiddleware
 from app.core.db import SessionLocal
 from app.core.errors import register_error_handlers
+from app.core.settings import get_settings
 from app.modules.agent_builder.routes import router as agents_router
 from app.modules.audit.routes import router as audit_router
 from app.modules.orchestrator.routes import router as workflows_router
@@ -50,6 +52,21 @@ app = FastAPI(
 
 # Story 1.3 — auth + tenant context middleware.
 app.add_middleware(AuthMiddleware)
+
+# CORS — added AFTER AuthMiddleware so it wraps outermost (Starlette runs the
+# last-added middleware first). This lets browser preflight `OPTIONS` requests
+# resolve before AuthMiddleware, and allows the Vite dev server (or a separate
+# production origin) to call the API directly via `VITE_API_BASE`.
+_cors_origins = [
+    o.strip() for o in get_settings().cors_origins.split(",") if o.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Story 1.3 — tenant module routes (login, refresh, me, users).
 app.include_router(tenant_router)
