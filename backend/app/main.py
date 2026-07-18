@@ -32,6 +32,7 @@ from app.modules.agent_builder.routes import integrations_router
 from app.modules.agent_builder.routes import router as agents_router
 from app.modules.agent_builder.tool_routes import router as tools_router
 from app.modules.audit.routes import router as audit_router
+from app.modules.mini_app.database_routes import mini_app_databases_router
 from app.modules.mini_app.routes import mini_app_rows_router, mini_apps_router
 from app.modules.orchestrator.file_routes import router as workflows_files_router
 from app.modules.orchestrator.graph_routes import router as workflows_graph_router
@@ -118,6 +119,9 @@ app.include_router(audit_router)
 # Epic 4 (Stories 4-2/4-4) — Mini-App catalog + generic row CRUD routes.
 app.include_router(mini_apps_router)
 app.include_router(mini_app_rows_router)
+
+# Database page — Mini-App Database (reusable schema template) CRUD routes.
+app.include_router(mini_app_databases_router)
 
 # Story 4-5 — serve built Mini-App bundles (sandbox runtime plane). Each
 # `build_mini_app` job writes `{bundle_root}/{app_id}/{index.html,bundle.js}`;
