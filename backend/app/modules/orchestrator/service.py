@@ -37,7 +37,6 @@ from app.core.ports.llm import Message, ModelRef
 from app.core.settings import get_settings
 from app.core.tenant_context import set_tenant_session_var, tenant_context
 from app.modules.agent_builder.agent_executor import AgentExecutor
-from app.modules.agent_builder.models import Tool
 from app.modules.agent_builder.service import get_agent, list_routable_agents
 from app.modules.orchestrator.models import Task, Workflow, WorkflowRun
 from app.modules.orchestrator.schemas import TaskSchemaModel
@@ -347,16 +346,23 @@ def _decomposition_prompt(
 
 
 def _tool_by_agent(session: Session, agent_ids: list[str]) -> dict[str, str]:
-    """Map `agent_id -> Tool.display_name` for the given candidates (best-effort,
-    first Tool found per Agent -- the demo seeds exactly one Tool per Agent)."""
+    """Map agent_id -> an invocable Tool's display_name for each candidate.
+
+    Uses the `agent_tools` M2M (Sub-project A). Excludes `rag` -- RAG is
+    consumed via the two-gate KB retrieval path, not invoked as a required
+    tool. The demo seeds one tool ref per agent; first invocable wins.
+    """
     if not agent_ids:
         return {}
-    rows = session.execute(
-        select(Tool.agent_id, Tool.display_name).where(
-            Tool.agent_id.in_([uuid.UUID(a) for a in agent_ids])
-        )
-    ).all()
-    return {str(agent_id): display_name for agent_id, display_name in rows}
+    from app.modules.agent_builder.tool_catalog_service import list_agent_tool_refs
+
+    out: dict[str, str] = {}
+    for a in agent_ids:
+        refs = list_agent_tool_refs(session, agent_id=uuid.UUID(a))
+        invocable = [t for t in refs if t.tool_type != "rag"]
+        if invocable:
+            out[a] = invocable[0].display_name
+    return out
 
 
 def _audit(session: Session | None, entry_kwargs: dict[str, Any]) -> None:

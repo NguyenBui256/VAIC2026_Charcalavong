@@ -116,6 +116,8 @@ class AgentExecutor(AgentProviderPort):
         if not tool_name:
             return []
         tool = get_tool_by_name(self._session, agent_id=agent_id, display_name=tool_name)
+        if tool.tool_type == "rag":
+            return []  # RAG is consumed via two-gate KB retrieval, not invoked as a tool
         out = invoke_tool(
             self._session,
             tool,
