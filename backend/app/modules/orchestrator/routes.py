@@ -37,6 +37,11 @@ from app.modules.orchestrator.service import (
 )
 from app.modules.orchestrator.service import get_workflow as get_workflow_service
 from app.modules.orchestrator.graph_serialization import serialize_graph_snapshot
+from app.modules.orchestrator.graph_authoring import (
+    replace_workflow_graph,
+    serialize_workflow_graph,
+)
+from app.modules.orchestrator.graph_validation import GraphValidationError
 from app.core.errors import NotFoundError
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -62,6 +67,27 @@ class UpdateWorkflowRequest(BaseModel):
 
 class CreateRunRequest(BaseModel):
     input: dict[str, Any] | None = None
+
+
+class GraphNodeIn(BaseModel):
+    node_key: str = Field(..., min_length=1, max_length=64)
+    label: str = Field(..., min_length=1, max_length=255)
+    agent_id: str
+    config: dict[str, Any] = Field(default_factory=dict)
+    position: dict[str, float] = Field(default_factory=dict)
+    approver_user_ids: list[str] = Field(default_factory=list)
+
+
+class GraphEdgeIn(BaseModel):
+    from_: str = Field(..., alias="from")
+    to: str
+
+    model_config = {"populate_by_name": True}
+
+
+class GraphDefinitionRequest(BaseModel):
+    nodes: list[GraphNodeIn] = Field(default_factory=list)
+    edges: list[GraphEdgeIn] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -204,3 +230,39 @@ def get_run_graph_route(
     return JSONResponse(
         status_code=200, content=_ok(serialize_graph_snapshot(run.graph_snapshot))
     )
+
+
+@router.get("/{workflow_id}/graph-definition")
+def get_graph_definition_route(
+    workflow_id: uuid.UUID,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """GET /workflows/{id}/graph-definition — the authored DAG for the editor."""
+    return JSONResponse(
+        status_code=200, content=_ok(serialize_workflow_graph(session, workflow_id))
+    )
+
+
+@router.put("/{workflow_id}/graph-definition")
+def put_graph_definition_route(
+    workflow_id: uuid.UUID,
+    body: GraphDefinitionRequest,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """PUT /workflows/{id}/graph-definition — replace the whole DAG (builder only)."""
+    principal = _principal(request)
+    try:
+        data = replace_workflow_graph(
+            session,
+            workflow_id,
+            role=principal.role,
+            nodes=[n.model_dump() for n in body.nodes],
+            edges=[{"from": e.from_, "to": e.to} for e in body.edges],
+        )
+    except GraphValidationError as exc:
+        return JSONResponse(
+            status_code=422,
+            content={"data": None, "error": {"message": str(exc)}, "meta": {}},
+        )
+    return JSONResponse(status_code=200, content=_ok(data))
