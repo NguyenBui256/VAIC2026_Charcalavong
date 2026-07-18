@@ -13,6 +13,7 @@ import AgentsPage from "./routes/agents";
 import AgentDetailPage from "./routes/agent-detail";
 import WorkflowsPage from "./routes/workflows";
 import WorkflowDetailPage from "./routes/workflow-detail";
+import RunTrackingPage from "./routes/orchestrator/RunTrackingPage";
 import MiniAppsPage from "./routes/mini-apps";
 import MiniAppHostPage from "./routes/mini-app-host";
 import AuditPage from "./routes/audit";
@@ -66,6 +67,7 @@ export function AppRoutes() {
         {/* Story 3.1 — Workflow list + Definition tab detail. */}
         <Route path="/workflows" element={<WorkflowsPage />} />
         <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
+        <Route path="/workflows/:id/runs/:runId" element={<RunTrackingPage />} />
         {/* Story 4.7 — Mini-App catalog list + create. */}
         <Route path="/mini-apps" element={<MiniAppsPage />} />
         {/* Task 16 — sandboxed Mini-App host page (iframe + scoped token). */}
