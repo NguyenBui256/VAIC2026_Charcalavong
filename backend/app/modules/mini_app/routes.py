@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from app.core.adapters.audit_postgres import PostgresAuditSink
 from app.core.arq_pool import get_arq_pool
 from app.core.deps import crud_audit_ids, get_tenant_session
-from app.core.errors import DomainError
+from app.core.errors import AuthorizationError, DomainError
 from app.core.ids import utcnow_iso_ms
 from app.core.ports.audit import AuditEntry
 from app.modules.mini_app import service
@@ -33,6 +33,7 @@ from app.modules.mini_app.schema_validation import (
     validate_entity_schema,
     validate_ui_spec,
 )
+from app.modules.mini_app.scoped_token import SCOPE_MINIAPP_ROWS, mint_scoped_token
 from app.modules.mini_app.visibility import MiniAppPrincipal, assert_can_access
 
 mini_apps_router = APIRouter(prefix="/mini-apps", tags=["mini-apps"])
@@ -149,10 +150,37 @@ async def rebuild_mini_app_route(app_id: uuid.UUID, request: Request,
     return JSONResponse(status_code=202, content=_ok({"app_id": str(app.id), "build_status": "pending"}))
 
 
+@mini_apps_router.post("/{app_id}/session-token")
+async def mint_session_token_route(
+    app_id: uuid.UUID, request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """Mint a per-app scoped token for the sandboxed iframe (Task 16).
+
+    Gated by a NORMAL platform session: a scoped token must not be able to
+    mint another scoped token (no privilege re-scoping / escalation chain).
+    """
+    if getattr(request.state, "scope", None) == SCOPE_MINIAPP_ROWS:
+        raise AuthorizationError("a scoped mini-app token cannot mint another session token")
+    app = service.get_app(session, app_id)
+    principal = _principal(request)
+    assert_can_access(app, principal)  # enforce the tier at mint time
+    return JSONResponse(status_code=200, content=_ok({"token": mint_scoped_token(app_id, principal)}))
+
+
 def _load_and_gate(app_id: uuid.UUID, request: Request, session: Session):  # noqa: ANN202
     app = service.get_app(session, app_id)
     principal = _principal(request)
-    assert_can_access(app, principal)
+    if getattr(request.state, "scope", None) == SCOPE_MINIAPP_ROWS:
+        # Scoped token: authorizes ONLY the app it was minted for. Tier was
+        # already checked by assert_can_access at mint time — do not
+        # re-run it here (department/whitelist membership at mint time is
+        # authoritative for the lifetime of the short-lived token).
+        if getattr(request.state, "miniapp_id", None) != str(app_id):
+            raise AuthorizationError("scoped token is not authorized for this mini-app")
+    else:
+        # Normal platform token — unchanged tier check.
+        assert_can_access(app, principal)
     return app, principal
 
 

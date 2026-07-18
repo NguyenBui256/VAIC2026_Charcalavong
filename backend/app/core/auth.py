@@ -226,6 +226,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         request.state.tenant_id = claims.get("tenant_id")
         request.state.department_id = claims.get("department_id")
         request.state.role = claims.get("role")
+        # Additive — Mini-App per-app scoped session token (story 4-6).
+        # `scope`/`miniapp_id` are only present on tokens minted by
+        # `mini_app.scoped_token.mint_scoped_token`; absent on normal
+        # platform JWTs, so this never affects existing auth behavior.
+        request.state.scope = claims.get("scope")
+        request.state.miniapp_id = claims.get("miniapp_id")
 
         try:
             response = await call_next(request)
