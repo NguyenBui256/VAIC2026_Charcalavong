@@ -9,6 +9,7 @@ import { semanticIcons, ICON_STROKE_WIDTH } from "../../lib/icons";
 import { useWorkflow } from "../../hooks/useWorkflow";
 import { useUnsavedChangesGuard } from "../agents/useUnsavedChangesGuard";
 import DefinitionTab from "./DefinitionTab";
+import RunsTab from "./RunsTab";
 import { useState } from "react";
 import type { Workflow } from "../../lib/workflowsApi";
 
@@ -23,6 +24,7 @@ export default function WorkflowDetailShell({ workflowId }: WorkflowDetailShellP
     isNew ? undefined : workflowId,
   );
   const [isDirty, setIsDirty] = useState(false);
+  const [tab, setTab] = useState<"definition" | "runs">("definition");
 
   const { guardedNavigate, confirmProps } = useUnsavedChangesGuard(isDirty);
 
@@ -73,13 +75,38 @@ export default function WorkflowDetailShell({ workflowId }: WorkflowDetailShellP
       )}
 
       {(isNew || (!isError && !isLoading)) && (
-        <DefinitionTab
-          workflowId={workflowId}
-          isNew={isNew}
-          workflow={workflow}
-          onDirtyChange={setIsDirty}
-          onSaved={handleSaved}
-        />
+        <>
+          <div
+            role="tablist"
+            style={{ display: "flex", gap: "var(--space-2)", marginBottom: "var(--space-3)" }}
+          >
+            <Button
+              variant={tab === "definition" ? "primary" : "ghost"}
+              onClick={() => setTab("definition")}
+            >
+              Definition
+            </Button>
+            <Button
+              variant={tab === "runs" ? "primary" : "ghost"}
+              disabled={isNew}
+              onClick={() => setTab("runs")}
+            >
+              Runs
+            </Button>
+          </div>
+
+          {tab === "definition" ? (
+            <DefinitionTab
+              workflowId={workflowId}
+              isNew={isNew}
+              workflow={workflow}
+              onDirtyChange={setIsDirty}
+              onSaved={handleSaved}
+            />
+          ) : (
+            <RunsTab workflowId={workflowId} />
+          )}
+        </>
       )}
 
       <ConfirmDialog
