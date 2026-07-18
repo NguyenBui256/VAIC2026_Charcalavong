@@ -38,7 +38,15 @@ from app.core.ids import uuid7
 # types (mirrors `agents.status`'s String pattern) so future value
 # additions (e.g. Story 3.6's `awaiting_human` consumers) never need an
 # `ALTER TYPE` dance.
-RUN_STATUSES = ("pending", "running", "awaiting_human", "completed", "failed", "timed_out")
+RUN_STATUSES = (
+    "pending",
+    "running",
+    "awaiting_human",
+    "completed",
+    "completed_with_failures",
+    "failed",
+    "timed_out",
+)
 TASK_STATUSES = ("pending", "claimed", "completed", "failed")
 
 # Graph workflow (Sub-project 3A). Per-node runtime status; defined in full

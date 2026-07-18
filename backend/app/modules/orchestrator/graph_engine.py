@@ -188,13 +188,38 @@ async def run_node(
         return None
 
 
-def finalize_run(session: Session, run_id: uuid.UUID | str, node_keys: list[str]) -> None:
-    """Aggregate node outputs into run.result; CAS running->completed/failed."""
+def finalize_run(
+    session: Session,
+    run_id: uuid.UUID | str,
+    node_keys: list[str],
+    edges: list[tuple[str, str]],
+) -> None:
+    """Aggregate node outputs into run.result; CAS running -> terminal status.
+
+    Three-way terminal status so a failed side-branch is distinguishable from a
+    total failure:
+      - `completed`               : no node failed.
+      - `completed_with_failures` : some node failed, but at least one leaf
+                                    (terminal, no-outgoing-edge) node still
+                                    completed -- the workflow produced output.
+      - `failed`                  : a node failed and no leaf produced output.
+    Non-failed branches always run to completion (the engine drains every
+    runnable node before finalizing), so their outputs sit in run.result even
+    when a sibling branch failed.
+    """
     _reassert_rls(session)
     execs = _load_node_execs(session, run_id)
     result = {k: execs[k].output for k in node_keys if k in execs}
     any_failed = any(execs[k].status == "failed" for k in node_keys if k in execs)
-    to_status = "failed" if any_failed else "completed"
+    if not any_failed:
+        to_status = "completed"
+    else:
+        outgoing = {src for src, _ in edges}
+        leaf_keys = [k for k in node_keys if k not in outgoing]
+        any_leaf_completed = any(
+            execs[k].status == "completed" for k in leaf_keys if k in execs
+        )
+        to_status = "completed_with_failures" if any_leaf_completed else "failed"
     _reassert_rls(session)
     transition_and_audit(
         session,
@@ -253,7 +278,7 @@ async def graph_orchestrate(
                 nxt = r
                 break
         if nxt is None:
-            finalize_run(session, run_id, node_keys)
+            finalize_run(session, run_id, node_keys, edges)
             return
 
         node = nodes_by_key[nxt.node_key]
