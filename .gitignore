@@ -122,3 +122,5 @@ _bmad-output/planning-artifacts/architecture/architecture-VAIC-2026-07-17/review
 
 .claude/
 .superpowers/
+.agents/
+skills-lock.json

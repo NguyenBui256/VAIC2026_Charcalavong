@@ -60,6 +60,9 @@ export function AppRoutes() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/agents" element={<AgentsPage />} />
         <Route path="/agents/:id" element={<AgentDetailPage />} />
+        {/* Placeholder routes — real surfaces arrive later (Tools/KB are Agent-scoped for now). */}
+        <Route path="/knowledge-base" element={<ComingSoon title="Knowledge Base" />} />
+        <Route path="/tools" element={<ComingSoon title="Tools" />} />
         {/* Story 3.1 — Workflow list + Definition tab detail. */}
         <Route path="/workflows" element={<WorkflowsPage />} />
         <Route path="/workflows/:id" element={<WorkflowDetailPage />} />

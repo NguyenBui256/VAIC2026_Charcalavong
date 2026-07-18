@@ -8,6 +8,8 @@
 import {
   LayoutGrid,
   Bot,
+  BookOpen,
+  Wrench,
   Workflow,
   AppWindow,
   Zap,
@@ -18,7 +20,7 @@ import {
 import type { Command } from "./CommandRegistry";
 import { commandRegistry } from "./CommandRegistry";
 
-/** The seven top-level navigation destinations (matches Sidebar UX-DR14). */
+/** The top-level navigation destinations (matches Sidebar UX-DR14). */
 export interface NavTarget {
   id: string;
   title: string;
@@ -28,6 +30,8 @@ export interface NavTarget {
 export const NAV_TARGETS: readonly NavTarget[] = [
   { id: "dashboard", title: "Go to Dashboard", path: "/dashboard" },
   { id: "agents", title: "Go to Agents", path: "/agents" },
+  { id: "knowledge-base", title: "Go to Knowledge Base", path: "/knowledge-base" },
+  { id: "tools", title: "Go to Tools", path: "/tools" },
   { id: "workflows", title: "Go to Workflows", path: "/workflows" },
   { id: "mini-apps", title: "Go to Mini-Apps", path: "/mini-apps" },
   { id: "actions", title: "Go to Actions", path: "/actions" },
@@ -38,6 +42,8 @@ export const NAV_TARGETS: readonly NavTarget[] = [
 const NAV_ICON_BY_ID: Record<string, typeof LayoutGrid> = {
   dashboard: LayoutGrid,
   agents: Bot,
+  "knowledge-base": BookOpen,
+  tools: Wrench,
   workflows: Workflow,
   "mini-apps": AppWindow,
   actions: Zap,
