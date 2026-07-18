@@ -110,8 +110,11 @@ async def create_mini_app_route(
     prompt: str | None = None
     if body.database_id is not None:
         db = database_service.get_database(session, body.database_id)
-        schema = validate_entity_schema(db.entity_schema)
-        ui_spec = validate_ui_spec(body.ui_spec or {})
+        try:
+            schema = validate_entity_schema(db.entity_schema)
+            ui_spec = validate_ui_spec(body.ui_spec or {})
+        except SchemaValidationError as exc:
+            raise DomainError(exc.reason, code="schema_rejected", http_status=422) from exc
     elif body.entity_schema is not None:
         schema = validate_entity_schema(body.entity_schema)
         ui_spec = validate_ui_spec(body.ui_spec or {})
