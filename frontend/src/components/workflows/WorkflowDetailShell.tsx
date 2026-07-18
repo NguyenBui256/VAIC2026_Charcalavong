@@ -83,7 +83,7 @@ export default function WorkflowDetailShell({ workflowId }: WorkflowDetailShellP
           >
             <Button
               variant={tab === "definition" ? "primary" : "ghost"}
-              onClick={() => setTab("definition")}
+              onClick={() => guardedNavigate(() => { setIsDirty(false); setTab("definition"); })}
             >
               Definition
             </Button>
@@ -112,7 +112,7 @@ export default function WorkflowDetailShell({ workflowId }: WorkflowDetailShellP
               onSaved={handleSaved}
             />
           ) : tab === "graph" ? (
-            <GraphTab workflowId={workflowId} />
+            <GraphTab workflowId={workflowId} onDirtyChange={setIsDirty} />
           ) : (
             <RunsTab workflowId={workflowId} />
           )}

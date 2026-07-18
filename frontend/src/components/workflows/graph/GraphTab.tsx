@@ -24,9 +24,15 @@ import {
 
 export interface GraphTabProps {
   workflowId: string;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
-export default function GraphTab({ workflowId }: GraphTabProps) {
+// React Flow emits dimension/select changes on mount, fitView, and clicks;
+// only these change types are genuine user edits that should mark the graph dirty.
+const STRUCTURAL_NODE_CHANGES = new Set(["position", "remove", "add", "replace"]);
+const STRUCTURAL_EDGE_CHANGES = new Set(["remove", "add", "replace"]);
+
+export default function GraphTab({ workflowId, onDirtyChange }: GraphTabProps) {
   const graph = useWorkflowGraph(workflowId);
   const { mutateAsync, isPending } = useWorkflowGraphMutation(workflowId);
   const { show } = useToast();
@@ -44,6 +50,12 @@ export default function GraphTab({ workflowId }: GraphTabProps) {
     setEdges(rf.edges);
     setDirty(false);
   }, [graph.data]);
+
+  // Lift dirty state so the shell's unsaved-changes guard (AC7) warns before
+  // a tab switch / Back navigation would discard unsaved graph edits.
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
 
   const def = useMemo(() => toDefinition(nodes, edges), [nodes, edges]);
   const error = useMemo(() => validateGraph(def), [def]);
@@ -112,8 +124,14 @@ export default function GraphTab({ workflowId }: GraphTabProps) {
           <GraphEditor
             nodes={nodes}
             edges={edges}
-            onNodesChange={(c) => { setNodes((ns) => applyNodeChanges(c, ns)); setDirty(true); }}
-            onEdgesChange={(c) => { setEdges((es) => applyEdgeChanges(c, es)); setDirty(true); }}
+            onNodesChange={(c) => {
+              setNodes((ns) => applyNodeChanges(c, ns));
+              if (c.some((ch) => STRUCTURAL_NODE_CHANGES.has(ch.type))) setDirty(true);
+            }}
+            onEdgesChange={(c) => {
+              setEdges((es) => applyEdgeChanges(c, es));
+              if (c.some((ch) => STRUCTURAL_EDGE_CHANGES.has(ch.type))) setDirty(true);
+            }}
             onConnect={(conn: Connection) => { setEdges((es) => addEdge(conn, es)); setDirty(true); }}
             onSelectNode={setSelectedId}
           />

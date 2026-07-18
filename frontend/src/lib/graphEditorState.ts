@@ -39,6 +39,10 @@ export function toDefinition(
   nodes: Node<RFNodeData>[],
   edges: Edge[],
 ): GraphDefinition {
+  // React Flow keeps node.id stable across a node-key rename; edges reference
+  // that stable id. Resolve each endpoint to the node's CURRENT node_key so a
+  // rename can't emit an edge pointing at a stale key (unknown-node on save).
+  const idToKey = new Map(nodes.map((n) => [n.id, n.data.nodeKey]));
   return {
     nodes: nodes.map((n) => ({
       node_key: n.data.nodeKey,
@@ -48,7 +52,10 @@ export function toDefinition(
       position: { x: n.position.x, y: n.position.y },
       approver_user_ids: n.data.approverUserIds,
     })),
-    edges: edges.map((e) => ({ from: e.source, to: e.target })),
+    edges: edges.map((e) => ({
+      from: idToKey.get(e.source) ?? e.source,
+      to: idToKey.get(e.target) ?? e.target,
+    })),
   };
 }
 
