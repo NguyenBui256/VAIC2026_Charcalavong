@@ -6,11 +6,11 @@ export interface MiniApp {
   ui_spec: Record<string, unknown>;
   visibility_tier: "public" | "need_auth" | "private";
   whitelist_user_ids: string[]; build_status: "pending" | "building" | "ready" | "failed";
-  build_error: string | null; created_at: string; updated_at: string;
+  build_error: string | null; database_id: string | null; created_at: string; updated_at: string;
 }
 
 export interface CreateMiniAppInput {
-  name: string; description?: string; expected_output?: string;
+  name: string; description?: string; expected_output?: string; database_id?: string;
   entity_schema?: MiniApp["entity_schema"]; visibility_tier?: string; whitelist_user_ids?: string[];
 }
 
