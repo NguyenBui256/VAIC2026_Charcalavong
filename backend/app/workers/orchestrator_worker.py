@@ -48,6 +48,8 @@ from app.core.tenant_context import (
     set_tenant_session_var,
     tenant_context,
 )
+from app.modules.orchestrator.graph_engine import graph_orchestrate
+from app.modules.orchestrator.models import WorkflowRun
 from app.modules.orchestrator.service import orchestrate_run
 from app.modules.orchestrator.state import transition_and_audit
 
@@ -90,18 +92,28 @@ def _transition(
 
 @tenant_aware_job
 async def run_workflow(ctx: dict[str, Any], *, run_id: str, resume: bool = False) -> None:
-    """Worker entrypoint for a Run — CAS `pending -> running` (AC4, AC5).
+    """Worker entrypoint for a Run — CAS into `running` (AC4, AC5).
 
+    Two Run kinds share this entrypoint, distinguished by whether the Run
+    carries an immutable `graph_snapshot` (3B graph engine) or not (flat
+    `orchestrate_run` path):
+
+    Flat runs (no `graph_snapshot`) — unchanged since Story 3.3/3.4:
     `resume=False` (default, fresh dispatch from `POST /runs`): the Run is
     `pending`; CAS `pending -> running` before proceeding. Losing the CAS
     race (rowcount==0) is a legitimate no-op — someone else already claimed
-    it.
+    it. `resume=True` (crash recovery, `resume_orphaned_runs`): the Run is
+    ALREADY `running` — that's the definition of "orphaned". Attempting the
+    `pending -> running` CAS here would always lose the race (the row is
+    not `pending`) and silently abandon the Run forever. Skip straight to
+    `orchestrate_run` instead; no re-transition into `running` needed.
 
-    `resume=True` (crash recovery, `resume_orphaned_runs`): the Run is
-    ALREADY `running` — that's the definition of "orphaned". Attempting
-    the `pending -> running` CAS here would always lose the race (the row
-    is not `pending`) and silently abandon the Run forever. Skip straight
-    to the worker body instead; no re-transition into `running` needed.
+    Graph runs (`graph_snapshot is not None`, 3B): `resume` instead means
+    "resume a paused (`awaiting_human`) Run", not orphan recovery.
+    `resume=False`: CAS `pending -> running`. `resume=True`: CAS
+    `awaiting_human -> running` — `graph_orchestrate` itself documents that
+    this worker performs that CAS before re-invoking it. Either way, losing
+    the CAS is a legitimate no-op (already claimed / not actually paused).
     """
     session = ctx["session"]
     tenant_id = tenant_context.get()
@@ -110,6 +122,26 @@ async def run_workflow(ctx: dict[str, Any], *, run_id: str, resume: bool = False
         raise RuntimeError("run_workflow: tenant_context unset at job entry")
     loop = asyncio.get_running_loop()
 
+    # Branch: graph runs (immutable graph_snapshot present) go to the 3B engine;
+    # graphless runs keep the flat orchestrate_run path (unchanged).
+    run = session.get(WorkflowRun, uuid.UUID(run_id))
+    is_graph = run is not None and run.graph_snapshot is not None
+
+    if is_graph:
+        # Fresh dispatch: pending->running. Resume of a paused run: awaiting_human->running.
+        from_status = "awaiting_human" if resume else "pending"
+        won = await loop.run_in_executor(
+            None, _transition, session, tenant_id, run_id, from_status, "running"
+        )
+        if not won:
+            logger.debug(
+                "run_workflow: lost %s->running race run_id=%s", from_status, run_id
+            )
+            return
+        await graph_orchestrate(session, run_id)
+        return
+
+    # Flat path (unchanged).
     if not resume:
         won = await loop.run_in_executor(
             None, _transition, session, tenant_id, run_id, "pending", "running"
@@ -117,15 +149,6 @@ async def run_workflow(ctx: dict[str, Any], *, run_id: str, resume: bool = False
         if not won:
             logger.debug("run_workflow: lost pending->running race run_id=%s", run_id)
             return
-
-    # Story 3.3/3.4: decomposition, Task dispatch, aggregation. Runs directly
-    # on the event loop (not `run_in_executor`) so the `tenant_context`
-    # contextvar set above stays visible to `orchestrate_run`'s internal RLS
-    # re-assertions (executor threads would NOT see it — see `_transition`).
-    # Both the fresh-dispatch and `resume=True` paths funnel into this same
-    # call — `decompose_run` is idempotent (skips Task creation if Tasks
-    # already exist for `run_id`), so a resumed Run re-entering here never
-    # duplicates its dispatched Tasks.
     await orchestrate_run(session, run_id)
 
 
