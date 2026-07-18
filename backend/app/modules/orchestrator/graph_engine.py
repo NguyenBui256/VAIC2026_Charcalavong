@@ -134,12 +134,25 @@ async def run_node(
         else {p: execs[p].output for p in parent_keys}
     )
     _reassert_rls(session)
+    # On (re-)entering `running` (incl. after a retry), wipe the prior
+    # decision slate so the node returns to `awaiting_approval` with
+    # `decision=NULL` and is reviewable again -- otherwise the CAS guard
+    # in graph_review.py (`decision IS NULL`) would 409 forever after a
+    # retry sets `decision='retry'`. `guidance` is intentionally
+    # preserved: it's appended to the agent prompt on retry/rollback re-runs.
     won = transition_node_status(
         session,
         row.id,
         from_status="pending",
         to_status="running",
-        extra_cols={"input": json.dumps(resolved_input)},
+        extra_cols={
+            "input": json.dumps(resolved_input),
+            "output": None,
+            "decision": None,
+            "decided_by": None,
+            "reason": None,
+            "decided_at": None,
+        },
     )
     if not won:
         return None
@@ -261,11 +274,15 @@ async def graph_orchestrate(
             )
             _set_run_awaiting_human(session, run_id)
             return
+        # Non-gated node: no human to catch an unsuccessful result, so a
+        # tool failure (res.success == False) must fail the node rather
+        # than complete it -- it still propagates to finalize_run.
+        to_status = "completed" if res.success else "failed"
         transition_node_status(
             session,
             nxt.id,
             from_status="running",
-            to_status="completed",
+            to_status=to_status,
             extra_cols={"output": json.dumps(res.output)},
         )
         # continue loop
