@@ -92,6 +92,17 @@ def get_mcp_client(*, agent_department_id: uuid.UUID) -> McpClientPort:
     factory -- callers depend on the `McpClientPort` interface, never a
     concrete class (hexagonal boundary, AD-1).
     """
+    settings = get_settings()
+    if settings.vaic_tools_enabled:
+        from app.core.adapters.vaic_tools_adapter import VaicToolsAdapter
+
+        return VaicToolsAdapter(
+            agent_department_id=agent_department_id,
+            base_url=settings.vaic_tools_base_url,
+            mcp_url=settings.vaic_tools_mcp_url,
+            api_key=settings.vaic_tools_api_key,
+        )
+
     from app.core.adapters.mcp_client_stub import McpClientStub
 
     return McpClientStub(agent_department_id=agent_department_id)

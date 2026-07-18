@@ -161,6 +161,24 @@ class Settings(BaseSettings):
         "`backend/.miniapp-bundles`)",
     )
 
+    # vaic_tools integration — real MCP tool server (retrieve/gmail/calendar
+    # via MCP /mcp/, KB ingest/delete via REST /api/v1/documents). When
+    # disabled the McpClientStub is used, so dev/test without a running
+    # vaic_tools stays green.
+    vaic_tools_enabled: bool = Field(
+        default=False, description="Route MCP tool calls to the real vaic_tools server"
+    )
+    vaic_tools_base_url: str = Field(
+        default="http://localhost:8000", description="vaic_tools REST root (ingest/delete)"
+    )
+    vaic_tools_mcp_url: str = Field(
+        default="http://localhost:8000/mcp/",
+        description="vaic_tools MCP Streamable HTTP endpoint",
+    )
+    vaic_tools_api_key: str = Field(
+        default="", description="Bearer key matching vaic_tools MCP_API_KEYS"
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
