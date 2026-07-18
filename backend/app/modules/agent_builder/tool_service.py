@@ -16,6 +16,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -82,6 +83,32 @@ def _emit_audit(
     )
 
 
+def _call_integration(
+    session: Session | None, tool: Tool, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    """Execute a `kind=="integration"` Tool via HTTP against its `ApiIntegration`."""
+    import httpx
+
+    from app.core.crypto import decrypt_secret
+    from app.modules.agent_builder.models import ApiIntegration
+
+    if session is None or tool.integration_id is None:
+        return {"error": "integration_missing"}
+    integ = session.get(ApiIntegration, tool.integration_id)
+    if integ is None:
+        return {"error": "integration_missing"}
+    headers = {"Content-Type": "application/json"}
+    auth = decrypt_secret(integ.auth_header_encrypted)
+    if auth:
+        name, _, value = auth.partition(":")
+        headers[name.strip()] = value.strip()
+    resp = httpx.post(integ.base_url, json=arguments, headers=headers, timeout=30)
+    resp.raise_for_status()
+    integ.last_used_at = datetime.now(UTC)
+    session.commit()
+    return resp.json()
+
+
 def _execute(
     tool: Tool,
     arguments: dict[str, Any],
@@ -90,14 +117,18 @@ def _execute(
     department_id: uuid.UUID,
     sandbox: SandboxPort | None,
     mcp_factory: McpFactory,
+    session: Session | None = None,
 ) -> tuple[dict[str, Any] | None, Any, int]:
-    """Route every catalog tool to MCP by its tool_type (gmail/calendar stubbed)."""
+    """Route `kind=="integration"` tools via HTTP; everything else stays on MCP."""
     _ = sandbox  # embedded-Python tools are out of scope in Sub-project A
     start = time.monotonic()
-    mcp = mcp_factory(agent_department_id=department_id)
-    mcp_result = _call_mcp(mcp, tool.tool_type, arguments, tenant_id, department_id)
+    if tool.kind == "integration":
+        output = _call_integration(session, tool, arguments)
+    else:
+        mcp = mcp_factory(agent_department_id=department_id)
+        output = _call_mcp(mcp, tool.tool_type, arguments, tenant_id, department_id).output
     latency_ms = int((time.monotonic() - start) * 1000)
-    return mcp_result.output, None, latency_ms
+    return output, None, latency_ms
 
 
 def invoke_tool(
@@ -117,7 +148,6 @@ def invoke_tool(
     Shared by `AgentToolPort.invoke` (Orchestrator-facing, Epic 3 consumer)
     and the Test-Tool route (AC7) so both exercise the IDENTICAL path.
     """
-    _ = session  # reserved for future Tool-scoped lookups; not needed here
     audit_port = audit or PostgresAuditSink()
     tool_name = tool.display_name
     audit_agent_id = str(agent_id) if agent_id else ""
@@ -159,6 +189,7 @@ def invoke_tool(
         department_id=department_id,
         sandbox=sandbox,
         mcp_factory=mcp_factory,
+        session=session,
     )
 
     # -- AC5: timeout / memory breach -> sandbox_violation --------------
