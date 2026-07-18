@@ -95,8 +95,10 @@ export default function DefinitionTab({
   const { show } = useToast();
 
   // Resync the form baseline whenever the underlying Workflow record changes
-  // (initial load, or after a successful save).
+  // (initial load, or after a successful save). Skip when there is no record
+  // yet (new workflow) — otherwise this would clobber the seed-prefilled name.
   useEffect(() => {
+    if (!workflow) return;
     setForm(toFormState(workflow));
     setErrors({});
     setTouched({});
