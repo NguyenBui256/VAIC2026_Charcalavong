@@ -16,6 +16,7 @@ __all__ = [
     "root_keys",
     "parents_by_key",
     "topological_order",
+    "descendants",
 ]
 
 
@@ -104,3 +105,25 @@ def topological_order(
             if indegree[child] == 0:
                 queue.append(child)
     return order
+
+
+def descendants(
+    node_keys: list[str], edges: list[tuple[str, str]], target: str
+) -> set[str]:
+    """All node keys reachable from `target` following edge direction.
+
+    `target` itself is excluded. Assumes an already-validated DAG.
+    """
+    adjacency: dict[str, list[str]] = {k: [] for k in node_keys}
+    for src, dst in edges:
+        adjacency[src].append(dst)
+    seen: set[str] = set()
+    stack = list(adjacency.get(target, []))
+    while stack:
+        node = stack.pop()
+        if node in seen:
+            continue
+        seen.add(node)
+        stack.extend(adjacency.get(node, []))
+    seen.discard(target)
+    return seen
