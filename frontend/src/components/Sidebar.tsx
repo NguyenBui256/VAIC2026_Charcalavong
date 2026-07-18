@@ -8,6 +8,7 @@
 import { NavLink } from "react-router-dom";
 import {
   LayoutGrid,
+  MessageSquare,
   Bot,
   BookOpen,
   Wrench,
@@ -34,6 +35,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
+  { to: "/chat", label: "Chat", icon: MessageSquare },
   { to: "/agents", label: "Agents", icon: Bot },
   { to: "/knowledge-base", label: "Knowledge Base", icon: BookOpen },
   { to: "/tools", label: "Tools", icon: Wrench },
