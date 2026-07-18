@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.db import SessionLocal
 from app.core.ids import uuid7
 from app.core.ports.audit import (
+    AuditEntry,
     AuditPort,
     EventRecord,
     ExecutionContext,
@@ -35,6 +36,18 @@ from app.modules.audit.redaction import redact_payload
 from app.modules.audit.taxonomy import SCHEMA_VERSION, validate_event_type
 
 logger = logging.getLogger(__name__)
+
+# Legacy append-only write path (compat shim) -> `audit_trail` table.
+_LEGACY_INSERT_SQL = text(
+    """
+    INSERT INTO audit_trail
+        (id, tenant_id, run_id, step_id, agent_id, ts, type,
+         input, output, latency_ms, model)
+    VALUES
+        (:id, :tenant_id, :run_id, :step_id, :agent_id, :ts, :type,
+         :input, :output, :latency_ms, :model)
+    """
+)
 
 _DOMAIN_EVENT_START = {
     "orchestrator": "orchestrator.planning_started",
@@ -67,6 +80,58 @@ class PostgresAuditSink(AuditPort):
 
     def __init__(self, session: Session | None = None) -> None:
         self._session = session
+
+    def log(self, entry: AuditEntry) -> None:
+        """Persist a single legacy audit entry to ``audit_trail``. Commits immediately.
+
+        Compatibility shim for CRUD-outside-a-Run writes and orchestrator
+        steps that predate Audit V2. RAISES on any failure (AD-4) — never
+        swallows, never silently drops. Runs in parallel to the V2
+        Session/Span/Event projections.
+        """
+        tenant_id = tenant_context.get()
+        if tenant_id is None:
+            raise RuntimeError(
+                "PostgresAuditSink.log: tenant_context is None — "
+                "cannot write audit_trail without tenant scope (AD-2)"
+            )
+
+        ts_dt = datetime.fromisoformat(entry.ts.replace("Z", "+00:00"))
+        row_id = uuid7()
+
+        owns_session = self._session is None
+        session = self._session if self._session is not None else SessionLocal()
+        try:
+            role = get_settings().app_db_role or "vaic_app"
+            session.execute(text(f"SET LOCAL ROLE {role}"))
+            set_tenant_session_var(session, tenant_id)
+            params = {
+                "id": str(row_id),
+                "tenant_id": str(tenant_id),
+                "run_id": str(uuid.UUID(entry.run_id)),
+                "step_id": str(uuid.UUID(entry.step_id)),
+                "agent_id": str(uuid.UUID(entry.agent_id)) if entry.agent_id else None,
+                "ts": ts_dt,
+                "type": entry.type,
+                "input": json.dumps(entry.input),
+                "output": json.dumps(entry.output),
+                "latency_ms": entry.latency_ms,
+                "model": entry.model or None,
+            }
+            session.execute(_LEGACY_INSERT_SQL, params)
+            session.commit()
+        except Exception:
+            session.rollback()
+            logger.exception(
+                "audit.log FAILED — entry dropped, Run must fail. run_id=%s step_id=%s type=%s",
+                entry.run_id,
+                entry.step_id,
+                entry.type,
+            )
+            raise
+        finally:
+            if owns_session:
+                session.close()
 
     @contextmanager
     def _transaction(self, tenant_id: uuid.UUID) -> Iterator[Session]:

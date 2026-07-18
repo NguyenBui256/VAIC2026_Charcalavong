@@ -23,6 +23,38 @@ AuditStatus = Literal[
 PayloadClassification = Literal["internal", "confidential", "restricted"]
 
 
+class AuditEntry(BaseModel):
+    """Legacy append-only audit trail entry (PRD FR-21).
+
+    Retained as a compatibility shim alongside the Audit V2
+    Session/Span/Event model: CRUD-outside-a-Run writes and the Trace
+    Dashboard read path still depend on the frozen ``audit_trail`` row shape.
+    Field names are exact -- DO NOT rename.
+
+    Attributes:
+        run_id: the Workflow Run this entry belongs to.
+        step_id: the step within the run.
+        agent_id: the Specialist Agent (or orchestrator) that produced this step.
+        ts: UTC ISO 8601 with milliseconds (consistency convention).
+        type: entry type (e.g. "decomposition", "task_dispatch", "tool_call",
+              "model_invocation", "aggregation", "escalation", "mini_app_emission").
+        input: the input to the step (prompt, task, etc.).
+        output: the output of the step (response, result, etc.).
+        latency_ms: wall-clock latency of the step in milliseconds.
+        model: model name if this was a model invocation, else None/empty.
+    """
+
+    run_id: str
+    step_id: str
+    agent_id: str
+    ts: str
+    type: str
+    input: dict[str, Any]
+    output: dict[str, Any]
+    latency_ms: int
+    model: str = ""
+
+
 class ExecutionContext(BaseModel):
     tenant_id: uuid.UUID
     session_id: uuid.UUID
@@ -108,8 +140,14 @@ class SessionEnd(BaseModel):
 
 @runtime_checkable
 class AuditPort(Protocol):
-    """Only application-facing write contract for Audit V2."""
+    """Application-facing audit write contract.
 
+    Exposes both the Audit V2 Session/Span/Event surface and the legacy
+    ``log(AuditEntry)`` compatibility method (kept for CRUD-outside-a-Run
+    writes and the existing Trace Dashboard read path).
+    """
+
+    def log(self, entry: AuditEntry) -> None: ...
     def start_session(self, value: SessionStart) -> ExecutionContext: ...
     def start_span(self, value: SpanStart) -> ExecutionContext: ...
     def emit_event(self, value: EventRecord) -> uuid.UUID: ...
@@ -119,6 +157,7 @@ class AuditPort(Protocol):
 
 
 __all__ = [
+    "AuditEntry",
     "AuditPort",
     "AuditStatus",
     "EventRecord",
