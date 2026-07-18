@@ -1,13 +1,13 @@
-/* 3C — shown to a target node's approver when a rollback to that node is
- * pending: Accept (re-run subtree) / Refuse (rejecting node must Approve/
- * Retry/Override instead).
+/* 3C/3E — target node's approver confirms a pending rollback: Accept (re-run
+ * subtree) or Refuse (with an optional reason shown back to the rejecter).
  */
+import { useState } from "react";
 import { Button, Card } from "../../ui";
 import type { RollbackRequest } from "../../../lib/runsApi";
 
 export interface RollbackConfirmCardProps {
   rollback: RollbackRequest;
-  onConfirm: (accept: boolean) => void;
+  onConfirm: (accept: boolean, reason?: string) => void;
   pending: boolean;
 }
 
@@ -16,28 +16,29 @@ export default function RollbackConfirmCard({
   onConfirm,
   pending,
 }: RollbackConfirmCardProps) {
+  const [reason, setReason] = useState("");
   return (
     <Card>
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-        <strong className="text-body">
-          Rollback requested to this node
-        </strong>
+        <strong className="text-body">Rollback requested to this node</strong>
         <span className="text-body" style={{ color: "var(--color-text-tertiary)" }}>
-          From node “{rollback.requester_node_key}”. Reason:{" "}
-          {rollback.reason || "—"}
+          From node “{rollback.requester_node_key}”. Reason: {rollback.reason || "—"}
         </span>
+        <textarea
+          className="vaic-form-input vaic-focusable"
+          placeholder="Reason (shown to the requester if you refuse)"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={2}
+        />
         <div style={{ display: "flex", gap: "var(--space-2)" }}>
-          <Button
-            variant="primary"
-            disabled={pending}
-            onClick={() => onConfirm(true)}
-          >
+          <Button variant="primary" disabled={pending} onClick={() => onConfirm(true)}>
             Accept
           </Button>
           <Button
             variant="secondary"
             disabled={pending}
-            onClick={() => onConfirm(false)}
+            onClick={() => onConfirm(false, reason)}
           >
             Refuse
           </Button>

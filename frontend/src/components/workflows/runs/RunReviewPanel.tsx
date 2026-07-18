@@ -118,9 +118,9 @@ export default function RunReviewPanel({
         <RollbackConfirmCard
           rollback={pendingForThisTarget}
           pending={mutations.confirm.isPending}
-          onConfirm={(accept) =>
+          onConfirm={(accept, reason) =>
             mutations.confirm.mutate(
-              { rollbackId: pendingForThisTarget.id, accept },
+              { rollbackId: pendingForThisTarget.id, accept, reason },
               {
                 onError: (err) => toast.show(err.message, "error"),
               },
@@ -128,6 +128,27 @@ export default function RunReviewPanel({
           }
         />
       )}
+
+      {rollbacks.refused
+        .filter((r) => r.requester_node_key === node.node_key)
+        .map((r) => (
+          <Card key={r.id}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
+              <strong className="text-body">
+                Rollback to “{r.target_node_key}” was refused
+              </strong>
+              <span className="text-body" style={{ color: "var(--color-text-tertiary)" }}>
+                Your reason: {r.reason || "—"}
+              </span>
+              <span className="text-body" style={{ color: "var(--color-text-tertiary)" }}>
+                Refuse reason: {r.refuse_reason || "—"}
+              </span>
+              <span className="text-body" style={{ color: "var(--color-text-tertiary)" }}>
+                Resolve via Approve / Retry / Override.
+              </span>
+            </div>
+          </Card>
+        ))}
 
       {canDecide && (
         <Card>

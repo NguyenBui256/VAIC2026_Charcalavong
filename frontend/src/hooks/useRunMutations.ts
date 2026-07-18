@@ -23,7 +23,7 @@ export interface UseRunMutationsResult {
   confirm: UseMutationResult<
     { id: string; status: string },
     Error,
-    { rollbackId: string; accept: boolean }
+    { rollbackId: string; accept: boolean; reason?: string }
   >;
 }
 
@@ -46,10 +46,10 @@ export function useRunMutations(runId: string): UseRunMutationsResult {
   const confirm = useMutation<
     { id: string; status: string },
     Error,
-    { rollbackId: string; accept: boolean }
+    { rollbackId: string; accept: boolean; reason?: string }
   >({
-    mutationFn: ({ rollbackId, accept }) =>
-      confirmRollback(runId, rollbackId, accept),
+    mutationFn: ({ rollbackId, accept, reason }) =>
+      confirmRollback(runId, rollbackId, accept, reason),
     onSuccess: invalidate,
   });
 
