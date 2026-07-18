@@ -124,8 +124,9 @@ export default function NewWorkflowModal({ open, onCancel, onConfirm }: Props) {
 
         {mode === "template" && (
           <div className="vaic-form-field">
-            <label className="vaic-form-label">Template</label>
+            <label htmlFor="vaic-new-wf-template" className="vaic-form-label">Template</label>
             <select
+              id="vaic-new-wf-template"
               className="vaic-form-input vaic-focusable"
               value={templateId}
               onChange={(e) => setTemplateId(e.target.value)}
@@ -139,8 +140,9 @@ export default function NewWorkflowModal({ open, onCancel, onConfirm }: Props) {
 
         {mode === "duplicate" && (
           <div className="vaic-form-field">
-            <label className="vaic-form-label">Duplicate from</label>
+            <label htmlFor="vaic-new-wf-source" className="vaic-form-label">Duplicate from</label>
             <select
+              id="vaic-new-wf-source"
               className="vaic-form-input vaic-focusable"
               value={sourceId}
               onChange={(e) => setSourceId(e.target.value)}
