@@ -1,4 +1,18 @@
 declare global { interface Window { __MINIAPP__: { appId: string; token: string; apiBase: string } } }
+
+// Host page (Task 16) passes config via the URL hash instead of postMessage
+// or query params, so the sandboxed iframe (sandbox="allow-scripts allow-forms",
+// deliberately WITHOUT allow-same-origin) never touches the parent's storage.
+// Hydrate window.__MINIAPP__ from location.hash on load if not already set.
+if (!window.__MINIAPP__) {
+  const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
+  window.__MINIAPP__ = {
+    appId: hash.get("appId") || "",
+    token: hash.get("token") || "",
+    apiBase: hash.get("apiBase") || "",
+  };
+}
+
 const cfg = () => window.__MINIAPP__;
 async function call(path: string, init?: RequestInit) {
   const c = cfg();

@@ -14,6 +14,7 @@ import AgentDetailPage from "./routes/agent-detail";
 import WorkflowsPage from "./routes/workflows";
 import WorkflowDetailPage from "./routes/workflow-detail";
 import MiniAppsPage from "./routes/mini-apps";
+import MiniAppHostPage from "./routes/mini-app-host";
 import AuditPage from "./routes/audit";
 import { isAuthenticated } from "./lib/auth";
 import { CommandPaletteProvider } from "./components/CommandPalette/CommandPaletteContext";
@@ -64,6 +65,8 @@ export function AppRoutes() {
         <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
         {/* Story 4.7 — Mini-App catalog list + create. */}
         <Route path="/mini-apps" element={<MiniAppsPage />} />
+        {/* Task 16 — sandboxed Mini-App host page (iframe + scoped token). */}
+        <Route path="/mini-apps/:appId" element={<MiniAppHostPage />} />
         {/* Placeholder routes for nav — real surfaces arrive in later stories */}
         <Route path="/actions" element={<ComingSoon title="Actions" />} />
         {/* Epic 6 (FR-22) — Trace Dashboard. */}
