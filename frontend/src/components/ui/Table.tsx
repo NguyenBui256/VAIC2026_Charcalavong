@@ -71,7 +71,26 @@ export default function Table<T>({
   return (
     <div className="vaic-table-wrapper" data-testid="vaic-table">
       <table className="vaic-table">
-        {caption && <caption style={{ position: "absolute", left: "-9999px" }}>{caption}</caption>}
+        {caption && (
+          /* Visually hidden but readable by screen readers. Uses the clip
+           * technique instead of left:-9999px, which pushes content off-canvas
+           * and inflates scrollWidth (phantom horizontal scrollbar). */
+          <caption
+            style={{
+              position: "absolute",
+              width: "1px",
+              height: "1px",
+              padding: 0,
+              margin: "-1px",
+              overflow: "hidden",
+              clip: "rect(0, 0, 0, 0)",
+              whiteSpace: "nowrap",
+              border: 0,
+            }}
+          >
+            {caption}
+          </caption>
+        )}
         <thead>
           <tr>
             {selectable && (
