@@ -11,7 +11,7 @@ supersedes: none
 
 > **CẬP NHẬT TIẾN ĐỘ (2026-07-18):**
 > - Epic 3 (agent khác): Story **3.1 CRUD+UI DONE** (16 BE + 22 FE test); 3.2 Run lifecycle đang chạy nền; 3.3/3.4 queued.
-> - Epic 6-thin: **FR-22 Timeline + FR-23 Collaboration graph DONE** (`/audit` Trace Dashboard, toggle Timeline⇄Graph) — PR #1.
+> - Epic 6: **FR-22 Timeline + FR-23 Collaboration graph + FR-24 Audit export DONE** (`/audit`, toggle Timeline⇄Graph, export JSON/CSV) — PR #1.
 > - Epic 7-thin: **Seed 3 Agent + KB + Tool DONE**; Workflow seed để dạng hook (tự kích hoạt khi 3.1 migration land) — PR #1.
 > - PR #1 `feat/epic6-trace-epic7-seed` → `rebuild` (Epic 6 + Epic 7, độc lập Epic 3). Chi tiết: `.claude/docs/project-roadmap.md`.
 
@@ -33,7 +33,7 @@ Nguồn epic gốc: `_bmad-output/planning-artifacts/epics.md` (đã khôi phụ
 | 3 | Workflow Orchestrator + HITL | §4.2 | FR-7..11 | 🚧 3.1 DONE, 3.2 đang chạy (agent khác) |
 | 4 | Mini-App Builder + Visibility | §4.3 | FR-12..17 | ❌ Stub (DEFER — cần migration) |
 | 5 | Actions / Triggers | §4.4 | FR-18..20 | ❌ Stub (DEFER) |
-| 6 | Trace Dashboard + Provenance | §4.5 | FR-22,23,24 | 🟡 FR-22 Timeline + FR-23 Graph DONE; FR-24 export chưa |
+| 6 | Trace Dashboard + Provenance | §4.5 | FR-22,23,24 | ✅ DONE — FR-22 Timeline + FR-23 Graph + FR-24 Export |
 | 7 | Integration & Demo Readiness | — | FR-28 + wiring | 🟡 Seed Agent+KB+Tool DONE; workflow=hook, warm-run chờ runs |
 
 Bằng chứng code (cập nhật): `orchestrator` đã có `Workflow` model + CRUD (3.1); `audit` đã có
@@ -157,9 +157,9 @@ Mỗi Epic MUST → spec → plan → execute riêng:
 3. **Epic 7 (thin)** — ✅ Seed Agent+KB+Tool DONE (PR #1). Workflow seed = hook tự-kích-hoạt.
    Router wiring orchestrator do Epic 3 agent tự làm.
 
-Runway độc lập kế tiếp (không đụng Epic 3, không migration): FR-24 audit export (DEFER).
-FR-23 collaboration graph đã DONE (PR #1). Còn lại (dashboard real-wiring, run-view trace embed,
-Epic 4/5) **phụ thuộc Epic 3** (runs endpoint) hoặc cần migration → chờ Epic 3 land thêm.
+Epic 6 đã DONE toàn bộ FR-22/23/24 (PR #1) — runway độc lập coi như vét sạch. Còn lại
+(dashboard real-wiring, run-view trace embed, Epic 4/5) **phụ thuộc Epic 3** (runs endpoint)
+hoặc cần migration → chờ Epic 3 land thêm.
 
 DEFER (chỉ mở khi vượt tiến độ): Epic 4 Mini-App → Epic 5 Actions → FR-23 graph / FR-24 export / 3.6 HITL.
 

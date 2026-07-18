@@ -28,7 +28,7 @@
 | `orchestrator` | 🚧 Epic 3 (agent khác) | Story 3.1: `Workflow` model + CRUD; 3.2 runs/tasks đang làm |
 | `mini_app` | ⛔ stub | Epic 4 |
 | `actions` | ⛔ stub | Epic 5 |
-| **`audit`** | 🟡 **read side mới** | `service.list_audit_entries` (read-only Trace query), `routes` `GET /audit`. Ghi vẫn chỉ qua `PostgresAuditSink` (AD-4) |
+| **`audit`** | 🟡 **read side mới** | `service.{list_audit_entries,export_audit_entries,entries_to_csv}` (read-only Trace query + export), `routes` `GET /audit` + `GET /audit/export`. Ghi vẫn chỉ qua `PostgresAuditSink` (AD-4) |
 
 ### Audit path (sau PR #1)
 - **Write:** `AuditPort.log` → `PostgresAuditSink` (INSERT-only, RLS, crash-on-fail). Đường duy nhất.

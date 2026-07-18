@@ -7,7 +7,11 @@
  * exist for the tenant.
  */
 
-import { apiFetch } from "./api";
+import { ApiError, apiFetch, authHeaders } from "./api";
+
+const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+
+export type AuditExportFormat = "json" | "csv";
 
 /** One append-only audit_trail row (PRD FR-21 / AuditEntry). */
 export interface AuditEntry {
@@ -50,4 +54,32 @@ export function listAuditEntries(params: AuditListParams = {}): Promise<AuditEnt
     limit: params.limit ? String(params.limit) : undefined,
   });
   return apiFetch<AuditEntry[]>(`/audit${qs}`);
+}
+
+/** FR-24 — download the (filtered) Audit Trail as a JSON or CSV file.
+ * Hits the raw-file export endpoint (not the JSON envelope) with auth headers,
+ * then triggers a browser download via an object URL. */
+export async function downloadAuditExport(
+  params: AuditListParams,
+  format: AuditExportFormat,
+): Promise<void> {
+  const qs = buildQuery({ run_id: params.run_id, type: params.type, format });
+  const resp = await fetch(`${API_BASE}/audit/export${qs}`, {
+    headers: authHeaders(),
+  });
+  if (!resp.ok) {
+    throw new ApiError(`Export failed (${resp.status})`, resp.status, "EXPORT_FAILED");
+  }
+  const blob = await resp.blob();
+  const scope = params.run_id ? params.run_id.slice(0, 8) : "all";
+  const filename = `audit-trail-${scope}.${format}`;
+
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }

@@ -7,13 +7,14 @@
 
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Button, EmptyState, ErrorState, Skeleton } from "../components/ui";
+import { Button, EmptyState, ErrorState, Skeleton, useToast } from "../components/ui";
 import TraceTimeline from "../components/audit/TraceTimeline";
 import CollaborationGraph from "../components/audit/CollaborationGraph";
 import { useAuditTrail } from "../hooks/useAuditTrail";
 import { useAgents } from "../hooks/useAgents";
 import { useDebounce } from "../lib/useDebounce";
 import { buildCollaborationGraph } from "../lib/collaborationGraph";
+import { downloadAuditExport, type AuditExportFormat } from "../lib/auditApi";
 import { semanticIcons, ICON_STROKE_WIDTH } from "../lib/icons";
 
 type TraceView = "timeline" | "graph";
@@ -36,7 +37,9 @@ export default function AuditPage() {
   const [runIdInput, setRunIdInput] = useState(runIdParam);
   const [type, setType] = useState("");
   const [view, setView] = useState<TraceView>("timeline");
+  const [exporting, setExporting] = useState(false);
   const debouncedRunId = useDebounce(runIdInput, 300);
+  const toast = useToast();
 
   const query = useAuditTrail({
     run_id: debouncedRunId.trim() || undefined,
@@ -57,6 +60,20 @@ export default function AuditPage() {
     () => buildCollaborationGraph(entries, nameById),
     [entries, nameById],
   );
+
+  async function handleExport(format: AuditExportFormat) {
+    setExporting(true);
+    try {
+      await downloadAuditExport(
+        { run_id: debouncedRunId.trim() || undefined, type: type || undefined },
+        format,
+      );
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : "Export failed", "error");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   function updateRunId(value: string) {
     setRunIdInput(value);
@@ -182,6 +199,21 @@ export default function AuditPage() {
             </option>
           ))}
         </select>
+        <span style={{ flex: 1 }} />
+        <Button
+          variant="ghost"
+          onClick={() => handleExport("json")}
+          disabled={exporting || entries.length === 0}
+        >
+          Export JSON
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={() => handleExport("csv")}
+          disabled={exporting || entries.length === 0}
+        >
+          Export CSV
+        </Button>
       </div>
 
       {renderBody()}

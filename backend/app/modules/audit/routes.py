@@ -10,15 +10,20 @@ Success envelope: ``{data, error: null, meta}`` (AR-14).
 
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_tenant_session
-from app.modules.audit.service import list_audit_entries
+from app.modules.audit.service import (
+    entries_to_csv,
+    export_audit_entries,
+    list_audit_entries,
+)
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
@@ -46,4 +51,38 @@ def list_audit_route(
     return JSONResponse(
         status_code=200,
         content=_ok(entries, meta={"count": len(entries)}),
+    )
+
+
+@router.get("/export")
+def export_audit_route(
+    request: Request,  # noqa: ARG001 -- symmetry
+    session: Session = Depends(get_tenant_session),  # noqa: B008 -- FastAPI idiom
+    run_id: uuid.UUID | None = None,
+    type: str | None = None,  # noqa: A002 -- matches AuditEntry field name
+    format: str = "json",  # noqa: A002 -- query param name
+) -> Response:
+    """GET /audit/export — download the tenant's Audit Trail (FR-24).
+
+    Returns a raw file (NOT the envelope) with a ``Content-Disposition``
+    attachment. ``format`` ∈ {json, csv}; unknown falls back to json.
+    Filters mirror ``GET /audit`` (``run_id``, ``type``). Bounded by
+    ``EXPORT_LIMIT`` in the service.
+    """
+    entries = export_audit_entries(session, run_id=run_id, entry_type=type)
+    scope = str(run_id)[:8] if run_id is not None else "all"
+
+    if format == "csv":
+        body = entries_to_csv(entries)
+        media_type = "text/csv"
+        filename = f"audit-trail-{scope}.csv"
+    else:
+        body = json.dumps(entries, ensure_ascii=False, indent=2)
+        media_type = "application/json"
+        filename = f"audit-trail-{scope}.json"
+
+    return Response(
+        content=body,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
