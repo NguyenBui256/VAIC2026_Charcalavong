@@ -132,3 +132,5 @@ backend/.workflow-files/
 # E2E scratch screenshots
 /3c-e2e-*.png
 /3e-e2e-*.png
+vaic_tools/
+frontend/.factory/
