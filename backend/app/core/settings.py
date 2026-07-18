@@ -169,10 +169,10 @@ class Settings(BaseSettings):
         default=False, description="Route MCP tool calls to the real vaic_tools server"
     )
     vaic_tools_base_url: str = Field(
-        default="http://localhost:8000", description="vaic_tools REST root (ingest/delete)"
+        default="http://localhost:8002", description="vaic_tools REST root (ingest/delete)"
     )
     vaic_tools_mcp_url: str = Field(
-        default="http://localhost:8000/mcp/",
+        default="http://localhost:8002/mcp/",
         description="vaic_tools MCP Streamable HTTP endpoint",
     )
     vaic_tools_api_key: str = Field(

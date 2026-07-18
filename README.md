@@ -43,6 +43,19 @@ npm run dev
 
 Vite dev server: <http://localhost:5173>
 
+## Service Ports
+
+| Service | Dev | Prod | Notes |
+|---|---|---|---|
+| Frontend | 5173 (`vite dev`) | 4173 (`vite preview`) | — |
+| Backend API | 8000 (`uvicorn --reload`) | 8001 (pm2 `vaic-api`) | — |
+| MCP tool server (`vaic_tools`) | 8002 (`uvicorn --reload`) | 8003 (pm2 `vaic-tools`) | REST + MCP at `/mcp/` |
+| Worker (ARQ) | — | — | **No port** — consumes Redis jobs only |
+
+Dev and prod ports differ so both can run side by side on one host. Prod services sit behind Cloudflare Tunnel domains: `charcalavon.site` (frontend), `api.charcalavon.site` (backend), `mcp.charcalavon.site` (MCP tool server → localhost:8003).
+
+Dev backend reaches the MCP server at `http://localhost:8002`; prod backend reaches it at `https://mcp.charcalavon.site` (`VAIC_VAIC_TOOLS_*` in `backend/.env` / `.env.production`).
+
 ## Repository Layout
 
 See [`_bmad-output/planning-artifacts/architecture/architecture-VAIC-2026-07-17/ARCHITECTURE-SPINE/structural-seed.md`](./_bmad-output/planning-artifacts/architecture/architecture-VAIC-2026-07-17/ARCHITECTURE-SPINE/structural-seed.md) for the authoritative source-tree contract.
