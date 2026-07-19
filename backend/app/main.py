@@ -39,6 +39,7 @@ from app.modules.notification.routes import notifications_router
 from app.modules.orchestrator.file_routes import router as workflows_files_router
 from app.modules.orchestrator.graph_routes import router as workflows_graph_router
 from app.modules.orchestrator.routes import router as workflows_router
+from app.modules.orchestrator.tracking_routes import router as tracking_router
 from app.modules.tenant.routes import departments_router
 from app.modules.tenant.routes import router as tenant_router
 
@@ -114,6 +115,9 @@ app.include_router(workflows_router)
 # Sub-project 3B (Task 7) — graph run review/rollback endpoints.
 app.include_router(workflows_graph_router)
 app.include_router(workflows_files_router)
+
+# Tracking (Task 1) — per-user cross-run review inbox read model.
+app.include_router(tracking_router)
 
 # Epic 6 (FR-22) — Trace Dashboard read API (/audit).
 app.include_router(audit_router)
