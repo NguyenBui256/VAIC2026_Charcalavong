@@ -6,7 +6,8 @@
  * `onChange` prop is silently dropped, so a controlled `value`/`onChange`
  * pair passed straight to `FormField` never reaches parent state. We use the
  * `children` slot with a raw `<input>` instead (same pattern as the native
- * `<select>` fields below) for the "Name" and "Notify user IDs" fields.
+ * `<select>` fields below) for the "Name" field. Notify uses a dedicated
+ * `<NotifyUserPicker>` (searchable checkbox roster) rather than a text field.
  */
 import { useState, type FormEvent } from "react";
 import {
@@ -16,6 +17,7 @@ import {
 import { useActions, useActionMutations, useMiniAppDatabasesList } from "../../hooks/useActions";
 import { useWorkflows } from "../../hooks/useWorkflows";
 import { useAgents } from "../../hooks/useAgents";
+import NotifyUserPicker from "../../components/actions/NotifyUserPicker";
 import type { ActionBinding, ActionEventType, ActionTargetType, CreateActionInput } from "../../lib/actionsApi";
 
 const EVENT_TYPES: ActionEventType[] = ["row.created", "row.updated", "row.deleted"];
@@ -28,14 +30,14 @@ interface DraftState {
   target_type: ActionTargetType;
   workflow_id: string;
   agent_id: string;
-  notify_user_ids: string; // comma-separated in the form
+  notify_user_ids: string[];
   is_active: boolean;
 }
 
 const EMPTY_DRAFT: DraftState = {
   id: null, name: "", database_id: "", event_type: "row.created",
   target_type: "workflow", workflow_id: "", agent_id: "",
-  notify_user_ids: "", is_active: true,
+  notify_user_ids: [], is_active: true,
 };
 
 export default function ActionsPage() {
@@ -63,7 +65,7 @@ export default function ActionsPage() {
       id: a.id, name: a.name, database_id: a.database_id, event_type: a.event_type,
       target_type: a.target_type,
       workflow_id: a.workflow_id ?? "", agent_id: a.agent_id ?? "",
-      notify_user_ids: a.notify_user_ids.join(", "), is_active: a.is_active,
+      notify_user_ids: [...a.notify_user_ids], is_active: a.is_active,
     });
   }
 
@@ -81,7 +83,7 @@ export default function ActionsPage() {
       target_type: draft.target_type,
       workflow_id: draft.target_type === "workflow" ? draft.workflow_id : null,
       agent_id: draft.target_type === "agent" ? draft.agent_id : null,
-      notify_user_ids: draft.notify_user_ids.split(",").map((s) => s.trim()).filter(Boolean),
+      notify_user_ids: draft.notify_user_ids,
       is_active: draft.is_active,
     };
     if (draft.id === null) {
@@ -226,17 +228,13 @@ export default function ActionsPage() {
               </div>
             )}
 
-            <FormField
-              label="Notify user IDs (comma-separated, optional)"
-              helperText="Staff to notify. Leave blank to notify the action owner."
-            >
-              <input
-                id="vaic-field-notify-user-ids-(comma-separated,-optional)"
-                className="vaic-form-input vaic-focusable"
-                value={draft.notify_user_ids}
-                onChange={(e) => setDraft({ ...draft, notify_user_ids: e.target.value })}
+            <div className="vaic-form-field">
+              <label className="vaic-form-label">Nhân sự nhận thông báo (tùy chọn)</label>
+              <NotifyUserPicker
+                selected={draft.notify_user_ids}
+                onChange={(ids) => setDraft({ ...draft, notify_user_ids: ids })}
               />
-            </FormField>
+            </div>
 
             <label style={{ display: "inline-flex", gap: "var(--space-1)", alignItems: "center", fontSize: "var(--text-small)" }}>
               <input
