@@ -14,7 +14,7 @@ import {
   Wrench,
   Workflow,
   AppWindow,
-  // Zap, // tạm ẩn Actions
+  Zap,
   Activity,
   ClipboardList,
   // Settings, // tạm ẩn Settings
@@ -43,7 +43,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/tools", label: "Tools", icon: Wrench },
   { to: "/workflows", label: "Workflows", icon: Workflow },
   { to: "/mini-apps", label: "Mini-Apps", icon: AppWindow },
-  // { to: "/actions", label: "Actions", icon: Zap },
+  { to: "/actions", label: "Actions", icon: Zap },
   { to: "/tracking", label: "Tracking", icon: ClipboardList },
   { to: "/audit", label: "Audit", icon: Activity },
   // { to: "/settings", label: "Settings", icon: Settings },
