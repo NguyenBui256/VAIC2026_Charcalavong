@@ -4,22 +4,17 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { SendHorizontal } from "lucide-react";
 import type { GraphChatMessage } from "../../../hooks/useGraphChat";
-import type { ChatProvider, ChatSessionDto } from "../../../lib/chatApi";
 import AttachmentPicker from "../../chat/attachment-picker";
-import ModelSelector from "../../chat/model-selector";
 
 interface Props {
   messages: GraphChatMessage[];
   onSend: (text: string, attachmentIds?: string[]) => void;
   pending: boolean;
-  providers: ChatProvider[];
-  session: ChatSessionDto | null;
-  onModelChange: (providerId: string, modelName: string) => void;
   onUndo: (mutationId: string) => void;
   error?: string;
 }
 
-export default function GraphChatPanel({ messages, onSend, pending, providers, session, onModelChange, onUndo, error }: Props) {
+export default function GraphChatPanel({ messages, onSend, pending, onUndo, error }: Props) {
   const [value, setValue] = useState("");
   const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
   const [attachmentsReady, setAttachmentsReady] = useState(true);
@@ -79,7 +74,6 @@ export default function GraphChatPanel({ messages, onSend, pending, providers, s
         <div ref={endRef} />
       </div>
       {error && <div role="alert" style={{ color: "var(--color-danger)", fontSize: 12 }}>{error}</div>}
-      <ModelSelector providers={providers} providerId={session?.provider_id ?? null} modelName={session?.model_name ?? null} disabled={pending} onChange={onModelChange} />
       <AttachmentPicker key={attachmentEpoch} disabled={pending} onChange={onAttachmentsChange} />
       <div style={{ display: "flex", alignItems: "flex-end", gap: "var(--space-2)", paddingTop: "var(--space-2)", borderTop: "1px solid var(--color-border)" }}>
         <textarea

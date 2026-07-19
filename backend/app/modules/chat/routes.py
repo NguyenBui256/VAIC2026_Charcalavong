@@ -37,6 +37,10 @@ from app.modules.chat.models import (
 )
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+# Edit chats (workflow graph / mini-app) always run on this fixed Gemini model
+# via GEMINI_API_KEY (settings.google_api_key). The UI selects no model.
+EDIT_CHAT_DEFAULT_PROVIDER = "google"
+EDIT_CHAT_DEFAULT_MODEL = "gemini-3.1-flash-lite"
 MAX_FILE_BYTES = 20 * 1024 * 1024
 MAX_FILES_PER_MESSAGE = 5
 SAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]")
@@ -55,6 +59,10 @@ class CreateSessionRequest(BaseModel):
         if self.target_type == "workflow" and self.scope == "execution":
             if self.provider_id is not None or self.model_name is not None:
                 raise ValueError("Workflow Chat uses each Agent's configured model")
+        elif self.scope in {"graph_authoring", "mini_app_edit"}:
+            # Edit chats (workflow graph / mini-app): the UI does not pick an
+            # Agent or a model. The backend fills a default model at creation.
+            pass
         elif not self.provider_id or not self.model_name:
             raise ValueError("provider_id and model_name are required for this chat")
         return self
@@ -154,6 +162,13 @@ def _configured_model(provider_id: str, model_name: str) -> bool:
     )
 
 
+def _default_model() -> tuple[str, str] | None:
+    """Fixed edit-chat model (Gemini flash-lite), available when GEMINI_API_KEY is set."""
+    if get_settings().google_api_key:
+        return EDIT_CHAT_DEFAULT_PROVIDER, EDIT_CHAT_DEFAULT_MODEL
+    return None
+
+
 @router.get("/models")
 def list_chat_models() -> dict[str, Any]:
     providers = [
@@ -168,7 +183,16 @@ def list_chat_models() -> dict[str, Any]:
 def create_chat_session(
     body: CreateSessionRequest, request: Request, db: Session = Depends(get_tenant_session)
 ) -> JSONResponse:  # noqa: B008,E501
-    if body.provider_id and not _configured_model(body.provider_id, body.model_name or ""):
+    if body.scope in {"graph_authoring", "mini_app_edit"} and not (
+        body.provider_id and body.model_name
+    ):
+        # Edit chats use the fixed Gemini default; it is intentionally not in the
+        # global catalog, so skip the catalog check for this path.
+        default = _default_model()
+        if default is None:
+            raise ValidationError("no chat model configured", code="model_not_configured")
+        body.provider_id, body.model_name = default
+    elif body.provider_id and not _configured_model(body.provider_id, body.model_name or ""):
         raise ValidationError("provider/model is not configured", code="model_not_configured")
     row = ChatSession(
         tenant_id=tenant_context.get(), owner_id=_user_id(request), **body.model_dump()

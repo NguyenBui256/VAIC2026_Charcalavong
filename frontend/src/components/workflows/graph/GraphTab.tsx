@@ -303,9 +303,6 @@ export default function GraphTab({ workflowId, onDirtyChange }: GraphTabProps) {
             messages: chat.messages,
             onSend: chat.send,
             pending: chat.pending,
-            providers: chat.models,
-            session: chat.session,
-            onModelChange: chat.changeModel,
             onUndo: chat.undo,
             error: chat.error ? (chat.error as Error).message : undefined,
           }}
