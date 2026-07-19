@@ -94,6 +94,17 @@
   }
 }
 
+/* KB ingest — indeterminate progress bar (a 40%-wide fill sweeping across the
+ * track). transform-only so it stays on the compositor. */
+@keyframes vaic-progress-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
 /* ── Animation utility classes ────────────────────────────────────── */
 
 .vaic-anim-step {
@@ -116,6 +127,32 @@
   animation: vaic-spin 1s linear infinite;
 }
 
+/* KB ingest progress bar: a thin track with a sweeping fill. */
+.vaic-progress {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-running-soft);
+}
+
+.vaic-progress-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-running);
+  animation: vaic-progress-indeterminate 1.2s ease-in-out infinite;
+}
+
+/* Determinate: width driven by inline style (real %), no sweep animation. */
+.vaic-progress-bar.is-determinate {
+  animation: none;
+  transition: width 0.3s ease;
+}
+
 /* ── prefers-reduced-motion: freeze ALL animations ────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
@@ -132,5 +169,14 @@
   /* Replace spin with a static icon (no rotation). */
   .vaic-anim-spin {
     animation: none !important;
+  }
+
+  /* Indeterminate: show a static full-width soft bar instead of a frozen
+   * (hidden) sweep. Determinate bars keep their real % width. */
+  .vaic-progress-bar:not(.is-determinate) {
+    animation: none !important;
+    transform: none !important;
+    width: 100%;
+    opacity: 0.5;
   }
 }

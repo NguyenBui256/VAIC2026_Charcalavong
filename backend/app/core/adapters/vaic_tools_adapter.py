@@ -29,8 +29,11 @@ from app.core.ports.mcp_client import McpClientPort, ToolResult
 
 __all__ = ["VaicToolsAdapter"]
 
-_REST_TOOLS = {"rag.ingest", "rag.delete"}
-_TIMEOUT_S = 30
+_REST_TOOLS = {"rag.ingest", "rag.delete", "rag.progress"}
+# Must be >= kb_service.INGEST_TIMEOUT_S so the httpx client doesn't abort a
+# large-PDF ingest before the backend's own wait_for ceiling. Ingest now runs
+# in a background task, so a long client timeout doesn't block any request.
+_TIMEOUT_S = 300
 
 
 class VaicToolsAdapter(McpClientPort):
@@ -97,8 +100,20 @@ class VaicToolsAdapter(McpClientPort):
                         arguments.get("content_type") or "application/octet-stream",
                     )
                 }
-                resp = await client.post("/api/v1/documents", files=files, headers=headers)
-                resp.raise_for_status()
+                # external_ref = caller document id, lets vaic_tools key live
+                # ingest progress back to us (GET /api/v1/documents/progress).
+                form = {"external_ref": str(arguments["document_id"])} if arguments.get("document_id") else None
+                resp = await client.post(
+                    "/api/v1/documents", files=files, data=form, headers=headers
+                )
+                if resp.status_code >= 400:
+                    # Surface the upstream envelope message (e.g. "No indexable
+                    # text...", "This content is already indexed...") instead of
+                    # the raw httpx "Client error '409 Conflict' for url ..."
+                    return ToolResult(
+                        tool_name=tool_name, output={}, success=False,
+                        error=_rest_error(resp),
+                    )
                 body = resp.json()
                 return ToolResult(
                     tool_name=tool_name,
@@ -108,6 +123,17 @@ class VaicToolsAdapter(McpClientPort):
                         "chunk_count": body.get("chunk_count", 0),
                     },
                 )
+            if tool_name == "rag.progress":
+                resp = await client.get(
+                    "/api/v1/documents/progress",
+                    params={"ref": str(arguments.get("external_ref"))},
+                    headers=headers,
+                )
+                if resp.status_code >= 400:
+                    return ToolResult(
+                        tool_name=tool_name, output={}, success=False, error=_rest_error(resp)
+                    )
+                return ToolResult(tool_name=tool_name, output=resp.json(), success=True)
             # rag.delete
             ext = arguments.get("external_document_id")
             if not ext:
@@ -120,7 +146,11 @@ class VaicToolsAdapter(McpClientPort):
                     error="missing external_document_id; nothing to delete on vaic_tools",
                 )
             resp = await client.delete(f"/api/v1/documents/{ext}", headers=headers)
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                return ToolResult(
+                    tool_name=tool_name, output={"deleted": False}, success=False,
+                    error=_rest_error(resp),
+                )
             body = resp.json()
             return ToolResult(
                 tool_name=tool_name, success=True, output={"deleted": bool(body.get("deleted"))}
@@ -131,7 +161,23 @@ class VaicToolsAdapter(McpClientPort):
     ) -> list[str]:
         self._assert_scope(department_id)
         _ = tenant_id
-        return ["rag.ingest", "rag.delete", "rag.search", "gmail", "calendar"]
+        return ["rag.ingest", "rag.delete", "rag.progress", "rag.search", "gmail", "calendar"]
+
+
+def _rest_error(resp: httpx.Response) -> str:
+    """Extract a human-readable message from a vaic_tools REST error response.
+
+    vaic_tools returns {"error": {"code", "message", ...}} on failure; fall
+    back to a plain HTTP-status string when the body isn't that envelope.
+    """
+    try:
+        body = resp.json()
+        err = body.get("error")
+        if isinstance(err, dict) and err.get("message"):
+            return str(err["message"])
+    except Exception:  # noqa: BLE001 -- non-JSON / unexpected body
+        pass
+    return f"vaic_tools returned HTTP {resp.status_code}"
 
 
 def _first_text(result: Any) -> str:

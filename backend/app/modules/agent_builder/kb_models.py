@@ -18,7 +18,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, LargeBinary, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -57,6 +57,12 @@ class KbDocument(Base):
     )
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     external_document_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Original uploaded bytes, retained so builders/users can view/download the
+    # source file (RAG only stores chunks, not the original). `deferred=True`
+    # keeps the blob out of list/get queries — loaded lazily only when the
+    # content endpoint reads it. Nullable: legacy rows uploaded pre-migration
+    # have no stored bytes.
+    content: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
     chunk_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )

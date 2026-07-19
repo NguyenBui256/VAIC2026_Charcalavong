@@ -31,12 +31,18 @@ from app.modules.agent_builder.service import Principal
 
 __all__ = [
     "KB_MAX_BYTES", "KB_ALLOWED_CONTENT_TYPES", "INGEST_TIMEOUT_S",
-    "upload_document", "delete_document", "list_documents", "get_document",
+    "upload_document", "create_pending_document", "ingest_document",
+    "delete_document", "list_documents", "get_document",
+    "get_document_content", "fetch_ingest_progress",
     "serialize_document", "_get_document_row",
 ]
 
 KB_MAX_BYTES = 20 * 1024 * 1024
-INGEST_TIMEOUT_S = 30
+# Large PDFs (hundreds of pages) chunk into thousands of embedding calls, so
+# 30s was far too short — the client timed out while vaic_tools kept indexing,
+# leaving the pool row and the RAG store desynced. Ingest now runs in a
+# background task (see `ingest_document`), so a generous ceiling is safe.
+INGEST_TIMEOUT_S = 300
 KB_ALLOWED_CONTENT_TYPES = {
     "application/pdf", "text/plain", "text/markdown", "text/x-markdown",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -82,9 +88,17 @@ def _run_ingest(session: Session, doc: KbDocument, data: bytes, mcp_factory: Mcp
                 timeout=INGEST_TIMEOUT_S,
             )
         )
-        doc.status = "indexed"
-        doc.external_document_id = result.output.get("document_id")
-        doc.chunk_count = int(result.output.get("chunk_count", 0))
+        if not result.success:
+            # The adapter surfaces upstream failures (timeout, 4xx/5xx,
+            # connection error) as success=False rather than raising, so we
+            # MUST check it — otherwise a failed ingest was silently recorded
+            # as "indexed" with 0 chunks.
+            doc.status = "failed"
+            doc.failure_reason = result.error or "Ingestion failed"
+        else:
+            doc.status = "indexed"
+            doc.external_document_id = result.output.get("document_id")
+            doc.chunk_count = int(result.output.get("chunk_count", 0))
     except TimeoutError:
         doc.status = "failed"
         doc.failure_reason = "Timeout"
@@ -98,12 +112,16 @@ def _run_ingest(session: Session, doc: KbDocument, data: bytes, mcp_factory: Mcp
         session.refresh(doc)
 
 
-def upload_document(
+def create_pending_document(
     session: Session, *, principal: Principal, filename: str, content_type: str,
     data: bytes, department_id: uuid.UUID | None = None,
-    mcp_factory: McpFactory = get_mcp_client, audit: AuditPort | None = None,
 ) -> KbDocument:
-    """Builder-only (spec OQ-3 revised); uploader = owner."""
+    """Builder-only. Persist the row in `processing` state and return it.
+
+    Ingestion is deferred to `ingest_document` (background task) so the upload
+    request returns immediately; the frontend polls the pool until the row
+    settles to `indexed`/`failed`.
+    """
     require_builder(principal)
     _validate_upload(content_type, data)
     doc = KbDocument(
@@ -115,10 +133,53 @@ def upload_document(
         content_type=content_type,
         size_bytes=len(data),
         status="processing",
+        content=data,  # retain original bytes for the view/download endpoint
     )
     session.add(doc)
     session.commit()
     session.refresh(doc)
+    return doc
+
+
+def ingest_document(
+    document_id: uuid.UUID, data: bytes, *, tenant_id: uuid.UUID,
+    mcp_factory: McpFactory = get_mcp_client, audit: AuditPort | None = None,
+) -> None:
+    """Run RAG ingestion for an already-persisted `processing` document.
+
+    Designed to run as a FastAPI BackgroundTask (in the threadpool), AFTER the
+    upload response is sent — so it opens its OWN tenant-scoped session and
+    re-establishes tenant context (the request session is already closed).
+    Blocking work inside `_run_ingest` (asyncio.run) is fine in a worker thread.
+    """
+    from app.core.db import SessionLocal
+    from app.core.deps import assume_app_role
+    from app.core.tenant_context import set_tenant_session_var
+
+    token = tenant_context.set(tenant_id)
+    try:
+        with SessionLocal() as session:
+            assume_app_role(session)
+            set_tenant_session_var(session, tenant_id)
+            doc = _get_document_row(session, document_id)
+            _run_ingest(session, doc, data, mcp_factory)
+            _emit_kb_audit(audit or PostgresAuditSink(), doc, "kb.document.uploaded")
+    finally:
+        tenant_context.reset(token)
+
+
+def upload_document(
+    session: Session, *, principal: Principal, filename: str, content_type: str,
+    data: bytes, department_id: uuid.UUID | None = None,
+    mcp_factory: McpFactory = get_mcp_client, audit: AuditPort | None = None,
+) -> KbDocument:
+    """Synchronous create + ingest (Builder-only). Kept for callers/tests that
+    want the fully-settled document in one call; the HTTP route uses the
+    background path (`create_pending_document` + `ingest_document`)."""
+    doc = create_pending_document(
+        session, principal=principal, filename=filename,
+        content_type=content_type, data=data, department_id=department_id,
+    )
     _run_ingest(session, doc, data, mcp_factory)
     _emit_kb_audit(audit or PostgresAuditSink(), doc, "kb.document.uploaded")
     return doc
@@ -135,6 +196,23 @@ def list_documents(session: Session, *, principal: Principal) -> list[KbDocument
 
 def get_document(session: Session, *, document_id: uuid.UUID, principal: Principal) -> KbDocument:
     return _get_document_row(session, document_id)
+
+
+def get_document_content(
+    session: Session, *, document_id: uuid.UUID, principal: Principal
+) -> tuple[KbDocument, bytes]:
+    """Return (doc, original bytes) for viewing/downloading.
+
+    Read-only, tenant-scoped by RLS (no builder gate — any tenant user may
+    view a pool document, mirroring `list_documents`). Raises NotFoundError
+    when the row exists but has no stored bytes (uploaded before the content
+    column existed), so the caller can surface a clean 404. Accessing
+    `doc.content` triggers the deferred blob load for this single row.
+    """
+    doc = _get_document_row(session, document_id)
+    if doc.content is None:
+        raise NotFoundError("Original file is not available for this document")
+    return doc, doc.content
 
 
 def delete_document(
@@ -157,6 +235,33 @@ def delete_document(
     _emit_kb_audit(audit or PostgresAuditSink(), doc, "kb.document.deleted")
     session.delete(doc)  # grants + agent_kb_documents cascade at DB
     session.commit()
+
+
+def fetch_ingest_progress(
+    doc: KbDocument, mcp_factory: McpFactory = get_mcp_client
+) -> int | None:
+    """Live ingest % for a `processing` doc, via the RAG store (keyed by doc.id).
+
+    Best-effort and fast: returns None on any error/timeout so the pool list
+    never breaks or stalls just because progress couldn't be fetched.
+    """
+    dept = doc.department_id or _NIL_UUID
+    try:
+        mcp = mcp_factory(agent_department_id=dept)
+        result = asyncio.run(
+            asyncio.wait_for(
+                mcp.call_tool(
+                    "rag.progress", {"external_ref": str(doc.id)},
+                    tenant_id=doc.tenant_id, department_id=dept,
+                ),
+                timeout=5,
+            )
+        )
+        if result.success:
+            return int(result.output.get("percent", 0))
+    except Exception:  # noqa: BLE001 -- progress is non-critical
+        return None
+    return None
 
 
 def serialize_document(doc: KbDocument) -> dict:

@@ -68,6 +68,13 @@ class McpClientStub(McpClientPort):
             )
         if tool_name == "rag.delete":
             return ToolResult(tool_name=tool_name, output={"deleted": True}, success=True)
+        if tool_name == "rag.progress":
+            # Stub ingest is instant, so any progress query is effectively done.
+            return ToolResult(
+                tool_name=tool_name,
+                output={"percent": 100, "status": "ready", "processed_chunks": 0, "total_chunks": 0},
+                success=True,
+            )
         if tool_name == "rag.search":
             # AC8 placeholder -- runtime retrieval is Story 2.5; the stub
             # returns an empty passage set so the client path is exercised
@@ -102,4 +109,4 @@ class McpClientStub(McpClientPort):
         """Return the stubbed tool names available for this scope."""
         self._assert_scope(department_id)
         _ = tenant_id
-        return ["rag.ingest", "rag.delete", "rag.search"]
+        return ["rag.ingest", "rag.delete", "rag.progress", "rag.search"]

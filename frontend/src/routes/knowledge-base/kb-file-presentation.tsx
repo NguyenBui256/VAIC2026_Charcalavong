@@ -51,6 +51,52 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/**
+ * Ingest progress indicator for a `processing` document. Shows the real % of
+ * chunks embedded (from the RAG store). While the percent is still unknown —
+ * the extract/OCR phase before chunk count is known — it falls back to an
+ * indeterminate sweep so the bar still reads as "working".
+ */
+export function KbProcessingIndicator({ progress }: { progress?: number }): ReactNode {
+  const hasPercent = typeof progress === "number" && progress > 0;
+  const pct = hasPercent ? Math.min(100, Math.max(0, Math.round(progress))) : 0;
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        flexDirection: "column",
+        gap: "4px",
+        minWidth: "110px",
+      }}
+    >
+      <span
+        className="vaic-progress"
+        role="progressbar"
+        aria-label="Processing document"
+        aria-valuenow={hasPercent ? pct : undefined}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        {hasPercent ? (
+          <span className="vaic-progress-bar is-determinate" style={{ width: `${pct}%` }} />
+        ) : (
+          <span className="vaic-progress-bar" />
+        )}
+      </span>
+      <span
+        style={{
+          fontSize: "11px",
+          color: "var(--color-text-tertiary)",
+          textAlign: "center",
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        {hasPercent ? `${pct}%` : "…"}
+      </span>
+    </span>
+  );
+}
+
 /** Filename cell: colored file-type icon + name (medium weight, truncating). */
 export function FileNameCell({ doc }: { doc: KbDocument }): ReactNode {
   const { Icon, color } = KIND_ICON[resolveKind(doc)];

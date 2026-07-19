@@ -6,7 +6,10 @@
  * bodies skip the JSON Content-Type override (api.ts).
  */
 
-import { apiFetch } from "./api";
+import { apiFetch, authHeaders, ApiError } from "./api";
+
+// Mirrors api.ts — binary endpoints bypass apiFetch (which always JSON-parses).
+const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
 export type KbStatus = "processing" | "indexed" | "failed";
 
@@ -23,6 +26,8 @@ export interface KbDocument {
   chunk_count: number;
   created_at: string;
   updated_at: string;
+  /** Live ingest percent (0-100), present only while `status === "processing"`. */
+  progress?: number;
 }
 
 /** Single source of truth for the client-side 20MB + type gate. */
@@ -55,4 +60,27 @@ export function deleteKbDocument(documentId: string): Promise<{ id: string }> {
   return apiFetch<{ id: string }>(`/kb/documents/${documentId}`, {
     method: "DELETE",
   });
+}
+
+/**
+ * Fetch the original uploaded file as a Blob for viewing/downloading.
+ * apiFetch can't be reused — it always JSON-parses, but this endpoint returns
+ * raw bytes. We reuse authHeaders() (JWT + tenant) but drop Content-Type so
+ * the request stays a plain GET.
+ */
+export async function fetchKbDocumentContent(documentId: string): Promise<Blob> {
+  const headers = authHeaders();
+  delete headers["Content-Type"];
+  const resp = await fetch(`${API_BASE}/kb/documents/${documentId}/content`, { headers });
+  if (!resp.ok) {
+    let message = "Failed to load document";
+    try {
+      const body = await resp.json();
+      message = body?.error?.message ?? message;
+    } catch {
+      /* non-JSON error body — keep the default message */
+    }
+    throw new ApiError(message, resp.status, "KB_CONTENT_ERROR");
+  }
+  return resp.blob();
 }

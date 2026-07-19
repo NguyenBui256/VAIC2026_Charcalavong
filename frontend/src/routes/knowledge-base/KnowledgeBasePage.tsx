@@ -5,7 +5,7 @@
  */
 
 import { useRef, useState, type ChangeEvent } from "react";
-import { Trash2 } from "lucide-react";
+import { Eye, Trash2 } from "lucide-react";
 import {
   Button,
   Card,
@@ -22,11 +22,17 @@ import { useKbPool, useKbPoolMutations } from "../../hooks/useKbPool";
 import { useIsBuilder } from "../../hooks/useIsBuilder";
 import KbStatusPill from "../../components/agents/KbStatusPill";
 import KbPoolStats from "./KbPoolStats";
-import { formatBytes, friendlyType, FileNameCell } from "./kb-file-presentation";
+import {
+  formatBytes,
+  friendlyType,
+  FileNameCell,
+  KbProcessingIndicator,
+} from "./kb-file-presentation";
 import {
   KB_MAX_BYTES,
   KB_ACCEPTED_EXTENSIONS,
   KB_ACCEPTED_MIME_TYPES,
+  fetchKbDocumentContent,
   type KbDocument,
 } from "../../lib/kbApi";
 
@@ -64,6 +70,7 @@ export default function KnowledgeBasePage() {
   const isBuilder = useIsBuilder();
   const inputRef = useRef<HTMLInputElement>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [viewingId, setViewingId] = useState<string | null>(null);
 
   const { query, documents, isLoading, isError } = useKbPool();
   const { upload, remove } = useKbPoolMutations();
@@ -85,6 +92,31 @@ export default function KnowledgeBasePage() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (file) handleFileSelected(file);
+  }
+
+  /** Fetch the original bytes and open them in a new tab (download for
+   *  non-previewable types). Uses a programmatic anchor click so the browser
+   *  treats it as user-initiated and doesn't block it as a popup. */
+  async function handleView(doc: KbDocument) {
+    if (viewingId) return;
+    setViewingId(doc.id);
+    try {
+      const blob = await fetchKbDocumentContent(doc.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Delay revoke so the new tab has time to load the blob.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      show(err instanceof Error ? err.message : "Failed to open document", "error");
+    } finally {
+      setViewingId(null);
+    }
   }
 
   function confirmDelete() {
@@ -120,7 +152,22 @@ export default function KnowledgeBasePage() {
       key: "status",
       header: "Status",
       align: "center",
-      render: (d) => <KbStatusPill status={d.status} failureReason={d.failure_reason} />,
+      render: (d) =>
+        d.status === "processing" ? (
+          <span
+            style={{
+              display: "inline-flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "var(--space-1)",
+            }}
+          >
+            <KbStatusPill status={d.status} failureReason={d.failure_reason} />
+            <KbProcessingIndicator progress={d.progress} />
+          </span>
+        ) : (
+          <KbStatusPill status={d.status} failureReason={d.failure_reason} />
+        ),
     },
     {
       key: "created_at",
@@ -131,25 +178,35 @@ export default function KnowledgeBasePage() {
         </span>
       ),
     },
-    ...(isBuilder
-      ? [
-          {
-            key: "actions",
-            header: "",
-            width: "1%",
-            align: "right" as const,
-            render: (d: KbDocument) => (
-              <Button
-                variant="icon"
-                aria-label={`Delete ${d.filename}`}
-                onClick={() => setPendingDeleteId(d.id)}
-              >
-                <Trash2 size={16} strokeWidth={ICON_STROKE_WIDTH} aria-hidden="true" />
-              </Button>
-            ),
-          } as TableColumn<KbDocument>,
-        ]
-      : []),
+    {
+      key: "actions",
+      header: "",
+      width: "1%",
+      align: "right" as const,
+      render: (d: KbDocument) => (
+        <span style={{ display: "inline-flex", gap: "var(--space-1)", whiteSpace: "nowrap" }}>
+          <Button
+            variant="icon"
+            aria-label={`View ${d.filename}`}
+            title="View document"
+            disabled={viewingId === d.id}
+            onClick={() => handleView(d)}
+          >
+            <Eye size={16} strokeWidth={ICON_STROKE_WIDTH} aria-hidden="true" />
+          </Button>
+          {isBuilder && (
+            <Button
+              variant="icon"
+              aria-label={`Delete ${d.filename}`}
+              title="Delete document"
+              onClick={() => setPendingDeleteId(d.id)}
+            >
+              <Trash2 size={16} strokeWidth={ICON_STROKE_WIDTH} aria-hidden="true" />
+            </Button>
+          )}
+        </span>
+      ),
+    } as TableColumn<KbDocument>,
   ];
 
   function renderBody() {
