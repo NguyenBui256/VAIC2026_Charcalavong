@@ -1,13 +1,16 @@
 import { apiFetch } from "./api";
 
 export type ActionEventType = "row.created" | "row.updated" | "row.deleted";
+export type ActionTargetType = "workflow" | "agent";
 
 export interface ActionBinding {
   id: string;
   name: string;
   database_id: string;
   event_type: ActionEventType;
-  workflow_id: string;
+  target_type: ActionTargetType;
+  workflow_id: string | null;
+  agent_id: string | null;
   notify_user_ids: string[];
   is_active: boolean;
   owner_id: string;
@@ -19,7 +22,9 @@ export interface CreateActionInput {
   name: string;
   database_id: string;
   event_type: ActionEventType;
-  workflow_id: string;
+  target_type: ActionTargetType;
+  workflow_id?: string | null;
+  agent_id?: string | null;
   notify_user_ids?: string[];
   is_active?: boolean;
 }
