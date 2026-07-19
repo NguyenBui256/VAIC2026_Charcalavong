@@ -1,7 +1,7 @@
 import { apiFetch } from "./api";
 
 export type FieldType =
-  | "string" | "longtext" | "integer" | "number" | "boolean" | "date" | "enum";
+  | "string" | "longtext" | "integer" | "number" | "boolean" | "date" | "enum" | "file";
 
 export interface SchemaField {
   name: string;

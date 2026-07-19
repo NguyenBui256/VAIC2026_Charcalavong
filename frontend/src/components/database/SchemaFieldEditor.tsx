@@ -6,7 +6,7 @@ import { Button } from "../ui";
 import { ICON_STROKE_WIDTH } from "../../lib/icons";
 import type { EntitySchema, FieldType, SchemaField } from "../../lib/miniAppDatabasesApi";
 
-const FIELD_TYPES: FieldType[] = ["string", "longtext", "integer", "number", "boolean", "date", "enum"];
+const FIELD_TYPES: FieldType[] = ["string", "longtext", "integer", "number", "boolean", "date", "enum", "file"];
 
 /* On a type change, clear type-specific attributes that are no longer valid for the new
  * type (backend rejects e.g. `options` left over from a prior `enum` type with a 422).
