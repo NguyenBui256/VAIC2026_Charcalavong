@@ -17,6 +17,7 @@ from app.core.ids import uuid7
 
 EVENT_TYPES = ("row.created", "row.updated", "row.deleted")
 ACTION_EVENT_STATUSES = ("pending", "dispatched", "failed", "skipped")
+TARGET_TYPES = ("workflow", "agent")
 
 
 class ActionBinding(Base):
@@ -26,6 +27,11 @@ class ActionBinding(Base):
         CheckConstraint(
             "event_type IN ('row.created','row.updated','row.deleted')",
             name="ck_action_bindings_event_type",
+        ),
+        CheckConstraint(
+            "(target_type = 'workflow' AND workflow_id IS NOT NULL AND agent_id IS NULL) "
+            "OR (target_type = 'agent' AND agent_id IS NOT NULL AND workflow_id IS NULL)",
+            name="ck_action_bindings_target",
         ),
     )
 
@@ -41,8 +47,14 @@ class ActionBinding(Base):
         UUID(as_uuid=True), ForeignKey("mini_app_databases.id", ondelete="CASCADE"), nullable=False
     )
     event_type: Mapped[str] = mapped_column(String(32), nullable=False, default="row.created", server_default="row.created")
-    workflow_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False
+    target_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="workflow", server_default="workflow"
+    )
+    workflow_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=True
+    )
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=True
     )
     notify_user_ids: Mapped[list[uuid.UUID]] = mapped_column(
         ARRAY(UUID(as_uuid=True)), nullable=False, default=list, server_default="{}"
