@@ -30,4 +30,17 @@ export const sdk = {
   update: (id: string, data: unknown, expected_updated_at: string) =>
     call(`/${id}`, { method: "PATCH", body: JSON.stringify({ data, expected_updated_at }) }),
   remove: (id: string) => call(`/${id}`, { method: "DELETE" }),
+  uploadFile: async (file: File) => {
+    const c = cfg();
+    const fd = new FormData();
+    fd.append("file", file);
+    const resp = await fetch(`${c.apiBase}/apps/${c.appId}/files`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${c.token}` },  // no Content-Type: browser sets multipart boundary
+      body: fd,
+    });
+    const body = await resp.json();
+    if (!resp.ok) throw new Error(body?.error?.message || "upload failed");
+    return body.data as { id: string; name: string; mime: string; size: number };
+  },
 };
