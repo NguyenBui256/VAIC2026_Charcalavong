@@ -55,9 +55,7 @@ class OllamaLlmAdapter:
         model: ModelRef,
         parameters: dict[str, Any] | None = None,
     ) -> AsyncIterator[StreamChunk]:
-        raise NotImplementedError(
-            f"{_PROVIDER_NAME} adapter is not yet implemented."
-        )
+        raise NotImplementedError(f"{_PROVIDER_NAME} adapter is not yet implemented.")
         yield StreamChunk(delta="")  # pragma: no cover
 
     def embed(
@@ -65,6 +63,4 @@ class OllamaLlmAdapter:
         texts: list[str],
         model: ModelRef,
     ) -> EmbeddingResult:
-        raise NotImplementedError(
-            f"{_PROVIDER_NAME} adapter is not yet implemented."
-        )
+        raise NotImplementedError(f"{_PROVIDER_NAME} adapter is not yet implemented.")

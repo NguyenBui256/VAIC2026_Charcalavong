@@ -3,8 +3,15 @@ node_modules/
 jspm_packages/
 web_modules/
 
+# Mini-App builder sandbox runtime (Epic 4, story 4-5) — built bundles and
+# the per-app esbuild workdir are generated artifacts, never committed.
+backend/.miniapp-bundles/
+frontend/.miniapp-build/
+
 # Environment files
 .env
+.env.bak
+*.env.bak
 .env.local
 .env.development.local
 .env.test.local
@@ -26,7 +33,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+/lib/
 lib64/
 parts/
 sdist/
@@ -112,3 +119,21 @@ _bmad-output/planning-artifacts/briefs
 _bmad-output/planning-artifacts/prds/prd-VAIC-2026-07-17/archive
 _bmad-output/planning-artifacts/architecture/architecture-VAIC-2026-07-17/archive
 _bmad-output/planning-artifacts/architecture/architecture-VAIC-2026-07-17/reviews
+
+.claude/
+.superpowers/
+.agents/
+skills-lock.json
+
+.playwright-mcp
+
+# 3E — runtime uploaded workflow files (local disk store, tenant-scoped); never commit
+backend/.workflow-files/
+# E2E scratch screenshots
+/3c-e2e-*.png
+/3e-e2e-*.png
+vaic_tools/
+frontend/.factory/
+backend/.workflow-files/
+
+/test_case

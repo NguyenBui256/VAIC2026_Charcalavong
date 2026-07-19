@@ -35,9 +35,7 @@ __all__ = [
 
 # Per-request / per-job tenant identifier. Set by FastAPI middleware on HTTP
 # paths and by the arq worker bootstrap on background paths (AD-10).
-tenant_context: ContextVar[uuid.UUID | None] = ContextVar(
-    "tenant_context", default=None
-)
+tenant_context: ContextVar[uuid.UUID | None] = ContextVar("tenant_context", default=None)
 
 
 def set_tenant_context(tenant_id: uuid.UUID | str) -> None:

@@ -1,0 +1,308 @@
+"""Tool invocation service — `AgentToolPort` implements `ToolPort` (Story 2.6 T4).
+
+Validates input against `input_schema` (AC2), routes to `SandboxPort`
+(embedded Python) or `McpClientPort` (MCP-routed) per AD-1/AD-3, validates
+the raw output against `output_schema` (AC3), and audits every outcome
+(`tool.invoked` / `tool.rejected` / `tool.sandbox_violation`) through the
+injected `AuditPort` (AD-4) — never direct SQL to `audit_trail`.
+
+Scope boundary (Dev Notes): this module builds and unit-tests the
+invocation *path* only. The Orchestrator dispatch loop that calls
+`ToolPort.invoke` during a live Workflow Run is Epic 3.
+"""
+
+from __future__ import annotations
+
+import time
+import uuid
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.core.adapters.audit_postgres import PostgresAuditSink
+from app.core.deps import crud_audit_ids, get_mcp_client
+from app.core.errors import NotFoundError
+from app.core.ids import utcnow_iso_ms
+from app.core.ports.audit import AuditEntry, AuditPort
+from app.core.ports.mcp_client import McpClientPort
+from app.core.ports.sandbox import SandboxPort
+from app.core.ports.tool import ToolOutput
+from app.modules.agent_builder.models import Tool
+from app.modules.agent_builder.schema_validation import validate_instance
+
+__all__ = ["AgentToolPort", "get_tool_by_name", "invoke_tool"]
+
+McpFactory = Callable[..., McpClientPort]
+
+
+def get_tool_by_name(session: Session, *, agent_id: uuid.UUID, display_name: str) -> Tool:
+    """Resolve a catalog Tool the agent references, by display_name or tool_type."""
+    from app.modules.agent_builder.models import AgentTool
+
+    tool = session.execute(
+        select(Tool)
+        .join(AgentTool, AgentTool.tool_id == Tool.id)
+        .where(
+            AgentTool.agent_id == agent_id,
+            Tool.is_deleted.is_(False),
+            (Tool.display_name == display_name) | (Tool.tool_type == display_name),
+        )
+    ).scalar_one_or_none()
+    if tool is None:
+        raise NotFoundError(f"Tool '{display_name}' not found for this Agent")
+    return tool
+
+
+def _emit_audit(
+    audit: AuditPort,
+    tool: Tool,
+    entry_type: str,
+    *,
+    input_payload: dict[str, Any],
+    output_payload: dict[str, Any],
+    latency_ms: int,
+    agent_id: str = "",
+) -> None:
+    """Emit one audit entry (AD-4). NEVER includes the raw `header` secret."""
+    run_id, step_id = crud_audit_ids(str(tool.id))
+    audit.log(
+        AuditEntry(
+            run_id=run_id,
+            step_id=step_id,
+            agent_id=agent_id,
+            ts=utcnow_iso_ms(),
+            type=entry_type,
+            input=input_payload,
+            output=output_payload,
+            latency_ms=latency_ms,
+            model="",
+        )
+    )
+
+
+def _call_integration(
+    session: Session | None, tool: Tool, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    """Execute a `kind=="integration"` Tool via HTTP against its `ApiIntegration`."""
+    import httpx
+
+    from app.core.crypto import decrypt_secret
+    from app.modules.agent_builder.models import ApiIntegration
+
+    if session is None or tool.integration_id is None:
+        return {"error": "integration_missing"}
+    integ = session.get(ApiIntegration, tool.integration_id)
+    if integ is None:
+        return {"error": "integration_missing"}
+    headers = {"Content-Type": "application/json"}
+    auth = decrypt_secret(integ.auth_header_encrypted)
+    if auth:
+        name, _, value = auth.partition(":")
+        headers[name.strip()] = value.strip()
+    try:
+        resp = httpx.post(integ.base_url, json=arguments, headers=headers, timeout=30)
+        resp.raise_for_status()
+        result = resp.json()
+    except httpx.HTTPError as exc:
+        return {"error": f"integration_call_failed: {exc}"}
+    except ValueError as exc:
+        return {"error": f"integration_call_failed: invalid JSON response ({exc})"}
+    integ.last_used_at = datetime.now(UTC)
+    session.flush()
+    return result
+
+
+def _execute(
+    tool: Tool,
+    arguments: dict[str, Any],
+    *,
+    tenant_id: uuid.UUID,
+    department_id: uuid.UUID,
+    sandbox: SandboxPort | None,
+    mcp_factory: McpFactory,
+    session: Session | None = None,
+) -> tuple[dict[str, Any] | None, Any, int]:
+    """Route `kind=="integration"` tools via HTTP; everything else stays on MCP."""
+    _ = sandbox  # embedded-Python tools are out of scope in Sub-project A
+    start = time.monotonic()
+    if tool.kind == "integration":
+        output = _call_integration(session, tool, arguments)
+    else:
+        mcp = mcp_factory(agent_department_id=department_id)
+        output = _call_mcp(mcp, tool.tool_type, arguments, tenant_id, department_id).output
+    latency_ms = int((time.monotonic() - start) * 1000)
+    return output, None, latency_ms
+
+
+def invoke_tool(
+    session: Session,
+    tool: Tool,
+    arguments: dict[str, Any],
+    *,
+    tenant_id: uuid.UUID,
+    department_id: uuid.UUID,
+    audit: AuditPort | None = None,
+    sandbox: SandboxPort | None = None,
+    mcp_factory: McpFactory = get_mcp_client,
+    agent_id: uuid.UUID | None = None,
+) -> ToolOutput:
+    """Validate -> route (sandbox|MCP) -> validate output -> audit (AC2-AC5).
+
+    Shared by `AgentToolPort.invoke` (Orchestrator-facing, Epic 3 consumer)
+    and the Test-Tool route (AC7) so both exercise the IDENTICAL path.
+    """
+    audit_port = audit or PostgresAuditSink()
+    tool_name = tool.display_name
+    audit_agent_id = str(agent_id) if agent_id else ""
+
+    # -- AC2: input validation -----------------------------------------
+    input_errors = validate_instance(tool.params_schema, arguments)
+    if input_errors:
+        _emit_audit(
+            audit_port,
+            tool,
+            "tool.rejected",
+            input_payload={"tool_id": str(tool.id), "arguments": arguments},
+            output_payload={"reason": "input_schema_mismatch", "errors": input_errors},
+            latency_ms=0,
+            agent_id=audit_agent_id,
+        )
+        return ToolOutput(
+            tool_name=tool_name,
+            output={},
+            success=False,
+            error=f"Input validation failed: {'; '.join(input_errors)}",
+        )
+
+    _emit_audit(
+        audit_port,
+        tool,
+        "tool.invoked",
+        input_payload={"tool_id": str(tool.id), "arguments": arguments},
+        output_payload={},
+        latency_ms=0,
+        agent_id=audit_agent_id,
+    )
+
+    # -- AC4: route to sandbox (embedded Python) or MCP -----------------
+    raw_output, sandbox_result, latency_ms = _execute(
+        tool,
+        arguments,
+        tenant_id=tenant_id,
+        department_id=department_id,
+        sandbox=sandbox,
+        mcp_factory=mcp_factory,
+        session=session,
+    )
+
+    # -- AC5: timeout / memory breach -> sandbox_violation --------------
+    if sandbox_result is not None and raw_output is None:
+        _emit_audit(
+            audit_port,
+            tool,
+            "tool.sandbox_violation",
+            input_payload={"tool_id": str(tool.id)},
+            output_payload={
+                "timed_out": sandbox_result.timed_out,
+                "exit_code": sandbox_result.exit_code,
+                "stderr": sandbox_result.stderr[:2000],
+            },
+            latency_ms=latency_ms,
+            agent_id=audit_agent_id,
+        )
+        return ToolOutput(
+            tool_name=tool_name,
+            output={},
+            success=False,
+            error="Sandbox execution terminated (timeout or memory breach)",
+            latency_ms=latency_ms,
+        )
+
+    # -- AC3: output validation -------------------------------------------
+    output_errors = validate_instance(tool.output_schema, raw_output)
+    if output_errors:
+        _emit_audit(
+            audit_port,
+            tool,
+            "tool.rejected",
+            input_payload={"tool_id": str(tool.id)},
+            output_payload={"reason": "output_schema_mismatch", "errors": output_errors},
+            latency_ms=latency_ms,
+            agent_id=audit_agent_id,
+        )
+        return ToolOutput(
+            tool_name=tool_name,
+            output={},
+            success=False,
+            error=f"Output validation failed: {'; '.join(output_errors)}",
+            latency_ms=latency_ms,
+        )
+
+    return ToolOutput(
+        tool_name=tool_name, output=raw_output, success=True, latency_ms=latency_ms
+    )
+
+
+def _call_mcp(
+    mcp: McpClientPort,
+    tool_name: str,
+    arguments: dict[str, Any],
+    tenant_id: uuid.UUID,
+    department_id: uuid.UUID,
+):  # noqa: ANN202 -- returns McpClientPort's ToolResult
+    """Run the async `McpClientPort.call_tool` synchronously (AD-3, AD-11)."""
+    import asyncio
+
+    return asyncio.run(
+        mcp.call_tool(
+            tool_name, arguments, tenant_id=tenant_id, department_id=department_id
+        )
+    )
+
+
+class AgentToolPort:
+    """`ToolPort` implementation, scoped to one Agent's registered Tools.
+
+    Resolves a Tool by its `display_name` within the bound Agent, then
+    delegates to `invoke_tool` for the validate/route/validate/audit path.
+    """
+
+    def __init__(
+        self,
+        session: Session,
+        *,
+        agent_id: uuid.UUID,
+        audit: AuditPort | None = None,
+        sandbox: SandboxPort | None = None,
+        mcp_factory: McpFactory = get_mcp_client,
+    ) -> None:
+        self._session = session
+        self._agent_id = agent_id
+        self._audit = audit
+        self._sandbox = sandbox
+        self._mcp_factory = mcp_factory
+
+    async def invoke(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        *,
+        tenant_id: uuid.UUID,
+        department_id: uuid.UUID,
+    ) -> ToolOutput:
+        tool = get_tool_by_name(self._session, agent_id=self._agent_id, display_name=name)
+
+        return invoke_tool(
+            self._session,
+            tool,
+            arguments,
+            tenant_id=tenant_id,
+            department_id=department_id,
+            audit=self._audit,
+            sandbox=self._sandbox,
+            mcp_factory=self._mcp_factory,
+            agent_id=self._agent_id,
+        )

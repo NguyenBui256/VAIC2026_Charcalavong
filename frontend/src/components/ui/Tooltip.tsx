@@ -5,9 +5,15 @@
  *
  * Shows on hover and focus; hides on blur and mouse leave.
  * Respects prefers-reduced-motion via motion.css (opacity transition freezes).
+ *
+ * The tooltip bubble is portaled to <body> with position:fixed so it never
+ * contributes to an ancestor's scroll area (an absolutely-positioned bubble
+ * inside an `overflow:auto` table wrapper inflated scrollWidth -> phantom
+ * horizontal scrollbar) and is never clipped by a scrolled container.
  */
 
-import { useState, type ReactNode } from "react";
+import { useState, useRef, useLayoutEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 export interface TooltipProps {
   /** Tooltip text. */
@@ -24,14 +30,25 @@ export default function Tooltip({
   side = "top",
 }: TooltipProps) {
   const [visible, setVisible] = useState(false);
+  const wrapperRef = useRef<HTMLSpanElement>(null);
+  const [coords, setCoords] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
 
-  const sideClass =
-    side === "bottom"
-      ? "vaic-tooltip-bottom"
-      : "";
+  // Position the portaled bubble against the trigger only while visible.
+  useLayoutEffect(() => {
+    if (!visible || !wrapperRef.current) return;
+    const r = wrapperRef.current.getBoundingClientRect();
+    const gap = 4;
+    setCoords({
+      left: r.left + r.width / 2,
+      top: side === "bottom" ? r.bottom + gap : r.top - gap,
+    });
+  }, [visible, side]);
+
+  const sideClass = side === "bottom" ? "vaic-tooltip-bottom" : "";
 
   return (
     <span
+      ref={wrapperRef}
       className="vaic-tooltip-wrapper"
       onMouseEnter={() => setVisible(true)}
       onMouseLeave={() => setVisible(false)}
@@ -39,12 +56,16 @@ export default function Tooltip({
       onBlur={() => setVisible(false)}
     >
       {children}
-      <span
-        className={`vaic-tooltip ${sideClass} ${visible ? "vaic-tooltip-visible" : ""}`}
-        role="tooltip"
-      >
-        {label}
-      </span>
+      {createPortal(
+        <span
+          className={`vaic-tooltip ${sideClass} ${visible ? "vaic-tooltip-visible" : ""}`}
+          role="tooltip"
+          style={{ left: `${coords.left}px`, top: `${coords.top}px` }}
+        >
+          {label}
+        </span>,
+        document.body,
+      )}
     </span>
   );
 }

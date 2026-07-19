@@ -14,15 +14,18 @@ Vietnamese banking AI-agent platform — Specialist Agents, cross-department Wor
 ### Bring up infrastructure
 
 ```bash
-cp .env.example .env
-docker compose -f infra/docker-compose.yml up -d
-docker compose -f infra/docker-compose.yml ps    # both services should report "healthy"
+cp infra/.env.example infra/.env
+docker compose --env-file infra/.env -f infra/docker-compose.yml up -d
+docker compose --env-file infra/.env -f infra/docker-compose.yml ps    # both services should report "healthy"
 ```
+
+Env is split by consumer — `infra/.env` (compose), `backend/.env` (app), `frontend/.env` (Vite). See the root `.env.example` for the layout. There is no root `.env`.
 
 ### Run the backend
 
 ```bash
 cd backend
+cp .env.example .env          # VAIC_* config; ports must match infra/.env
 uv sync
 uv run uvicorn app.main:app --reload --port 8000
 ```
@@ -33,11 +36,25 @@ Health check: <http://localhost:8000/health> → `{"status": "ok"}`
 
 ```bash
 cd frontend
+cp .env.example .env          # optional; VITE_API_BASE (default: same-origin via Vite proxy)
 npm install
 npm run dev
 ```
 
 Vite dev server: <http://localhost:5173>
+
+## Service Ports
+
+| Service | Dev | Prod | Notes |
+|---|---|---|---|
+| Frontend | 5173 (`vite dev`) | 4173 (`vite preview`) | — |
+| Backend API | 8000 (`uvicorn --reload`) | 8001 (pm2 `vaic-api`) | — |
+| MCP tool server (`vaic_tools`) | 8002 (`uvicorn --reload`) | 8003 (pm2 `vaic-tools`) | REST + MCP at `/mcp/` |
+| Worker (ARQ) | — | — | **No port** — consumes Redis jobs only |
+
+Dev and prod ports differ so both can run side by side on one host. Prod services sit behind Cloudflare Tunnel domains: `charcalavon.site` (frontend), `api.charcalavon.site` (backend), `mcp.charcalavon.site` (MCP tool server → localhost:8003).
+
+Dev backend reaches the MCP server at `http://localhost:8002`; prod backend reaches it at `https://mcp.charcalavon.site` (`VAIC_VAIC_TOOLS_*` in `backend/.env` / `.env.production`).
 
 ## Repository Layout
 

@@ -149,6 +149,15 @@
   background: var(--color-surface);
 }
 
+/* When a Table sits directly inside a Card, the Card already provides the
+ * container chrome (border, radius, padding). Drop the wrapper's own border /
+ * radius / background so we don't render a box-in-a-box (double border look). */
+.vaic-card > .vaic-table-wrapper {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
 .vaic-table {
   width: 100%;
   border-collapse: collapse;
@@ -322,11 +331,13 @@
   display: inline-flex;
 }
 
+/* Portaled to <body> with position:fixed; left/top come from inline style
+ * (computed against the trigger in Tooltip.tsx). Placed above the trigger by
+ * default (translateY(-100%)); .vaic-tooltip-bottom drops it below. Using fixed
+ * keeps the bubble out of any scroll container's overflow area. */
 .vaic-tooltip {
-  position: absolute;
-  bottom: calc(100% + var(--space-1));
-  left: 50%;
-  transform: translateX(-50%);
+  position: fixed;
+  transform: translate(-50%, -100%);
   padding: var(--space-1) var(--space-2);
   background: var(--slate-900);
   color: #fff;
@@ -349,8 +360,7 @@
 }
 
 .vaic-tooltip-bottom {
-  top: calc(100% + var(--space-1));
-  bottom: auto;
+  transform: translate(-50%, 0);
 }
 
 /* ────────────────────────────────────────────────────────────────────

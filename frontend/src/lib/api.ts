@@ -41,7 +41,14 @@ export async function apiFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const headers = { ...authHeaders(), ...(init?.headers ?? {}) };
+  const base = authHeaders();
+  // Multipart bodies (KB upload) must NOT get a JSON Content-Type — the
+  // browser sets its own `multipart/form-data; boundary=...` header.
+  const isFormData = typeof FormData !== "undefined" && init?.body instanceof FormData;
+  if (isFormData) {
+    delete base["Content-Type"];
+  }
+  const headers = { ...base, ...(init?.headers ?? {}) };
   const resp = await fetch(`${API_BASE}${path}`, { ...init, headers });
 
   if (resp.status === 401) {

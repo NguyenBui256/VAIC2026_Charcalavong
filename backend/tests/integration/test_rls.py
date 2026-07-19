@@ -24,6 +24,7 @@ from app.modules.tenant.models import Department, Tenant, User
 # inside their transaction to drop superuser privileges and become subject
 # to RLS.
 
+
 def _as_app(session: Session, tenant_id: uuid.UUID) -> None:
     """Drop superuser privileges + set RLS context for the current txn."""
     session.execute(text("SET LOCAL ROLE vaic_app"))
@@ -34,6 +35,7 @@ def _as_app(session: Session, tenant_id: uuid.UUID) -> None:
 
 
 # -- AC2: tenant sees its own rows -----------------------------------------
+
 
 def test_tenant_a_sees_own_users_orm(
     app_session: Session, seed_data: dict[str, dict[str, Any]]
@@ -65,17 +67,14 @@ def test_tenant_a_sees_own_tenant_row_only(
 
 # -- AC3 + AC4: cross-tenant query returns empty under ORM and raw SQL ------
 
+
 def test_cross_tenant_orm_query_returns_empty(
     app_session: Session, seed_data: dict[str, dict[str, Any]]
 ) -> None:
     """Under TenantA's session, querying for TenantB's user returns nothing."""
     _as_app(app_session, seed_data["tenant_a_id"])
     rows = (
-        app_session.execute(
-            select(User).where(User.id == seed_data["user_b_id"])
-        )
-        .scalars()
-        .all()
+        app_session.execute(select(User).where(User.id == seed_data["user_b_id"])).scalars().all()
     )
     assert rows == []
 
@@ -112,6 +111,7 @@ def test_cross_tenant_aggregate_count_excludes_other_tenant(
 
 
 # -- AC5: app role must NOT have BYPASSRLS ----------------------------------
+
 
 def test_vaic_app_role_lacks_bypassrls(
     app_session: Session, seed_data: dict[str, dict[str, Any]]

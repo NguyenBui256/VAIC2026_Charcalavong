@@ -1,6 +1,6 @@
 /* Story 1.8 — Sidebar navigation.
  * UX-DR14: 256px (collapses to 72px icon rail under 1280px viewport).
- * Nav items: Dashboard, Agents, Workflows, Mini-Apps, Actions, Audit, Settings.
+ * Nav items: Dashboard, Agents, Knowledge Base, Tools, Workflows, Mini-Apps, Actions, Audit, Settings.
  * Active: bg-primary-soft, text-primary, border-l-2 border-primary.
  * Hover: bg-surface-muted.
  */
@@ -8,15 +8,26 @@
 import { NavLink } from "react-router-dom";
 import {
   LayoutGrid,
+  MessageSquare,
   Bot,
+  Database,
+  Wrench,
   Workflow,
   AppWindow,
   Zap,
   Activity,
-  Settings,
-  HelpCircle,
+  ClipboardList,
+  // Settings, // tạm ẩn Settings
+  // HelpCircle, // tạm ẩn Help
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
-import type { ComponentType } from "react";
+import { useState, type ComponentType } from "react";
+import { useTrackingSummary } from "../hooks/useTracking";
+
+// UX-DR14: expanded 256px, collapsed to icon-only rail 72px.
+const COLLAPSED_W = "72px";
+const STORAGE_KEY = "vaic:sidebar-collapsed";
 
 interface NavItem {
   to: string;
@@ -26,12 +37,16 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
+  { to: "/chat", label: "Chat", icon: MessageSquare },
   { to: "/agents", label: "Agents", icon: Bot },
+  { to: "/database", label: "Database", icon: Database },
+  { to: "/tools", label: "Tools", icon: Wrench },
   { to: "/workflows", label: "Workflows", icon: Workflow },
   { to: "/mini-apps", label: "Mini-Apps", icon: AppWindow },
   { to: "/actions", label: "Actions", icon: Zap },
+  { to: "/tracking", label: "Tracking", icon: ClipboardList },
   { to: "/audit", label: "Audit", icon: Activity },
-  { to: "/settings", label: "Settings", icon: Settings },
+  // { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 const sidebarStyle = {
@@ -76,14 +91,89 @@ const linkHover: React.CSSProperties = {
   background: "var(--color-surface-muted)",
 };
 
-const footerStyle = {
-  padding: "var(--space-3) var(--space-4)",
-  borderTop: "1px solid var(--color-border)",
+// Tạm ẩn Help — footerStyle giữ lại để khôi phục khi cần:
+// const footerStyle = {
+//   padding: "var(--space-3) var(--space-4)",
+//   borderTop: "1px solid var(--color-border)",
+// };
+
+// Floating toggle tab pinned to the right vertical edge of the sidebar,
+// vertically centered on the border divider.
+const toggleBtnStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "16px",
+  right: "-14px",
+  zIndex: 10,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "28px",
+  height: "28px",
+  border: "1px solid var(--color-border)",
+  borderRadius: "var(--radius-full, 9999px)",
+  background: "var(--color-surface)",
+  color: "var(--color-text-secondary)",
+  cursor: "pointer",
+  boxShadow: "var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.12))",
+  transition: `background var(--duration-hover) ease-out`,
 };
 
 export default function Sidebar() {
+  const [collapsed, setCollapsed] = useState<boolean>(
+    () => localStorage.getItem(STORAGE_KEY) === "1",
+  );
+
+  const trackingSummary = useTrackingSummary();
+  const awaitingCount = trackingSummary.data?.awaiting_my_review ?? 0;
+
+  const toggle = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem(STORAGE_KEY, next ? "1" : "0");
+      return next;
+    });
+  };
+
+  // When collapsed: narrow rail, hide labels, center icons.
+  const rootStyle: React.CSSProperties = {
+    ...sidebarStyle,
+    position: "relative",
+    width: collapsed ? COLLAPSED_W : "var(--sidebar-w)",
+    transition: "width var(--duration-hover) ease-out",
+  };
+
+  const itemStyle = (isActive: boolean): React.CSSProperties => ({
+    ...linkBase,
+    ...(isActive ? linkActive : {}),
+    ...(collapsed ? { justifyContent: "center", padding: "var(--space-2)" } : {}),
+  });
+
   return (
-    <aside className="vaic-sidebar" style={sidebarStyle} data-testid="vaic-sidebar">
+    <aside
+      className="vaic-sidebar"
+      style={rootStyle}
+      data-testid="vaic-sidebar"
+      data-collapsed={collapsed}
+    >
+      <button
+        type="button"
+        onClick={toggle}
+        className="vaic-sidebar-toggle"
+        style={toggleBtnStyle}
+        title={collapsed ? "Mở rộng sidebar" : "Thu gọn sidebar"}
+        aria-label={collapsed ? "Mở rộng sidebar" : "Thu gọn sidebar"}
+        aria-expanded={!collapsed}
+        onMouseEnter={(e) => Object.assign(e.currentTarget.style, linkHover)}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "var(--color-surface)";
+        }}
+      >
+        {collapsed ? (
+          <ChevronRight size={16} strokeWidth={1.5} />
+        ) : (
+          <ChevronLeft size={16} strokeWidth={1.5} />
+        )}
+      </button>
       <nav style={navStyle} aria-label="Primary">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
@@ -92,10 +182,8 @@ export default function Sidebar() {
               key={item.to}
               to={item.to}
               className="vaic-nav-item"
-              style={({ isActive }) => ({
-                ...linkBase,
-                ...(isActive ? linkActive : {}),
-              })}
+              title={collapsed ? item.label : undefined}
+              style={({ isActive }) => itemStyle(isActive)}
               onMouseEnter={(e) => {
                 const el = e.currentTarget;
                 // Only apply hover bg if not active (active has its own bg).
@@ -111,21 +199,45 @@ export default function Sidebar() {
               }}
             >
               <Icon size={18} strokeWidth={1.5} />
-              <span>{item.label}</span>
+              {!collapsed && <span>{item.label}</span>}
+              {item.to === "/tracking" && awaitingCount > 0 && (
+                <span
+                  data-testid="vaic-tracking-badge"
+                  style={{
+                    marginLeft: "auto",
+                    minWidth: 18,
+                    height: 18,
+                    padding: "0 5px",
+                    borderRadius: 9,
+                    background: "var(--color-warning, #b8860b)",
+                    color: "#fff",
+                    fontSize: "0.7rem",
+                    fontWeight: 700,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {awaitingCount}
+                </span>
+              )}
             </NavLink>
           );
         })}
       </nav>
+      {/* Tạm ẩn Help — khôi phục khi cần:
       <div style={footerStyle}>
         <NavLink
           to="/help"
           className="vaic-nav-item vaic-nav-help"
-          style={linkBase}
+          title={collapsed ? "Help" : undefined}
+          style={itemStyle(false)}
         >
           <HelpCircle size={18} strokeWidth={1.5} />
-          <span>Help</span>
+          {!collapsed && <span>Help</span>}
         </NavLink>
       </div>
+      */}
     </aside>
   );
 }

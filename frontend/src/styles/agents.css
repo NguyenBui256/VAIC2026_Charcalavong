@@ -1,0 +1,494 @@
+/* Story 2.2 — Agent list/detail surface styles (Toast, ConfirmDialog, Tabs,
+ * dirty-dot, filters, department badge). Split from components.css to keep
+ * that file focused on Story 1.9 primitives (modularization rule, >200 LOC).
+ */
+
+/* ────────────────────────────────────────────────────────────────────
+ * Toast (UX-DR9 durations.toast)
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-toast-stack {
+  position: fixed;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+
+.vaic-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-small);
+  color: var(--color-text);
+  pointer-events: auto;
+  animation-name: vaic-toast-in;
+  animation-fill-mode: both;
+}
+
+.vaic-toast-success {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.vaic-toast-error {
+  border-color: var(--color-destructive);
+  color: var(--color-destructive);
+}
+
+.vaic-toast-close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: var(--text-body);
+  line-height: 1;
+  padding: 0 0 0 var(--space-2);
+}
+
+@keyframes vaic-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * ConfirmDialog (UX-DR1 escape routes, UX-DR9 durations.modal)
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation-name: vaic-confirm-overlay-in;
+  animation-fill-mode: both;
+}
+
+.vaic-confirm-dialog {
+  width: min(420px, calc(100vw - 48px));
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  animation-name: vaic-confirm-dialog-in;
+  animation-fill-mode: both;
+}
+
+.vaic-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+@keyframes vaic-confirm-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes vaic-confirm-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * Agent list filters + Department badge
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-agents-filters {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.vaic-agents-filters select {
+  min-width: 200px;
+}
+
+.vaic-agents-filters input[type="search"] {
+  flex: 1;
+  min-width: 240px;
+}
+
+.vaic-dept-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: 9999px;
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * Agent detail — 6-tab nav + dirty dot + status toggle
+ * ──────────────────────────────────────────────────────────────────── */
+
+/* Two-column builder layout: a left sub-sidebar of section links + the
+ * content panel. The nav sticks so it stays visible while the panel scrolls. */
+.vaic-agent-builder-layout {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.vaic-agent-builder-nav {
+  position: sticky;
+  top: var(--space-2);
+}
+
+.vaic-agent-builder-content {
+  min-width: 0;
+}
+
+/* Vertical section nav (was a horizontal tab strip). */
+.vaic-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vaic-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: var(--text-body);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--duration-hover) ease-out,
+              background var(--duration-hover) ease-out;
+}
+
+/* Icon keeps its size; the label takes the slack and truncates if needed. */
+.vaic-tab > svg {
+  flex-shrink: 0;
+}
+
+/* Count badge + dirty dot hug the right edge of the row. */
+.vaic-tab .vaic-tab-count-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.vaic-tab .vaic-tab-count-badge + .vaic-dirty-dot {
+  margin-left: 0;
+}
+
+.vaic-tab .vaic-dirty-dot {
+  margin-left: auto;
+}
+
+.vaic-tab:hover:not([aria-disabled="true"]) {
+  color: var(--color-text);
+  background: var(--color-surface-muted);
+}
+
+.vaic-tab-active,
+.vaic-tab-active:hover {
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+/* Narrow content area — fall back to a stacked horizontal scroller so the
+ * nav never squeezes the panel on tight viewports. */
+@media (max-width: 860px) {
+  .vaic-agent-builder-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+
+  .vaic-agent-builder-nav {
+    position: static;
+  }
+
+  .vaic-tabs {
+    flex-direction: row;
+    gap: var(--space-1);
+    overflow-x: auto;
+    scrollbar-width: thin;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: var(--space-1);
+  }
+
+  .vaic-tab {
+    width: auto;
+    white-space: nowrap;
+  }
+
+  .vaic-tab .vaic-tab-count-badge,
+  .vaic-tab .vaic-dirty-dot {
+    margin-left: 0;
+  }
+}
+
+.vaic-dirty-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-destructive);
+}
+
+/* Story 2.8 — count badge, disabled tabs, detail header, Save All. */
+
+.vaic-tab-count-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--space-2);
+  border-radius: 9999px;
+  background: var(--color-surface-muted);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-caption);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.vaic-tab[aria-disabled="true"] {
+  color: var(--color-text-tertiary);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.vaic-agent-detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+/* Breadcrumb-style back link — a quiet, always-present escape route
+ * (UX-DR1) that reads as navigation, not a competing action. */
+.vaic-agent-detail-breadcrumb {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-start;
+  padding: var(--space-1) 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: var(--text-small);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--duration-hover) ease-out;
+}
+
+.vaic-agent-detail-breadcrumb:hover {
+  color: var(--color-text);
+}
+
+.vaic-agent-detail-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.vaic-agent-detail-title h1 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vaic-agent-detail-header-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.vaic-agent-detail-shell {
+  display: block;
+}
+
+.vaic-agent-detail-main {
+  min-width: 0;
+  /* Constrain the overall body so it doesn't sprawl on wide screens, but stay
+   * left-aligned (no auto margins) to avoid empty side gutters. */
+  max-width: 1080px;
+  padding-bottom: var(--space-8);
+}
+
+/* Plain container — the AppShell content area already provides the page
+ * padding, and the left nav supplies the structure, so a second card box
+ * here would double the inset. The form sits flush, aligned with the
+ * header and nav. */
+.vaic-tab-panel {
+  min-width: 0;
+}
+
+/* Fields fill the content column and stand a little taller for comfortable
+ * input; the outer body max-width keeps line length in check. */
+.vaic-tab-panel .vaic-form-input {
+  min-height: 42px;
+}
+
+/* ── New-Agent gating note ─────────────────────────────────────────── */
+.vaic-agent-gating-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-card);
+  background: var(--color-primary-soft);
+  color: var(--color-text-secondary);
+  font-size: var(--text-small);
+  line-height: var(--leading-small);
+}
+
+.vaic-agent-gating-note strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.vaic-agent-gating-note-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--color-primary);
+}
+
+/* ── Field helper text ─────────────────────────────────────────────── */
+.vaic-form-help {
+  font-size: var(--text-caption);
+  line-height: var(--leading-caption);
+  color: var(--color-text-tertiary);
+}
+
+/* View mode — disabled controls read as clean, filled-in values rather than
+ * greyed-out "broken" inputs. Editing restores the normal white surface. */
+.vaic-form-input:disabled {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  border-color: var(--color-border);
+  opacity: 1;
+  cursor: default;
+}
+
+.vaic-segmented-option:disabled {
+  cursor: default;
+}
+
+.vaic-segmented-option:disabled:not([aria-pressed="true"]) {
+  opacity: 0.6;
+}
+
+/* In-tab action row — right-aligned footer holding Edit, or Save + Cancel. */
+.vaic-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── Segmented control (status toggle) ─────────────────────────────── */
+.vaic-segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-muted);
+}
+
+.vaic-segmented-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 30px;
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: calc(var(--radius-control) - 2px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: var(--text-small);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--duration-hover) ease-out,
+              color var(--duration-hover) ease-out;
+}
+
+.vaic-segmented-option:hover {
+  color: var(--color-text);
+}
+
+.vaic-segmented-option[aria-pressed="true"] {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.vaic-inline-alert {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--color-destructive-soft);
+  color: var(--color-destructive);
+  font-size: var(--text-small);
+  margin-bottom: var(--space-3);
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * Prompt tab — directive highlight overlay + context-window warning
+ * ──────────────────────────────────────────────────────────────────── */
+
+.vaic-inline-alert-warning {
+  background: var(--color-pending-soft);
+  color: var(--color-pending);
+}
+
+.vaic-prompt-directive {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  border-radius: 3px;
+}
+
+.vaic-prompt-highlight-overlay {
+  font-size: var(--text-body);
+  line-height: 1.5;
+}
+

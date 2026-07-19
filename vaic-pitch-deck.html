@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VAIC — Nền tảng AI-Agent cho Ngân hàng</title>
+
+<!-- ============================================================
+     FONTS — cả hai đều có subset Vietnamese (render dấu chuẩn):
+       · Archivo      → tiêu đề editorial lớn (900/700)
+       · Be Vietnam Pro → body/UI, thiết kế cho tiếng Việt
+     ============================================================ -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,500;0,700;0,900;1,700;1,900&family=Be+Vietnam+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   THEME TOKENS — đổi ở đây để đổi toàn bộ giao diện
+   Style: Editorial Bold (light) — cream paper, ink, blue + red
+   ============================================================ */
+:root{
+  --paper:#f3eee2;      /* nền giấy kem */
+  --paper-2:#ece5d5;    /* nền phụ */
+  --ink:#141210;        /* mực đen */
+  --ink-soft:#2a2620;
+  --blue:#1f3cff;       /* accent chính */
+  --red:#ff4222;        /* accent nhấn */
+  --muted:#5c584f;      /* chữ phụ */
+  --line:rgba(20,18,16,.12);
+  --font-display:'Archivo',sans-serif;
+  --font-body:'Be Vietnam Pro',sans-serif;
+  --ease:cubic-bezier(.16,1,.3,1);
+  --stage-bg:#c9c1af;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+
+/* ============================================================
+   FIXED 16:9 STAGE — MANDATORY (viewport-base.css, đầy đủ)
+   ============================================================ */
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--stage-bg,#000)}
+.deck-viewport{position:fixed;inset:0;overflow:hidden;background:var(--stage-bg,#000)}
+.deck-stage{position:absolute;left:0;top:0;width:1920px;height:1080px;overflow:hidden;transform-origin:0 0;background:var(--slide-bg,#fff)}
+.slide{position:absolute;inset:0;width:1920px;height:1080px;overflow:hidden;display:block;visibility:hidden;opacity:0;pointer-events:none;background:var(--paper)}
+.slide.active,.slide.visible{visibility:visible;opacity:1;pointer-events:auto;z-index:1}
+img,video,canvas,svg{max-width:100%;max-height:100%}
+.deck-controls{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:1000}
+@media print{
+  html,body{width:1920px;height:auto;overflow:visible;background:#fff}
+  .deck-viewport{position:static;overflow:visible;background:#fff}
+  .deck-stage{position:static;width:auto;height:auto;transform:none!important;background:none}
+  .slide{position:relative;display:block!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;width:1920px;height:1080px;break-after:page;page-break-after:always}
+  .slide:last-child{break-after:auto;page-break-after:auto}
+  .deck-controls{display:none!important}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.2s!important}}
+
+/* ============================================================
+   SLIDE CHROME — khung editorial: rule trên + rule dưới
+   ============================================================ */
+.slide{font-family:var(--font-body);color:var(--ink)}
+.pad{position:absolute;inset:80px 120px 74px;display:flex;flex-direction:column}
+.chrome{flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;
+  border-bottom:3px solid var(--ink);padding-bottom:22px;
+  font-size:21px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.chrome .brand{font-family:var(--font-display);font-weight:900;font-size:34px;letter-spacing:-.01em;color:var(--ink);text-transform:none}
+.chrome .brand em{color:var(--blue);font-style:normal}
+.stack{flex:1;display:flex;flex-direction:column;justify-content:center;padding:40px 0;min-height:0}
+.foot{flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;
+  border-top:3px solid var(--ink);padding-top:20px;
+  font-size:19px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.foot .pg{font-weight:700;color:var(--ink);font-family:var(--font-display)}
+
+/* faint 12-col grid overlay (dùng cho slide chọn lọc) */
+.cols{position:absolute;inset:0;display:grid;grid-template-columns:repeat(12,1fr);pointer-events:none;z-index:0}
+.cols span{border-right:1px solid rgba(20,18,16,.045)}
+
+/* ============================================================
+   TYPOGRAPHY HELPERS
+   ============================================================ */
+.kicker{display:inline-flex;align-items:center;gap:14px;font-family:var(--font-body);font-weight:600;
+  font-size:22px;letter-spacing:.26em;text-transform:uppercase;color:var(--blue)}
+.kicker.red{color:var(--red)}
+.kicker .tick{width:34px;height:3px;background:currentColor}
+h1.hero{font-family:var(--font-display);font-weight:900;font-size:150px;line-height:.9;letter-spacing:-.03em;text-transform:uppercase}
+h2{font-family:var(--font-display);font-weight:900;font-size:88px;line-height:.96;letter-spacing:-.02em;text-transform:uppercase}
+h2.sm{font-size:70px}
+.lead{font-size:32px;line-height:1.5;color:var(--muted);font-weight:400;max-width:1220px}
+.lead b{color:var(--ink);font-weight:600}
+.hl{background:linear-gradient(transparent 60%,rgba(31,60,255,.24) 0);padding:0 3px;color:var(--ink);font-weight:600}
+.hl.r{background:linear-gradient(transparent 60%,rgba(255,66,34,.24) 0)}
+
+/* badge (nhãn đỏ nghiêng) */
+.badge{display:inline-block;background:var(--red);color:#fff;font-family:var(--font-display);font-weight:900;
+  font-size:22px;letter-spacing:.04em;text-transform:uppercase;padding:11px 22px;transform:rotate(-1.5deg)}
+
+/* tags / chips */
+.tags{display:flex;flex-wrap:wrap;gap:12px}
+.tag{font-family:var(--font-display);font-weight:700;font-size:19px;letter-spacing:.02em;text-transform:uppercase;
+  border:2.5px solid var(--ink);padding:10px 18px;color:var(--ink)}
+.tag.b{background:var(--ink);color:var(--paper)}
+.tag.blue{border-color:var(--blue);color:var(--blue)}
+.tag.red{border-color:var(--red);color:var(--red)}
+.chip{font-size:19px;font-weight:500;background:var(--paper-2);border:1px solid var(--line);border-radius:40px;padding:9px 18px;color:var(--ink-soft)}
+
+/* ============================================================
+   REVEAL — stagger qua biến --d (transition-delay)
+   ============================================================ */
+.reveal{opacity:0;transform:translateY(30px);
+  transition:opacity .7s var(--ease),transform .7s var(--ease);transition-delay:var(--d,0s)}
+.slide.visible .reveal{opacity:1;transform:translateY(0)}
+.reveal-mask{overflow:hidden;display:block}
+.reveal-mask>span{display:block;transform:translateY(110%);transition:transform .8s var(--ease);transition-delay:var(--d,0s)}
+.slide.visible .reveal-mask>span{transform:translateY(0)}
+
+/* ============================================================
+   COMPONENT: feature row (số lớn + nội dung)
+   ============================================================ */
+.feat{display:grid;grid-template-columns:340px 1fr;gap:60px;align-items:start}
+.feat .num{font-family:var(--font-display);font-weight:900;font-size:230px;line-height:.8;color:var(--blue);letter-spacing:-.04em}
+.feat h2{margin-bottom:28px}
+.feat .desc{font-size:30px;line-height:1.5;color:var(--muted);max-width:980px;margin-bottom:34px}
+.feat .desc b{color:var(--ink);font-weight:600}
+.pts{display:grid;grid-template-columns:1fr 1fr;gap:16px 40px;max-width:1050px}
+.pt{display:flex;gap:16px;font-size:24px;line-height:1.35;color:var(--ink-soft)}
+.pt .m{color:var(--red);font-family:var(--font-display);font-weight:900;flex:0 0 auto}
+
+/* ============================================================
+   COMPONENT: 4-card grid (solution overview)
+   ============================================================ */
+.grid4{display:grid;grid-template-columns:repeat(2,1fr);gap:26px;margin-top:8px}
+.card{border:3px solid var(--ink);padding:34px 36px;background:var(--paper);position:relative;overflow:hidden}
+.card .bar{display:block;width:46px;height:5px;background:var(--blue);margin-bottom:18px}
+.card h3{font-family:var(--font-display);font-weight:900;font-size:38px;text-transform:uppercase;letter-spacing:-.01em;margin:6px 0 12px}
+.card p{font-size:23px;line-height:1.45;color:var(--muted)}
+.card.k{background:var(--ink)}
+.card.k .bar{background:var(--red)}
+.card.k h3{color:var(--paper)}
+.card.k p{color:#cfc7b6}
+
+/* ============================================================
+   COMPONENT: closed-loop diagram
+   ============================================================ */
+.loop{display:flex;align-items:center;justify-content:center;gap:22px;margin-top:20px;flex-wrap:wrap}
+.loop .node{border:3px solid var(--ink);background:var(--paper);padding:26px 30px;min-width:270px;text-align:center}
+.loop .node .t{font-family:var(--font-display);font-weight:900;font-size:30px;text-transform:uppercase}
+.loop .node .s{font-size:20px;color:var(--muted);margin-top:6px}
+.loop .node.blue{border-color:var(--blue)}.loop .node.blue .t{color:var(--blue)}
+.loop .node.red{border-color:var(--red)}.loop .node.red .t{color:var(--red)}
+.loop .arw{font-family:var(--font-display);font-weight:900;font-size:44px;color:var(--ink)}
+
+/* ============================================================
+   COMPONENT: demo step cards (2 bước / slide)
+   ============================================================ */
+.steps2{display:grid;grid-template-columns:1fr 1fr;gap:32px}
+.step{border:3px solid var(--ink);padding:30px 34px;display:flex;flex-direction:column;gap:16px;background:var(--paper)}
+.step .sh{display:flex;align-items:baseline;gap:18px}
+.step .sn{font-family:var(--font-display);font-weight:900;font-size:64px;line-height:.8;color:var(--blue)}
+.step .st{font-family:var(--font-display);font-weight:900;font-size:32px;text-transform:uppercase;letter-spacing:-.01em;line-height:1}
+.step .dept{align-self:flex-start;font-size:18px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#fff;background:var(--red);padding:6px 14px}
+.step .dept.blue{background:var(--blue)}
+.step .dept.ink{background:var(--ink)}
+.step .act{font-size:23px;line-height:1.4;color:var(--ink-soft)}
+.step .docs{display:flex;flex-wrap:wrap;gap:9px;margin-top:2px}
+.step .docs .d{font-size:17.5px;background:var(--paper-2);border:1px solid var(--line);border-radius:30px;padding:7px 14px;color:var(--muted)}
+.step .docs .d b{color:var(--ink);font-weight:600}
+
+/* ============================================================
+   COMPONENT: flow map (6 bước ngang)
+   ============================================================ */
+.flow{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-top:12px}
+.fstep{border:3px solid var(--ink);padding:20px 18px;display:flex;flex-direction:column;gap:10px;background:var(--paper)}
+.fstep .fn{font-family:var(--font-display);font-weight:900;font-size:40px;color:var(--blue);line-height:.8}
+.fstep .ft{font-family:var(--font-display);font-weight:700;font-size:20px;text-transform:uppercase;line-height:1.05}
+.fstep .fd{font-size:16px;color:var(--muted);line-height:1.3}
+.fstep .fp{margin-top:auto;font-size:15px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:#fff;background:var(--ink);padding:5px 10px;align-self:flex-start}
+.fstep .fp.r{background:var(--red)}.fstep .fp.b{background:var(--blue)}
+
+.agents{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-top:30px}
+.agent{padding:4px 0}
+.agent .an{font-family:var(--font-display);font-weight:900;font-size:26px;text-transform:uppercase}
+.agent .an::before{content:"";display:inline-block;width:15px;height:15px;background:var(--blue);margin-right:13px;vertical-align:baseline}
+.agent.red .an::before{background:var(--red)}
+.agent.ink .an::before{background:var(--ink)}
+.agent .ar{font-size:19px;color:var(--muted);line-height:1.35;margin-top:4px}
+
+/* ============================================================
+   COMPONENT: rubric 4 bars
+   ============================================================ */
+.rubric{display:grid;grid-template-columns:repeat(2,1fr);gap:20px 30px;margin-top:8px}
+.rb{display:flex;gap:22px;align-items:flex-start;border-bottom:2px solid var(--line);padding-bottom:18px}
+.rb .rn{font-family:var(--font-display);font-weight:900;font-size:56px;line-height:.8;color:var(--red);flex:0 0 auto}
+.rb .rt{font-family:var(--font-display);font-weight:900;font-size:28px;text-transform:uppercase;line-height:1}
+.rb .rd{font-size:21px;color:var(--muted);line-height:1.4;margin-top:8px}
+
+/* ============================================================
+   INVERTED slides (divider / closing) — nền mực
+   ============================================================ */
+.slide.invert{background:var(--ink);color:var(--paper)}
+.slide.invert .pad{}
+.slide.invert .chrome{border-color:rgba(243,238,226,.3);color:#9c968a}
+.slide.invert .chrome .brand{color:var(--paper)}
+.slide.invert .chrome .brand em{color:var(--red)}
+.slide.invert .foot{border-color:rgba(243,238,226,.3);color:#9c968a}
+.slide.invert .foot .pg{color:var(--paper)}
+.slide.invert h1.hero,.slide.invert h2{color:var(--paper)}
+.slide.invert .lead{color:#c8c1b2}
+.slide.invert .lead b{color:var(--paper)}
+.slide.invert .tag{border-color:var(--paper);color:var(--paper)}
+.slide.invert .tag.b{background:var(--paper);color:var(--ink)}
+.slide.invert .cols span{border-color:rgba(243,238,226,.05)}
+.slide.invert .hl{color:var(--paper)}
+
+/* ============================================================
+   EDIT MODE (chỉnh chữ trực tiếp trên trình duyệt)
+   ============================================================ */
+.edit-hotzone{position:fixed;top:0;left:0;width:80px;height:80px;z-index:10000;cursor:pointer}
+.edit-toggle{position:fixed;top:18px;left:18px;width:52px;height:52px;border-radius:12px;border:none;
+  background:var(--ink);color:#fff;font-size:22px;cursor:pointer;opacity:0;pointer-events:none;
+  transition:opacity .3s ease;z-index:10001;box-shadow:0 6px 20px rgba(0,0,0,.3)}
+.edit-toggle.show,.edit-toggle.active{opacity:1;pointer-events:auto}
+.edit-toggle.active{background:var(--blue)}
+body.editing [contenteditable]{outline:2px dashed rgba(31,60,255,.5);outline-offset:4px;border-radius:3px}
+body.editing [contenteditable]:focus{outline:2px solid var(--blue);background:rgba(31,60,255,.06)}
+.edit-hint{position:fixed;top:20px;left:84px;background:var(--blue);color:#fff;font-family:var(--font-body);
+  font-size:15px;font-weight:500;padding:10px 16px;border-radius:8px;z-index:10001;display:none;letter-spacing:.02em}
+body.editing .edit-hint{display:block}
+
+/* progress / counter chrome */
+.deck-progress{
+  position:fixed;left:0;bottom:0;height:5px;width:100%;
+  background:var(--blue);z-index:1000;
+  transform:scaleX(0);transform-origin:left;
+  transition:transform .4s var(--ease);
+}
+</style>
+</head>
+<body>
+<div class="deck-viewport">
+  <main class="deck-stage" id="deckStage">
+
+    <!-- ================= 1 · TITLE ================= -->
+    <section class="slide active" data-sec="Giới thiệu">
+      <div class="cols"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="pad">
+        <header class="chrome"><span class="brand">VA<em>I</em>C</span><span>Enterprise AI-Agent Platform · 2026</span></header>
+        <div class="stack">
+          <span class="badge reveal" style="--d:.05s;align-self:flex-start;margin-bottom:38px">Demo · Vay Thế Chấp Ô Tô</span>
+          <h1 class="hero">
+            <span class="reveal-mask"><span style="--d:.15s">Không phải</span></span>
+            <span class="reveal-mask"><span style="--d:.28s">chatbot —</span></span>
+            <span class="reveal-mask"><span style="--d:.41s" class="cblue">là hệ thống.</span></span>
+          </h1>
+          <p class="lead reveal" style="--d:.7s;margin-top:44px">Nền tảng AI-Agent giúp ngân hàng tự động hóa các <b>quy trình liên phòng ban</b>: nhiều chuyên gia AI phối hợp, <span class="hl">tự sinh mini-app có backend riêng</span>, và phản ứng theo sự kiện.</p>
+        </div>
+        <footer class="foot"><span>Nền tảng AI-Agent cho Ngân hàng Việt Nam</span><span class="pg">01</span></footer>
+      </div>
+    </section>
+
+    <!-- ================= 2 · PROBLEM ================= -->
+    <section class="slide" data-sec="Vấn đề">
+      <div class="pad">
+        <header class="chrome"><span class="brand">VA<em>I</em>C</span><span>Vấn đề</span></header>
+        <div class="stack">
+          <div class="kicker red reveal" style="--d:.05s"><span class="tick"></span>Công việc thật sự nằm ở đâu?</div>
+          <h2 class="reveal" style="--d:.15s;margin:26px 0 34px">Công việc ngân hàng<br>là <span style="color:var(--red)">các luồng</span> liên phòng ban.</h2>
+          <p class="lead reveal" style="--d:.32s">Một hồ sơ vay chạm Tín dụng, Pháp lý/Tuân thủ và Vận hành. Một ngoại lệ chạm Chi nhánh, Rủi ro, Back-Office. Hôm nay những luồng này chạy trên <b>email, chat, Excel và kinh nghiệm truyền miệng</b>.</p>
+          <div class="tags reveal" style="--d:.5s;margin-top:40px">
+            <span class="tag">Email</span><span class="tag">Chat</span><span class="tag">Excel</span><span class="tag">Tribal knowledge</span>
+          </div>
+        </div>
+        <footer class="foot"><span>Luồng, không phải câu trả lời, mới là đơn vị công việc</span><span class="pg">02</span></footer>
+      </div>
+    </section>
+
+    <!-- ================= 3 · COST ================= -->
+    <section class="slide" data-sec="Vấn đề">
+      <div class="pad">
+        <header class="chrome"><span class="brand">VA<em>I</em>C</span><span>Cái giá phải trả</span></header>
+        <div class="stack">
+          <h2 class="sm reveal" style="--d:.05s;margin-bottom:36px">Khi luồng không có chủ sở hữu</h2>
+          <div class="grid4">
+            <div class="card reveal" style="--d:.15s"><span class="bar"></span><h3>Không ai sở hữu</h3><p>Việc bật qua bật lại giữa các inbox; trạng thái luôn là "để tôi kiểm tra lại".</p></div>
+            <div class="card reveal" style="--d:.26s"><span class="bar"></span><h3>Lặp lại thủ công</h3><p>Tra cứu chính sách, kiểm tra hồ sơ, nhập liệu, làm lại bằng tay mỗi lần.</p></div>
+            <div class="card reveal" style="--d:.37s"><span class="bar"></span><h3>Không có sổ ghi</h3><p>Dữ liệu phân tán khắp file; không nơi nào lưu lại <b>vết quyết định</b>.</p></div>
+            <div class="card k reveal" style="--d:.48s"><span class="bar"></span><h3>IT không theo kịp</h3><p>Mỗi công cụ nội bộ mới cần một team dev và một ticket trong backlog.</p></div>
+          </div>
+        </div>
+        <footer class="foot"><span>Chatbot đơn lẻ trả lời một câu hỏi, nhưng không sở hữu một quy trình</span><span class="pg">03</span></footer>
+      </div>
+    </section>
+
+    <!-- ================= 4 · INSIGHT ================= -->
+    <section class="slide invert" data-sec="Góc nhìn">
+      <div class="cols"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="pad">
+        <header class="chrome"><span class="brand">VA<em>I</em>C</span><span>Góc nhìn</span></header>
+        <div class="stack">
+          <div class="kicker reveal" style="--d:.05s;color:var(--red)"><span class="tick"></span>Cú đặt cược</div>
+          <h2 class="reveal" style="--d:.18s;margin-top:26px;max-width:1500px">Khoảng trống là <span style="color:var(--red)">chính cái luồng</span>, chứ không phải câu trả lời.</h2>
+          <p class="lead reveal" style="--d:.4s;margin-top:40px">Chatbot đơn lẻ không thể giữ trạng thái xuyên phòng ban, không bàn giao sạch, và <b>không tạo ra thứ gì tồn tại được</b>. Cần một nơi để công việc thật sự "sống" và tự chạy.</p>
+        </div>
+        <footer class="foot"><span>Vietnamese banking · cross-department flows</span><span class="pg">04</span></footer>
+      </div>
+    </section>
+
+    <!-- ================= 5 · SOLUTION OVERVIEW ================= -->
+    <section class="slide" data-sec="Giải pháp">
+      <div class="pad">
+        <header class="chrome"><span class="brand">VA<em>I</em>C</span><span>Giải pháp</span></header>
+        <div class="stack">
+          <div class="kicker reveal" style="--d:.05s"><span class="tick"></span>Nền tảng web đa tenant · 4 bộ phận</div>
+          <h2 class="sm reveal" style="--d:.15s;margin:22px 0 30px">Bốn phần ăn khớp thành một vòng lặp</h2>
+          <div class="grid4">
+            <div class="card reveal" style="--d:.24s"><span class="bar"></span><h3>Agent Builder</h3><p>Cấu hình chuyên gia AI theo phòng ban: KB/RAG riêng, tool calling, tích hợp API, chọn prompt &amp; model.</p></div>
+            <div class="card reveal" style="--d:.34s"><span class="bar"></span><h3>Orchestrator</h3><p>Agent điều phối phân rã yêu cầu phức tạp, giao việc qua MCP, fallback về con người khi bí.</p></div>
+            <div class="card reveal" style="--d:.44s"><span class="bar"></span><h3>Mini-App Builder</h3><p>Agent tự sinh app: UI + backend + CSDL JSONB riêng, có tầng hiển thị, phát sự kiện ngược lại.</p></div>
+            <div class="card reveal" style="--d:.54s"><span class="bar"></span><h3>Actions</h3><p>Lịch cron + trigger sự kiện trong app, kích hoạt agent đúng thời điểm.</p></div>
+          </div>
+        </div>
+        <footer class="foot"><span>FastAPI · PostgreSQL (JSONB) · ReactJS · LLM model-agnostic + MCP</span><span class="pg">05</span></footer>
+      </div>
+    </section>
+
+    <!-- ================= 6 · FEATURE 1 ================= -->
+    <section class="slide" data-sec="Tính năng">
+      <div class="pad">
+        <header class="chrome"><span class="brand">VA<em>I</em>C</span><span>Tính năng · Agent Builder</span></header>
+        <div class="stack">
+          <div class="feat">
+            <div class="num reveal" style="--d:.05s">01</div>
+            <div>
+              <h2 class="reveal" style="--d:.12s">Agent Builder</h2>
+              <p class="desc reveal" style="--d:.22s">Cấu hình chuyên gia AI cho từng phòng ban, với <b>Knowledge Base cô lập</b>: Tín dụng không đọc được tài liệu của Nhân sự.</p>
+              <div class="pts">
+                <div class="pt reveal" style="--d:.32s"><span class="m">→</span><span>KB riêng từng agent: tài liệu chính sách, quy định — truy hồi qua RAG.</span></div>
+                <div class="pt reveal" style="--d:.4s"><span class="m">→</span><span>Tool calling: header (auth), input/output schema, Python nhúng tùy chọn.</span></div>
+                <div class="pt reveal" style="--d:.48s"><span class="m">→</span><span>Tích hợp API: hệ thống nội bộ, Gmail, Calendar.</span></div>
+                <div class="pt reveal" style="--d:.56s"><span class="m">→</span><span>Prompt &amp; model cấu hình được cho từng agent.</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="foot"><span>Cô lập KB theo phòng ban: yêu cầu của ngành quản chế</span><span class="pg">06</span></footer>
+      </div>
+    </section>
+
+    <!-- ================= 7 · FEATURE 2 ================= -->
+    <section class="slide" data-sec="Tính năng">
+      <div class="pad">
+        <header class="chrome"><span class="brand">VA<em>I</em>C</span><span>Tính năng · Orchestrator</span></header>
+        <div class="stack">
+          <div class="feat">
+            <div class="num reveal" style="--d:.05s">02</div>
+            <div>
+              <h2 class="reveal" style="--d:.12s">Workflow<br>Orchestrator</h2>
+              <p class="desc reveal" style="--d:.22s">Agent điều phối <b>phân rã động</b> một yêu cầu phức tạp thành các task có cấu trúc, rồi giao cho agent chuyên gia.</p>
+              <div class="pts">
+                <div class="pt reveal" style="--d:.32s"><span class="m">→</span><span>Schema task JSON/YAML: task / input / output / expected / criteria.</span></div>
+                <div class="pt reveal" style="--d:.4s"><span class="m">→</span><span>Agent phối hợp qua MCP, đồng thời là kho task chia sẻ.</span></div>
+                <div class="pt reveal" style="--d:.48s"><span class="m">→</span><span>Xung đột / mơ hồ → fallback về con người kèm trạng thái hiện tại.</span></div>
+                <div class="pt reveal" style="--d:.56s"><span class="m">→</span><span>Human-in-the-loop với vòng phản hồi từng bước.</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="foot"><span>Planner decompose + assign, đúng chuẩn rubric hackathon</span><span class="pg">07</span></footer>
+      </div>
+    </section>
+
+    <!-- ================= 8 · FEATURE 3 ================= -->
+    <section class="slide" data-sec="Tính năng">
+      <div class="pad">
+        <header class="chrome"><span class="brand">VA<em>I</em>C</span><span>Tính năng · Mini-App</span></header>
+        <div class="stack">
+          <div class="feat">
+            <div class="num reveal" style="--d:.05s" >03</div>
+            <div>
+              <h2 class="reveal" style="--d:.12s">Mini-App Builder</h2>
+              <p class="desc reveal" style="--d:.22s">Từ mô tả + output mong muốn, agent <b>tự sinh một mini-app</b>: UI + backend tự cấp phát + CSDL riêng theo tenant.</p>
+              <div class="pts">
+                <div class="pt reveal" style="--d:.32s"><span class="m">→</span><span>Backend tự động: schema thực thể JSON → bảng JSONB + CRUD endpoint.</span></div>
+                <div class="pt reveal" style="--d:.4s"><span class="m">→</span><span>Tầng hiển thị: Public / Need-Auth / Private (whitelist).</span></div>
+                <div class="pt reveal" style="--d:.48s"><span class="m">→</span><span>Cô lập theo tenant_id / department_id / owner_id.</span></div>
+                <div class="pt reveal" style="--d:.56s"><span class="m">→</span><span>App <b>phát sự kiện ngược</b> vào orchestrator — vòng lặp khép kín.</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="foot"><span>Điểm khác biệt kiến trúc: agent → app có backend → event</span><span class="pg">08</span></footer>
+      </div>
+    </section>
+
+    <!-- ================= 9 · FEATURE 4 ================= -->
+    <section class="slide" data-sec="Tính năng">
+      <div class="pad">
+        <header class="chrome"><span class="brand">VA<em>I</em>C</span><span>Tính năng · Actions</span></header>
+        <div class="stack">
+          <div class="feat">
+            <div class="num reveal" style="--d:.05s">04</div>
+            <div>
+              <h2 class="reveal" style="--d:.12s">Actions</h2>
+              <p class="desc reveal" style="--d:.22s">Kích hoạt agent <b>đúng thời điểm</b> — không cần con người bấm nút.</p>
+              <div class="pts">
+                <div class="pt reveal" style="--d:.32s"><span class="m">→</span><span>Lịch cron: báo cáo hằng ngày, đối soát hằng tuần.</span></div>
+                <div class="pt reveal" style="--d:.4s"><span class="m">→</span><span>Trigger sự kiện trong app: "khi một form được gửi".</span></div>
+                <div class="pt reveal" style="--d:.48s"><span class="m">→</span><span>Event bus nội bộ: sự kiện mini-app &amp; lịch đều enqueue agent run.</span></div>
+                <div class="pt reveal" style="--d:.56s"><span class="m">→</span><span>Là mắt xích khép kín vòng lặp thực thi.</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="foot"><span>Cron + in-app event triggers</span><span class="pg">09</span></footer>
+      </div>
+    </section>
+
+    <!-- ================= 10 · CLOSED LOOP ================= -->
+    <section class="slide invert" data-sec="Điểm khác biệt">
+      <div class="pad">
+        <header class="chrome"><span class="brand">VA<em>I</em>C</span><span>Vòng lặp đóng</span></header>
+        <div class="stack">
+          <div class="kicker reveal" style="--d:.05s;color:var(--red)"><span class="tick"></span>Đây mới là sản phẩm</div>
+          <h2 class="sm reveal" style="--d:.15s;margin:22px 0 44px">Vòng lặp khép kín là điểm khác biệt</h2>
+          <div class="loop">
+            <div class="node blue reveal" style="--d:.28s"><div class="t">Agent</div><div class="s">phân rã &amp; làm việc</div></div>
+            <div class="arw reveal" style="--d:.34s">→</div>
+            <div class="node reveal" style="--d:.4s"><div class="t">Mini-App</div><div class="s">tự sinh + backend</div></div>
+            <div class="arw reveal" style="--d:.46s">→</div>
+            <div class="node red reveal" style="--d:.52s"><div class="t">Event</div><div class="s">app phát khi người thao tác</div></div>
+            <div class="arw reveal" style="--d:.58s">↺</div>
+            <div class="node blue reveal" style="--d:.64s"><div class="t">Agent</div><div class="s">phản ứng</div></div>
+          </div>
+          <p class="lead reveal" style="--d:.8s;margin-top:50px;text-align:center;align-self:center">Không nền tảng nào cho agent <b>tự sinh app có backend phát sự kiện ngược vào workflow</b>. Công việc giờ <span class="hl">có nơi để sống</span>.</p>
+        </div>
+        <footer class="foot"><span>Lợi thế thực thi, không phải một tính năng đơn lẻ</span><span class="pg">10</span></footer>
+      </div>
+    </section>
+
+    <!-- ================= 11 · DEMO DIVIDER ================= -->
+    <section class="slide invert" data-sec="Demo">
+      <div class="cols"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="pad">
+        <header class="chrome"><span class="brand">VA<em>I</em>C</span><span>Kịch bản Demo</span></header>
+        <div class="stack">
+          <span class="badge reveal" style="--d:.05s;align-self:flex-start;margin-bottom:36px">Kịch bản Demo</span>
+          <h1 class="hero" style="font-size:118px">
+            <span class="reveal-mask"><span style="--d:.15s">Thẩm định &amp; Giải ngân</span></span>
+            <span class="reveal-mask"><span style="--d:.28s">Vay Thế Chấp <span style="color:var(--red)">Ô Tô</span></span></span>
+          </h1>
+          <p class="lead reveal" style="--d:.6s;margin-top:40px">Quy trình 6 bước, xuyên nhiều phòng ban, kèm danh mục hồ sơ đầy đủ ở mỗi giai đoạn để <b>xóa triệt để tình trạng thiếu sót hồ sơ</b>.</p>
+        </div>
+        <footer class="foot"><span>Secured Auto Loan · cross-department workflow</span><span class="pg">11</span></footer>
+      </div>
+    </section>
+
+    <!-- ================= 12 · DEMO OVERVIEW / FLOW MAP ================= -->
+    <section class="slide" data-sec="Demo">
+      <div class="pad">
+        <header class="chrome"><span class="brand">VA<em>I</em>C</span><span>Demo · Tổng quan luồng</span></header>
+        <div class="stack">
+          <h2 class="sm reveal" style="--d:.05s;margin-bottom:8px">6 bước · 3 chuyên gia AI + 1 điều phối</h2>
+          <div class="flow">
+            <div class="fstep reveal" style="--d:.16s"><div class="fn">1</div><div class="ft">Tiếp nhận hồ sơ</div><div class="fd">Tư vấn, thu thập, kiểm tra chất lượng bản quét</div><span class="fp b">Sale / RM</span></div>
+            <div class="fstep reveal" style="--d:.24s"><div class="fn">2</div><div class="ft">Thẩm định tín dụng</div><div class="fd">CIC + tính DTI, năng lực trả nợ</div><span class="fp r">Credit</span></div>
+            <div class="fstep reveal" style="--d:.32s"><div class="fn">3</div><div class="ft">Định giá TSĐB</div><div class="fd">Tra giá thị trường, đánh giá dòng/đời xe</div><span class="fp">Collateral</span></div>
+            <div class="fstep reveal" style="--d:.4s"><div class="fn">4</div><div class="ft">Phê duyệt</div><div class="fd">Quyết định &amp; thông báo cho vay</div><span class="fp b">Cấp duyệt</span></div>
+            <div class="fstep reveal" style="--d:.48s"><div class="fn">5</div><div class="ft">Ký &amp; hoàn thiện</div><div class="fd">Hợp đồng, thế chấp, thủ tục xe</div><span class="fp">Back Office</span></div>
+            <div class="fstep reveal" style="--d:.56s"><div class="fn">6</div><div class="ft">Đăng ký &amp; Giải ngân</div><div class="fd">GDBĐ, giữ giấy gốc, chuyển tiền</div><span class="fp">Back Office</span></div>
+          </div>
+          <div class="agents">
+            <div class="agent ink reveal" style="--d:.64s"><div class="an">Orchestrator</div><div class="ar">Phân rã &amp; giao việc, fallback về người</div></div>
+            <div class="agent red reveal" style="--d:.7s"><div class="an">Credit</div><div class="ar">CIC, DTI, năng lực trả nợ</div></div>
+            <div class="agent reveal" style="--d:.76s"><div class="an">Legal / Compliance</div><div class="ar">Hồ sơ pháp lý, hợp đồng</div></div>
+            <div class="agent ink reveal" style="--d:.82s"><div class="an">Operations</div><div class="ar">Định giá, back-office, giải ngân</div></div>
+          </div>
+        </div>
+        <footer class="foot"><span>2–3 chuyên gia + planner + tool use + trace = 4 bar rubric</span><span class="pg">12</span></footer>
+      </div>
+    </section>
+
+    <!-- ================= 13 · STEPS 1-2 ================= -->
+    <section class="slide" data-sec="Demo">
+      <div class="pad">
+        <header class="chrome"><span class="brand">VA<em>I</em>C</span><span>Demo · Bước 1–2</span></header>
+        <div class="stack">
+          <div class="steps2">
+            <div class="step reveal" style="--d:.1s">
+              <div class="sh"><span class="sn">1</span><span class="st">Tiếp nhận &amp;<br>thu thập hồ sơ</span></div>
+              <span class="dept blue">Sale / RM</span>
+              <div class="act">Tư vấn gói vay, kiểm tra độ rõ nét của ảnh/bản quét để tránh phải bổ sung nhiều lần.</div>
+              <div class="docs">
+                <span class="d"><b>Hồ sơ pháp lý</b></span>
+                <span class="d">HĐ lao động / QĐ bổ nhiệm</span>
+                <span class="d">Sao kê lương 3–6 tháng</span>
+                <span class="d">HĐ mua bán xe</span>
+                <span class="d">Phiếu đặt cọc / vốn tự có</span>
+                <span class="d">Xe cũ: Cà vẹt + Đăng kiểm</span>
+              </div>
+            </div>
+            <div class="step reveal" style="--d:.26s">
+              <div class="sh"><span class="sn">2</span><span class="st">Thẩm định<br>tín dụng</span></div>
+              <span class="dept">Phòng Thẩm định Tín dụng</span>
+              <div class="act">Kiểm tra lịch sử tín dụng, tính DTI thủ công, đánh giá năng lực trả nợ từ hồ sơ tài chính.</div>
+              <div class="docs">
+                <span class="d">Toàn bộ hồ sơ Bước 1</span>
+                <span class="d"><b>Báo cáo CIC</b></span>
+                <span class="d"><b>Tờ trình thẩm định</b> (DTI, hạn mức, lãi suất, thời hạn)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="foot"><span>Khởi tạo khoản vay → Thẩm định năng lực trả nợ</span><span class="pg">13</span></footer>
+      </div>
+    </section>
+
+    <!-- ================= 14 · STEPS 3-4 ================= -->
+    <section class="slide" data-sec="Demo">
+      <div class="pad">
+        <header class="chrome"><span class="brand">VA<em>I</em>C</span><span>Demo · Bước 3–4</span></header>
+        <div class="stack">
+          <div class="steps2">
+            <div class="step reveal" style="--d:.1s">
+              <div class="sh"><span class="sn">3</span><span class="st">Định giá &amp;<br>thẩm định TSĐB</span></div>
+              <span class="dept">Phòng QL Tài sản Đảm bảo</span>
+              <div class="act">Tra cứu giá thị trường, đánh giá dòng/đời xe để định giá chính xác (xe cũ thẩm định hiện trạng thực tế).</div>
+              <div class="docs">
+                <span class="d">HĐ mua bán / Thông báo giá / Cà vẹt cũ</span>
+                <span class="d">Biên bản kiểm tra thực tế TSĐB</span>
+                <span class="d"><b>Chứng thư định giá</b> (căn cứ tỷ lệ vay 70–80%)</span>
+              </div>
+            </div>
+            <div class="step reveal" style="--d:.26s">
+              <div class="sh"><span class="sn">4</span><span class="st">Phê duyệt<br>khoản vay</span></div>
+              <span class="dept ink">Trưởng phòng / Hội đồng TD</span>
+              <div class="act">Đánh giá tổng thể tờ trình tín dụng + chứng thư định giá để ra quyết định cuối cùng.</div>
+              <div class="docs">
+                <span class="d"><b>Phê duyệt tín dụng</b> (chữ ký thẩm quyền)</span>
+                <span class="d"><b>Thông báo cấp tín dụng</b> gửi KH &amp; đại lý</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="foot"><span>Định giá tài sản → Quyết định phê duyệt</span><span class="pg">14</span></footer>
+      </div>
+    </section>
+
+    <!-- ================= 15 · STEPS 5-6 ================= -->
+    <section class="slide" data-sec="Demo">
+      <div class="pad">
+        <header class="chrome"><span class="brand">VA<em>I</em>C</span><span>Demo · Bước 5–6</span></header>
+        <div class="stack">
+          <div class="steps2">
+            <div class="step reveal" style="--d:.1s">
+              <div class="sh"><span class="sn">5</span><span class="st">Ký kết &amp; hoàn<br>thiện TSĐB</span></div>
+              <span class="dept blue">Back Office · RM · Đại lý</span>
+              <div class="act">Soạn &amp; ký hợp đồng, nộp thuế trước bạ, bấm biển số, đăng ký giao dịch đảm bảo.</div>
+              <div class="docs">
+                <span class="d">HĐ tín dụng · HĐ thế chấp · Giấy nhận nợ</span>
+                <span class="d">Hóa đơn VAT · Biên lai trước bạ</span>
+                <span class="d">Giấy hẹn / Cà vẹt</span>
+                <span class="d"><b>Bảo hiểm thân vỏ</b> (NH thụ hưởng)</span>
+              </div>
+            </div>
+            <div class="step reveal" style="--d:.26s">
+              <div class="sh"><span class="sn">6</span><span class="st">Đăng ký GDBĐ<br>&amp; giải ngân</span></div>
+              <span class="dept">Back Office</span>
+              <div class="act">Hoàn tất đăng ký biện pháp bảo đảm, giữ giấy tờ gốc, phát giấy đi đường, chuyển tiền vào TK đại lý.</div>
+              <div class="docs">
+                <span class="d">Phiếu yêu cầu đăng ký GDBĐ</span>
+                <span class="d">Biên bản lưu kho giấy tờ gốc</span>
+                <span class="d"><b>Ủy nhiệm chi</b> → TK đại lý</span>
+                <span class="d">Giấy đi đường cấp cho KH</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="foot"><span>Hoàn thiện pháp lý tài sản → Giải ngân</span><span class="pg">15</span></footer>
+      </div>
+    </section>
+
+    <!-- ================= 16 · TRACE + RUBRIC ================= -->
+    <section class="slide" data-sec="Vì sao thắng">
+      <div class="pad">
+        <header class="chrome"><span class="brand">VA<em>I</em>C</span><span>Trace &amp; Rubric</span></header>
+        <div class="stack">
+          <div class="kicker reveal" style="--d:.05s"><span class="tick"></span>Mọi quyết định đều được log: doc, tool, prompt, model, latency</div>
+          <h2 class="sm reveal" style="--d:.15s;margin:20px 0 30px">Bốn thanh chuẩn của rubric</h2>
+          <div class="rubric">
+            <div class="rb reveal" style="--d:.26s"><span class="rn">1</span><div><div class="rt">2–3 chuyên gia số</div><div class="rd">Credit, Legal/Compliance, Operations phối hợp trên một yêu cầu phức tạp.</div></div></div>
+            <div class="rb reveal" style="--d:.36s"><span class="rn">2</span><div><div class="rt">Điều phối bởi planner</div><div class="rd">Phân rã công việc và giao task cho các agent thực thi.</div></div></div>
+            <div class="rb reveal" style="--d:.46s"><span class="rn">3</span><div><div class="rt">Dùng tool thực</div><div class="rd">Gọi API, truy vấn dữ liệu, thực hiện hành động cụ thể — không chỉ trả text.</div></div></div>
+            <div class="rb reveal" style="--d:.56s"><span class="rn">4</span><div><div class="rt">Trace dashboard</div><div class="rd">Vết agent, trạng thái task, quyết định, luồng phối hợp — nhìn xuyên suốt.</div></div></div>
+          </div>
+        </div>
+        <footer class="foot"><span>Trace = input dashboard rubric + bằng chứng "vì sao hơn chatbot"</span><span class="pg">16</span></footer>
+      </div>
+    </section>
+
+    <!-- ================= 17 · CLOSING ================= -->
+    <section class="slide invert" data-sec="Kết">
+      <div class="cols"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="pad">
+        <header class="chrome"><span class="brand">VA<em>I</em>C</span><span>Kết</span></header>
+        <div class="stack">
+          <h1 class="hero" style="font-size:132px">
+            <span class="reveal-mask"><span style="--d:.12s">Công việc giờ</span></span>
+            <span class="reveal-mask"><span style="--d:.25s">có <span style="color:var(--red)">nơi để sống.</span></span></span>
+          </h1>
+          <p class="lead reveal" style="--d:.55s;margin-top:44px">Là cách các ngân hàng Việt Nam xây phần mềm nội bộ: mỗi luồng liên phòng ban trở thành một tập agent chuyên gia với app tự sinh. <b>Tự động hóa không cần hàng đợi IT.</b></p>
+          <div class="tags reveal" style="--d:.75s;margin-top:44px">
+            <span class="tag b">Multi-Agent</span><span class="tag">Orchestrator</span><span class="tag">Mini-App</span><span class="tag">Actions</span><span class="tag">Trace &amp; Audit</span>
+          </div>
+        </div>
+        <footer class="foot"><span>VAIC · Enterprise AI-Agent Platform for Banking</span><span class="pg">17</span></footer>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- progress bar + edit affordances (ngoài stage) -->
+<div class="deck-progress" id="progress"></div>
+<div class="edit-hotzone" aria-hidden="true"></div>
+<button class="edit-toggle" id="editToggle" title="Chế độ chỉnh sửa (E)">✏️</button>
+<div class="edit-hint">Chế độ sửa: bấm vào chữ để sửa · Ctrl+S để lưu · E để thoát</div>
+
+<script>
+/* ============================================================
+   SLIDE CONTROLLER — scaling, keyboard, wheel, touch, progress
+   ============================================================ */
+class SlidePresentation{
+  constructor(){
+    this.slides=[...document.querySelectorAll('.slide')];
+    this.i=0;
+    this.stage=document.getElementById('deckStage');
+    this.progress=document.getElementById('progress');
+    this.scale();addEventListener('resize',()=>this.scale());
+    this.keys();this.wheel();this.touch();
+    this.restore();
+    this.show(0);
+  }
+  scale(){
+    const f=Math.min(innerWidth/1920,innerHeight/1080);
+    const x=(innerWidth-1920*f)/2, y=(innerHeight-1080*f)/2;
+    this.stage.style.transform=`translate(${x}px,${y}px) scale(${f})`;
+  }
+  show(n){
+    this.i=Math.max(0,Math.min(n,this.slides.length-1));
+    this.slides.forEach((s,k)=>{s.classList.toggle('active',k===this.i);s.classList.toggle('visible',k===this.i);});
+    this.progress.style.transform='scaleX('+((this.i+1)/this.slides.length)+')';
+  }
+  next(){this.show(this.i+1)} prev(){this.show(this.i-1)}
+  keys(){
+    addEventListener('keydown',e=>{
+      if(document.body.classList.contains('editing'))return;
+      if(['ArrowRight','ArrowDown',' ','PageDown'].includes(e.key)){e.preventDefault();this.next()}
+      else if(['ArrowLeft','ArrowUp','PageUp'].includes(e.key)){e.preventDefault();this.prev()}
+      else if(e.key==='Home'){this.show(0)} else if(e.key==='End'){this.show(this.slides.length-1)}
+    });
+  }
+  wheel(){let t=0;addEventListener('wheel',e=>{if(document.body.classList.contains('editing'))return;
+    const now=Date.now();if(now-t<600)return;if(Math.abs(e.deltaY)<24)return;t=now;e.deltaY>0?this.next():this.prev();},{passive:true});}
+  touch(){let x0=0;addEventListener('touchstart',e=>x0=e.touches[0].clientX,{passive:true});
+    addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-x0;if(Math.abs(dx)>60)dx<0?this.next():this.prev();},{passive:true});}
+  restore(){try{const d=JSON.parse(localStorage.getItem('vaic-deck-edits')||'{}');
+    document.querySelectorAll('[data-eid]').forEach(el=>{if(d[el.dataset.eid]!=null)el.innerHTML=d[el.dataset.eid];});}catch(e){}}
+}
+const deck=new SlidePresentation();
+
+/* ============================================================
+   INLINE EDIT MODE
+   ============================================================ */
+const editor={
+  isActive:false,
+  toggle(){
+    this.isActive=!this.isActive;
+    document.body.classList.toggle('editing',this.isActive);
+    const btn=document.getElementById('editToggle');
+    btn.classList.toggle('active',this.isActive);btn.classList.add('show');
+    const sel='h1,h2,h3,p,.lead,.act,.st,.rt,.rd,.desc,.ft,.fd,.an,.ar,.card p,.d,.tag,.chip,.badge';
+    document.querySelectorAll('.slide '+sel).forEach((el,k)=>{
+      if(this.isActive){el.setAttribute('contenteditable','true');if(!el.dataset.eid)el.dataset.eid='e'+k;}
+      else el.removeAttribute('contenteditable');
+    });
+    if(!this.isActive)this.save();
+  },
+  save(){const d={};document.querySelectorAll('[data-eid]').forEach(el=>d[el.dataset.eid]=el.innerHTML);
+    localStorage.setItem('vaic-deck-edits',JSON.stringify(d));}
+};
+document.getElementById('editToggle').addEventListener('click',()=>editor.toggle());
+const hz=document.querySelector('.edit-hotzone'),et=document.getElementById('editToggle');let ht=null;
+hz.addEventListener('mouseenter',()=>{clearTimeout(ht);et.classList.add('show')});
+hz.addEventListener('mouseleave',()=>{ht=setTimeout(()=>{if(!editor.isActive)et.classList.remove('show')},400)});
+et.addEventListener('mouseenter',()=>clearTimeout(ht));
+et.addEventListener('mouseleave',()=>{ht=setTimeout(()=>{if(!editor.isActive)et.classList.remove('show')},400)});
+hz.addEventListener('click',()=>editor.toggle());
+document.addEventListener('keydown',e=>{
+  if((e.key==='e'||e.key==='E')&&!e.target.getAttribute('contenteditable')){editor.toggle();}
+  if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();editor.save();
+    const h=document.querySelector('.edit-hint');if(h){const o=h.textContent;h.textContent='✓ Đã lưu';setTimeout(()=>h.textContent=o,1200);}}
+});
+</script>
+</body>
+</html>

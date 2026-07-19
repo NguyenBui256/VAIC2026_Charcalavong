@@ -54,6 +54,7 @@ _pwd = CryptContext(schemes=["argon2"], deprecated="auto")
 # Error — minimal until Story 1.4 lands the shared envelope.
 # ---------------------------------------------------------------------------
 
+
 class AuthError(Exception):
     """Authentication failure carrying a stable code + http_status."""
 
@@ -81,6 +82,7 @@ class AuthError(Exception):
 # Password hashing (Argon2)
 # ---------------------------------------------------------------------------
 
+
 def hash_password(plain: str) -> str:
     """Argon2 hash a plaintext password."""
     return _pwd.hash(plain)
@@ -97,6 +99,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 # ---------------------------------------------------------------------------
 # JWT
 # ---------------------------------------------------------------------------
+
 
 def create_access_token(
     claims: dict[str, Any],
@@ -119,9 +122,7 @@ def decode_access_token(token: str) -> dict[str, Any]:
     """Decode + verify a JWT. Raises AuthError on any failure."""
     s = get_settings()
     try:
-        payload: dict[str, Any] = jwt.decode(
-            token, s.jwt_secret, algorithms=[s.jwt_algorithm]
-        )
+        payload: dict[str, Any] = jwt.decode(token, s.jwt_secret, algorithms=[s.jwt_algorithm])
     except JWTError as exc:
         raise AuthError("Invalid or expired token") from exc
 
@@ -137,23 +138,34 @@ def decode_access_token(token: str) -> dict[str, Any]:
 
 # Paths that bypass authentication. Public endpoints must not depend on the
 # tenant contextvar being set.
-PUBLIC_PATHS: frozenset[str] = frozenset({
-    "/health",
-    "/ready",
-    "/auth/login",
-    "/auth/refresh",
-    "/openapi.json",
-    "/docs",
-    "/redoc",
-})
+PUBLIC_PATHS: frozenset[str] = frozenset(
+    {
+        "/health",
+        "/ready",
+        "/auth/login",
+        "/auth/refresh",
+        "/openapi.json",
+        "/docs",
+        "/redoc",
+    }
+)
 
 
 def _is_public(path: str) -> bool:
-    """A path is public if it exactly matches a PUBLIC_PATHS entry or is docs."""
+    """A path is public if it exactly matches a PUBLIC_PATHS entry or is docs.
+
+    `/mini-app-runtime/...` (story 4-5) is the static bundle.js/index.html for
+    a generated Mini-App — sandbox-inert markup/JS, not tenant data. It is
+    deliberately served without auth here; the actual data plane
+    (`/apps/{app_id}/rows*`) stays gated behind a normal or scoped platform
+    JWT (story 4-6 `scoped_token.py`), so this exemption never exposes rows.
+    """
     if path in PUBLIC_PATHS:
         return True
     # Swagger UI assets
-    return path.startswith("/docs") or path.startswith("/redoc")
+    if path.startswith("/docs") or path.startswith("/redoc"):
+        return True
+    return path.startswith("/mini-app-runtime/")
 
 
 def _envelope(
@@ -181,7 +193,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(
-        self, request: Request, call_next: Any  # noqa: ANN401 -- ASGI contract
+        self,
+        request: Request,
+        call_next: Any,  # noqa: ANN401 -- ASGI contract
     ) -> Any:  # noqa: ANN401
         path = request.url.path
         trace_id = uuid.uuid4()
@@ -194,7 +208,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
             return _unauthenticated(trace_id, "Missing or malformed Authorization header")
-        token = auth_header[len("Bearer "):].strip()
+        token = auth_header[len("Bearer ") :].strip()
         if not token:
             return _unauthenticated(trace_id, "Empty bearer token")
 
@@ -217,6 +231,36 @@ class AuthMiddleware(BaseHTTPMiddleware):
         request.state.tenant_id = claims.get("tenant_id")
         request.state.department_id = claims.get("department_id")
         request.state.role = claims.get("role")
+        # Additive — Mini-App per-app scoped session token (story 4-6).
+        # `scope`/`miniapp_id` are only present on tokens minted by
+        # `mini_app.scoped_token.mint_scoped_token`; absent on normal
+        # platform JWTs, so this never affects existing auth behavior.
+        request.state.scope = claims.get("scope")
+        request.state.miniapp_id = claims.get("miniapp_id")
+
+        # Global deny-by-default for scoped Mini-App tokens (story 4-6 /
+        # security review Task 13). A `miniapp:rows` token is a valid
+        # platform JWT (carries user_id/tenant_id/role), so without this
+        # check it would be accepted on every protected route. Restrict it
+        # to only its own app's rows endpoints; everything else is 403.
+        # Normal tokens (`scope` is None) are completely unaffected.
+        scope = claims.get("scope")
+        if scope == "miniapp:rows":
+            miniapp_id = claims.get("miniapp_id")
+            # Rows are the data plane; files are the `file` field upload/download
+            # plane (both gated per-app by `_load_and_gate`). Both live under the
+            # token's own `/apps/{miniapp_id}` prefix; everything else is 403.
+            allowed_prefixes = (
+                f"/apps/{miniapp_id}/rows",
+                f"/apps/{miniapp_id}/files",
+            )
+            if not miniapp_id or not any(
+                path == p or path.startswith(p + "/") for p in allowed_prefixes
+            ):
+                reset_tenant_context()
+                return _forbidden(
+                    trace_id, "scoped mini-app token is not authorized for this path"
+                )
 
         try:
             response = await call_next(request)
@@ -235,5 +279,18 @@ def _unauthenticated(
     """Return a 401 JSONResponse carrying the standard error envelope."""
     return JSONResponse(
         status_code=401,
+        content=_envelope(code, message, trace_id, details),
+    )
+
+
+def _forbidden(
+    trace_id: uuid.UUID,
+    message: str,
+    code: str = "FORBIDDEN",
+    details: dict[str, Any] | None = None,
+) -> JSONResponse:
+    """Return a 403 JSONResponse carrying the standard error envelope."""
+    return JSONResponse(
+        status_code=403,
         content=_envelope(code, message, trace_id, details),
     )

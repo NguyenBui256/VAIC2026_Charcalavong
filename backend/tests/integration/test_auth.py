@@ -55,15 +55,14 @@ def _login(client: TestClient, email: str, password: str) -> dict[str, Any]:
 # AC1 — JWT contains user_id, tenant_id, department_id, role
 # ---------------------------------------------------------------------------
 
+
 def test_login_returns_jwt_with_required_claims(
     api_client: TestClient, auth_seed: dict[str, Any]
 ) -> None:
     """POST /auth/login with valid creds returns a JWT carrying the 4 claims."""
     body = _login(api_client, "alice@tenanta.example", "Password123!")
     token = body["data"]["access_token"]
-    decoded = jwt.decode(
-        token, _settings.jwt_secret, algorithms=[_settings.jwt_algorithm]
-    )
+    decoded = jwt.decode(token, _settings.jwt_secret, algorithms=[_settings.jwt_algorithm])
     assert str(decoded["user_id"]) == str(auth_seed["user_a_id"])
     assert str(decoded["tenant_id"]) == str(auth_seed["tenant_a_id"])
     assert str(decoded["department_id"]) == str(auth_seed["dept_a_id"])
@@ -86,9 +85,8 @@ def test_login_wrong_password_returns_401(api_client: TestClient) -> None:
 # AC2 — JWT expires per configurable TTL
 # ---------------------------------------------------------------------------
 
-def test_jwt_has_configurable_expiration(
-    api_client: TestClient, auth_seed: dict[str, Any]
-) -> None:
+
+def test_jwt_has_configurable_expiration(api_client: TestClient, auth_seed: dict[str, Any]) -> None:
     """Decoded JWT `exp` minus `iat` equals the configured TTL."""
     body = _login(api_client, "alice@tenanta.example", "Password123!")
     decoded = jwt.decode(
@@ -104,6 +102,7 @@ def test_jwt_has_configurable_expiration(
 # ---------------------------------------------------------------------------
 # AC3 — Missing Authorization header → 401 envelope
 # ---------------------------------------------------------------------------
+
 
 def test_protected_endpoint_without_auth_header_returns_401_envelope(
     api_client: TestClient,
@@ -123,6 +122,7 @@ def test_protected_endpoint_without_auth_header_returns_401_envelope(
 # ---------------------------------------------------------------------------
 # AC4 — Invalid / expired JWT → 401 envelope
 # ---------------------------------------------------------------------------
+
 
 def test_protected_endpoint_with_invalid_jwt_returns_401_envelope(
     api_client: TestClient,
@@ -157,6 +157,7 @@ def test_protected_endpoint_with_expired_jwt_returns_401_envelope(
 # AC5 — Valid JWT → tenant_context.get() populated in handler
 # ---------------------------------------------------------------------------
 
+
 def test_protected_endpoint_sees_tenant_context(
     api_client: TestClient, auth_seed: dict[str, Any]
 ) -> None:
@@ -176,6 +177,7 @@ def test_protected_endpoint_sees_tenant_context(
 # ---------------------------------------------------------------------------
 # AC6 — RLS session var is set; handler sees only same-tenant rows
 # ---------------------------------------------------------------------------
+
 
 def test_protected_endpoint_enforces_rls_isolation(
     api_client: TestClient, auth_seed: dict[str, Any]
@@ -198,6 +200,7 @@ def test_protected_endpoint_enforces_rls_isolation(
 # AC7 — Password hashing uses Argon2
 # ---------------------------------------------------------------------------
 
+
 def test_password_hash_uses_argon2() -> None:
     """hash_password() returns a string starting with $argon2."""
     h = hash_password("anything")
@@ -207,6 +210,7 @@ def test_password_hash_uses_argon2() -> None:
 # ---------------------------------------------------------------------------
 # AC8 — tenant_context is reset between requests
 # ---------------------------------------------------------------------------
+
 
 def test_tenant_context_resets_between_requests(
     api_client: TestClient, auth_seed: dict[str, Any]
@@ -227,14 +231,13 @@ def test_tenant_context_resets_between_requests(
 # AC9 — Deactivated user → 401 with code ACCOUNT_DEACTIVATED
 # ---------------------------------------------------------------------------
 
+
 def test_deactivated_user_login_returns_401_account_deactivated(
     api_client: TestClient, auth_seed: dict[str, Any]
 ) -> None:
     """Set is_active=false on alice, attempt login — get ACCOUNT_DEACTIVATED."""
     with AdminSessionLocal() as s:
-        s.execute(
-            text("UPDATE users SET is_active = false WHERE email = 'alice@tenanta.example'")
-        )
+        s.execute(text("UPDATE users SET is_active = false WHERE email = 'alice@tenanta.example'"))
         s.commit()
     try:
         r = api_client.post(
@@ -255,9 +258,8 @@ def test_deactivated_user_login_returns_401_account_deactivated(
 # AC10 — GET /auth/me returns profile
 # ---------------------------------------------------------------------------
 
-def test_auth_me_returns_user_profile(
-    api_client: TestClient, auth_seed: dict[str, Any]
-) -> None:
+
+def test_auth_me_returns_user_profile(api_client: TestClient, auth_seed: dict[str, Any]) -> None:
     body = _login(api_client, "bob@tenantb.example", "Password123!")
     token = body["data"]["access_token"]
     r = api_client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
@@ -270,6 +272,7 @@ def test_auth_me_returns_user_profile(
 # ---------------------------------------------------------------------------
 # AC11 — Two different JWTs never cross tenant boundaries
 # ---------------------------------------------------------------------------
+
 
 def test_two_jwts_never_cross_tenant_boundaries(
     api_client: TestClient, auth_seed: dict[str, Any]

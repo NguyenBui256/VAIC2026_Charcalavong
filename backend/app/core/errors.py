@@ -47,7 +47,8 @@ __all__ = [
 # -- TraceId context ---------------------------------------------------------
 
 TraceIdContext: ContextVar[uuid.UUID | None] = ContextVar(
-    "trace_id_context", default=None,
+    "trace_id_context",
+    default=None,
 )
 
 
@@ -204,7 +205,8 @@ def _build_error_response(
 
 
 async def _domain_exception_handler(
-    request: Request, exc: DomainError,
+    request: Request,
+    exc: DomainError,
 ) -> JSONResponse:
     """Translate a DomainError into the error envelope."""
     _ = request  # unused but required by FastAPI signature
@@ -217,7 +219,8 @@ async def _domain_exception_handler(
 
 
 async def _unhandled_exception_handler(
-    request: Request, exc: Exception,
+    request: Request,
+    exc: Exception,
 ) -> JSONResponse:
     """Translate any unhandled exception into a 500 error envelope.
 

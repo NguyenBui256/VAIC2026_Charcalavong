@@ -9,10 +9,26 @@ import { useEffect, type ReactNode } from "react";
 import AppShell from "./components/AppShell";
 import LoginPage from "./routes/login";
 import DashboardPage from "./routes/dashboard";
+import AgentsPage from "./routes/agents";
+import AgentDetailPage from "./routes/agent-detail";
+import WorkflowsPage from "./routes/workflows";
+import WorkflowDetailPage from "./routes/workflow-detail";
+import RunTrackingPage from "./routes/orchestrator/RunTrackingPage";
+import MiniAppsPage from "./routes/mini-apps";
+import MiniAppHostPage from "./routes/mini-app-host";
+import AuditExplorerPage from "./routes/audit-explorer";
+import AuditSessionPage from "./routes/audit-session";
+import ToolsPage from "./routes/tools/ToolsPage";
+import KnowledgeBasePage from "./routes/knowledge-base/KnowledgeBasePage";
+import ChatPage from "./routes/chat/ChatPage";
+import DatabasePage from "./routes/database";
+import ActionsPage from "./routes/actions/ActionsPage";
+import TrackingPage from "./routes/tracking";
 import { isAuthenticated } from "./lib/auth";
 import { CommandPaletteProvider } from "./components/CommandPalette/CommandPaletteContext";
 import CommandPalette from "./components/CommandPalette/CommandPalette";
 import { registerNavigationCommands } from "./components/CommandPalette/navigationCommands";
+import { ToastProvider } from "./components/ui";
 
 /** Auth guard: redirects to /login if no token. */
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -50,12 +66,27 @@ export function AppRoutes() {
         }
       >
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/chat" element={<ChatPage />} />
+        <Route path="/agents" element={<AgentsPage />} />
+        <Route path="/agents/:id" element={<AgentDetailPage />} />
+        {/* Task 9 — shared Tools + Knowledge Base pages. */}
+        <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
+        <Route path="/tools" element={<ToolsPage />} />
+        <Route path="/database" element={<DatabasePage />} />
+        {/* Story 3.1 — Workflow list + Definition tab detail. */}
+        <Route path="/workflows" element={<WorkflowsPage />} />
+        <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
+        <Route path="/workflows/:id/runs/:runId" element={<RunTrackingPage />} />
+        <Route path="/tracking" element={<TrackingPage />} />
+        {/* Story 4.7 — Mini-App catalog list + create. */}
+        <Route path="/mini-apps" element={<MiniAppsPage />} />
+        {/* Task 16 — sandboxed Mini-App host page (iframe + scoped token). */}
+        <Route path="/mini-apps/:appId" element={<MiniAppHostPage />} />
         {/* Placeholder routes for nav — real surfaces arrive in later stories */}
-        <Route path="/agents" element={<ComingSoon title="Agents" />} />
-        <Route path="/workflows" element={<ComingSoon title="Workflows" />} />
-        <Route path="/mini-apps" element={<ComingSoon title="Mini-Apps" />} />
-        <Route path="/actions" element={<ComingSoon title="Actions" />} />
-        <Route path="/audit" element={<ComingSoon title="Audit" />} />
+        <Route path="/actions" element={<ActionsPage />} />
+        {/* Epic 6 (FR-22) — Audit V2 Trace Explorer + session evaluation. */}
+        <Route path="/audit" element={<AuditExplorerPage />} />
+        <Route path="/audit/:sessionId" element={<AuditSessionPage />} />
         <Route path="/settings" element={<ComingSoon title="Settings" />} />
       </Route>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -80,11 +111,13 @@ function CommandPaletteRegistrations() {
 export default function App() {
   return (
     <BrowserRouter>
-      <CommandPaletteProvider>
-        <AppRoutes />
-        <CommandPaletteRegistrations />
-        <CommandPalette />
-      </CommandPaletteProvider>
+      <ToastProvider>
+        <CommandPaletteProvider>
+          <AppRoutes />
+          <CommandPaletteRegistrations />
+          <CommandPalette />
+        </CommandPaletteProvider>
+      </ToastProvider>
     </BrowserRouter>
   );
 }

@@ -3,7 +3,7 @@
 Covers ACs:
 - Every port is a typing.Protocol (not a concrete class)
 - LlmPort exposes complete, stream, embed with correct signatures
-- AuditPort.log signature matches PRD FR-21 AuditEntry field shape
+- AuditPort exposes structured session/span/event lifecycle methods
 - McpClientPort REQUIRES tenant_id + department_id on every method
 - ToolPort, DocIntakePort, SandboxPort are Protocols with correct methods
 """
@@ -15,12 +15,14 @@ import typing
 
 # -- Protocol check helper ---------------------------------------------------
 
+
 def _is_protocol(cls: type) -> bool:
     """Return True if cls is a typing.Protocol."""
     return typing.get_origin(cls) is None and getattr(cls, "_is_protocol", False)
 
 
 # -- LlmPort -----------------------------------------------------------------
+
 
 def test_llm_port_is_protocol() -> None:
     """LlmPort is a Protocol, not a concrete class."""
@@ -67,6 +69,7 @@ def test_llm_port_structural_compliance() -> None:
 
 # -- AuditPort ---------------------------------------------------------------
 
+
 def test_audit_port_is_protocol() -> None:
     """AuditPort is a Protocol."""
     from app.core.ports.audit import AuditPort
@@ -74,22 +77,31 @@ def test_audit_port_is_protocol() -> None:
     assert _is_protocol(AuditPort)
 
 
-def test_audit_port_has_log_method() -> None:
-    """AuditPort declares `log`."""
+def test_audit_port_has_v2_lifecycle_methods() -> None:
+    """AuditPort exposes session/span/event lifecycle methods."""
     from app.core.ports.audit import AuditPort
 
-    assert hasattr(AuditPort, "log")
-    assert callable(AuditPort.log)
+    expected = {"start_session", "start_span", "emit_event", "end_span", "end_session", "span"}
+    assert all(callable(getattr(AuditPort, name)) for name in expected)
 
 
-def test_audit_entry_has_fr21_fields() -> None:
-    """AuditEntry has the exact field names from PRD FR-21."""
-    from app.core.ports.audit import AuditEntry
+def test_execution_context_has_correlation_fields() -> None:
+    from app.core.ports.audit import ExecutionContext
 
-    fields = AuditEntry.model_fields
-    expected = {"run_id", "step_id", "agent_id", "ts", "type", "input", "output",
-                "latency_ms", "model"}
-    assert set(fields.keys()) == expected
+    expected = {
+        "tenant_id",
+        "session_id",
+        "run_id",
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "task_id",
+        "agent_id",
+        "department_id",
+        "attempt_no",
+        "correlation_id",
+    }
+    assert set(ExecutionContext.model_fields) == expected
 
 
 def test_audit_port_structural_compliance() -> None:
@@ -97,12 +109,18 @@ def test_audit_port_structural_compliance() -> None:
     from app.core.ports.audit import AuditPort
 
     class FakeAudit:
-        def log(self, entry) -> None: ...  # noqa: ANN001
+        def start_session(self, value): ...  # noqa: ANN001
+        def start_span(self, value): ...  # noqa: ANN001
+        def emit_event(self, value): ...  # noqa: ANN001
+        def end_span(self, value): ...  # noqa: ANN001
+        def end_session(self, value): ...  # noqa: ANN001
+        def span(self, value): ...  # noqa: ANN001
 
     assert isinstance(FakeAudit(), AuditPort)
 
 
 # -- McpClientPort -----------------------------------------------------------
+
 
 def test_mcp_client_port_is_protocol() -> None:
     """McpClientPort is a Protocol."""
@@ -130,12 +148,8 @@ def test_mcp_client_port_call_tool_requires_tenant_and_department() -> None:
             continue
         sig = inspect.signature(attr)
         params = set(sig.parameters.keys())
-        assert "tenant_id" in params, (
-            f"McpClientPort.{name} must accept tenant_id (AD-11)"
-        )
-        assert "department_id" in params, (
-            f"McpClientPort.{name} must accept department_id (AD-11)"
-        )
+        assert "tenant_id" in params, f"McpClientPort.{name} must accept tenant_id (AD-11)"
+        assert "department_id" in params, f"McpClientPort.{name} must accept department_id (AD-11)"
 
 
 def test_mcp_client_port_structural_compliance() -> None:
@@ -144,7 +158,12 @@ def test_mcp_client_port_structural_compliance() -> None:
 
     class FakeMcp:
         async def call_tool(
-            self, tool_name, arguments, *, tenant_id, department_id,  # noqa: ANN001
+            self,
+            tool_name,
+            arguments,
+            *,
+            tenant_id,
+            department_id,  # noqa: ANN001
         ): ...
         async def list_tools(self, *, tenant_id, department_id): ...  # noqa: ANN001
 
@@ -152,6 +171,7 @@ def test_mcp_client_port_structural_compliance() -> None:
 
 
 # -- ToolPort ----------------------------------------------------------------
+
 
 def test_tool_port_is_protocol() -> None:
     """ToolPort is a Protocol."""
@@ -178,6 +198,7 @@ def test_tool_port_structural_compliance() -> None:
 
 
 # -- DocIntakePort -----------------------------------------------------------
+
 
 def test_doc_intake_port_is_protocol() -> None:
     """DocIntakePort is a Protocol."""
@@ -206,6 +227,7 @@ def test_doc_intake_port_structural_compliance() -> None:
 
 # -- SandboxPort -------------------------------------------------------------
 
+
 def test_sandbox_port_is_protocol() -> None:
     """SandboxPort is a Protocol."""
     from app.core.ports.sandbox import SandboxPort
@@ -230,7 +252,59 @@ def test_sandbox_port_structural_compliance() -> None:
     assert isinstance(FakeSandbox(), SandboxPort)
 
 
+# -- AgentProviderPort (Story 2.5, deferred from 1.4) ------------------------
+
+def test_agent_provider_port_is_protocol() -> None:
+    """AgentProviderPort is a Protocol."""
+    from app.core.ports.agent_provider import AgentProviderPort
+
+    assert _is_protocol(AgentProviderPort)
+
+
+def test_agent_provider_port_has_retrieve_method() -> None:
+    """AgentProviderPort declares `retrieve`."""
+    from app.core.ports.agent_provider import AgentProviderPort
+
+    assert hasattr(AgentProviderPort, "retrieve")
+    assert callable(AgentProviderPort.retrieve)
+
+
+def test_agent_provider_port_retrieve_requires_tenant_and_department() -> None:
+    """`retrieve` carries the AD-11 keyword-only tenant_id + department_id."""
+    from app.core.ports.agent_provider import AgentProviderPort
+
+    sig = inspect.signature(AgentProviderPort.retrieve)
+    params = set(sig.parameters.keys())
+    assert "tenant_id" in params
+    assert "department_id" in params
+
+
+def test_agent_provider_port_structural_compliance() -> None:
+    """A fake implementing `retrieve()` satisfies `isinstance(fake, AgentProviderPort)`."""
+    from app.core.ports.agent_provider import AgentProviderPort
+
+    class FakeAgentProvider:
+        async def retrieve(  # noqa: ANN001
+            self, agent_id, query, *, tenant_id, department_id, top_k=5
+        ): ...
+
+        async def execute_task(  # noqa: ANN001
+            self, agent_id, task_payload, *, tenant_id, department_id
+        ): ...
+
+    assert isinstance(FakeAgentProvider(), AgentProviderPort)
+
+
+def test_retrieval_passage_model_has_exact_fields() -> None:
+    """RetrievalPassage exposes exactly {passage, document_name, chunk_reference, score} (AC3)."""
+    from app.core.ports.agent_provider import RetrievalPassage
+
+    fields = RetrievalPassage.model_fields
+    assert set(fields.keys()) == {"passage", "document_name", "chunk_reference", "score"}
+
+
 # -- Protocol models ---------------------------------------------------------
+
 
 def test_llm_message_model_exists() -> None:
     """LlmPort's Message model has role and content fields."""
@@ -249,3 +323,25 @@ def test_llm_completion_result_model_exists() -> None:
     assert "content" in fields
     assert "model" in fields
     assert "latency_ms" in fields
+
+
+# -- SubprocessSandbox / AgentToolPort structural compliance (Story 2.6) ----
+
+def test_subprocess_sandbox_satisfies_sandbox_port() -> None:
+    """`SubprocessSandbox` structurally satisfies `SandboxPort` (AC4/AC5)."""
+    from app.core.adapters.sandbox import SubprocessSandbox
+    from app.core.ports.sandbox import SandboxPort
+
+    assert isinstance(SubprocessSandbox(), SandboxPort)
+
+
+def test_agent_tool_port_satisfies_tool_port() -> None:
+    """`AgentToolPort` structurally satisfies `ToolPort` (AC2-AC5)."""
+    import uuid
+
+    from app.core.ports.tool import ToolPort
+    from app.modules.agent_builder.tool_service import AgentToolPort
+
+    fake_session = object()
+    port = AgentToolPort(fake_session, agent_id=uuid.uuid4())  # type: ignore[arg-type]
+    assert isinstance(port, ToolPort)

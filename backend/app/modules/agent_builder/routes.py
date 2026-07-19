@@ -1,1 +1,356 @@
-"""Agent Builder routes."""
+"""Agent Builder HTTP routes — /agents CRUD (Story 2.1).
+
+Thin adapter: parse request -> call service -> envelope (AD-1). No SQL or
+business rules live here. `DomainError` subclasses raised by the service
+flow through the registered exception handlers (`core/errors.py`).
+
+Success envelope: `{data, error: null, meta: {}}` (AR-14).
+"""
+
+from __future__ import annotations
+
+import uuid
+from typing import Any
+
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from app.core.deps import get_tenant_session
+from app.core.model_catalog import get_provider_catalog
+from app.core.settings import get_settings
+from app.modules.agent_builder.agent_kb_service import (
+    attach_agent_document, detach_agent_document, list_agent_documents,
+)
+from app.modules.agent_builder.integration_service import (
+    create_integration,
+    delete_integration,
+    get_integration,
+    list_integrations,
+    serialize_integration,
+    update_integration,
+)
+from app.modules.agent_builder.kb_service import serialize_document as serialize_kb_document
+from app.modules.agent_builder.service import (
+    Principal,
+    create_agent,
+    list_agents,
+    serialize_agent,
+    soft_delete_agent,
+    update_agent,
+)
+from app.modules.agent_builder.service import get_agent as get_agent_service
+from app.modules.agent_builder.tool_catalog_service import (
+    attach_agent_tool,
+    detach_agent_tool,
+    list_agent_tool_refs,
+)
+from app.modules.agent_builder.tool_catalog_service import serialize_tool as serialize_catalog_tool
+
+router = APIRouter(prefix="/agents", tags=["agents"])
+
+
+# ---------------------------------------------------------------------------
+# Request schemas
+# ---------------------------------------------------------------------------
+
+class CreateAgentRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    department_id: uuid.UUID
+    system_prompt: str = Field(..., min_length=1)
+
+
+class UpdateAgentRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    system_prompt: str | None = Field(default=None, min_length=1)
+    status: str | None = Field(default=None, min_length=1, max_length=32)
+    department_id: uuid.UUID | None = None
+    # Story 2.3 (AD-7): ModelRef {provider, model_name, parameters} as data.
+    model: dict[str, Any] | None = None
+
+
+class CreateIntegrationRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    base_url: str = Field(..., min_length=1, max_length=2048)
+    auth_header: str = Field(..., min_length=1)
+    schema_: dict[str, Any] | None = Field(default=None, alias="schema")
+
+    model_config = {"populate_by_name": True}
+
+
+class UpdateIntegrationRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    base_url: str | None = Field(default=None, min_length=1, max_length=2048)
+    auth_header: str | None = Field(default=None, min_length=1)
+    schema_: dict[str, Any] | None = Field(default=None, alias="schema")
+
+    model_config = {"populate_by_name": True}
+
+
+# ---------------------------------------------------------------------------
+# Envelope + principal helpers
+# ---------------------------------------------------------------------------
+
+def _ok(data: Any) -> dict[str, Any]:
+    return {"data": data, "error": None, "meta": {}}
+
+
+def _principal(request: Request) -> Principal:
+    """Extract the caller's Principal from `request.state` (set by AuthMiddleware)."""
+    dept = getattr(request.state, "department_id", None)
+    return Principal(
+        user_id=uuid.UUID(str(request.state.user_id)),
+        tenant_id=uuid.UUID(str(request.state.tenant_id)),
+        department_id=uuid.UUID(str(dept)) if dept else None,
+        role=str(getattr(request.state, "role", "")),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
+@router.post("")
+def create_agent_route(
+    body: CreateAgentRequest,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008 -- FastAPI idiom
+) -> JSONResponse:
+    """POST /agents — create a scoped Agent (AC1, AC10)."""
+    principal = _principal(request)
+    agent = create_agent(
+        session,
+        owner_id=principal.user_id,
+        role=principal.role,
+        name=body.name,
+        department_id=body.department_id,
+        system_prompt=body.system_prompt,
+    )
+    return JSONResponse(status_code=201, content=_ok(serialize_agent(agent)))
+
+
+@router.get("/providers")
+def list_providers_route() -> JSONResponse:
+    """GET /agents/providers — runtime provider/model catalog (T1, AC1, AC2).
+
+    Registered before `/{agent_id}` so "providers" is never parsed as an
+    agent id. `configured` reflects `Settings` only -- no live API calls.
+    """
+    catalog = get_provider_catalog(get_settings())
+    return JSONResponse(
+        status_code=200,
+        content=_ok([p.model_dump() for p in catalog]),
+    )
+
+
+@router.get("/{agent_id}")
+def get_agent_route(
+    agent_id: uuid.UUID,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """GET /agents/{id} — cross-tenant returns 404 via RLS (AC2, AC3)."""
+    agent = get_agent_service(session, agent_id)
+    return JSONResponse(status_code=200, content=_ok(serialize_agent(agent)))
+
+
+@router.get("")
+def list_agents_route(
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+    department_id: uuid.UUID | None = None,
+) -> JSONResponse:
+    """GET /agents — tenant-scoped list, optional department filter (AC4, AC5)."""
+    agents = list_agents(session, department_id=department_id)
+    return JSONResponse(
+        status_code=200, content=_ok([serialize_agent(a) for a in agents])
+    )
+
+
+@router.patch("/{agent_id}")
+def update_agent_route(
+    agent_id: uuid.UUID,
+    body: UpdateAgentRequest,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """PATCH /agents/{id} — owner or builder-in-department only (AC6)."""
+    principal = _principal(request)
+    agent = update_agent(
+        session,
+        agent_id,
+        principal,
+        **body.model_dump(exclude_unset=True),
+    )
+    return JSONResponse(status_code=200, content=_ok(serialize_agent(agent)))
+
+
+@router.delete("/{agent_id}")
+def delete_agent_route(
+    agent_id: uuid.UUID,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """DELETE /agents/{id} — soft-delete only, same scoping as PATCH (AC7)."""
+    principal = _principal(request)
+    soft_delete_agent(session, agent_id, principal)
+    return JSONResponse(status_code=200, content=_ok({"id": str(agent_id)}))
+
+
+# ---------------------------------------------------------------------------
+# Agent -> Tool references (Sub-project A)
+# ---------------------------------------------------------------------------
+
+class AttachToolRequest(BaseModel):
+    tool_id: uuid.UUID
+
+
+@router.get("/{agent_id}/tools")
+def list_agent_tools_route(
+    agent_id: uuid.UUID,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """GET /agents/{id}/tools — catalog tools this agent references."""
+    tools = list_agent_tool_refs(session, agent_id=agent_id)
+    return JSONResponse(status_code=200, content=_ok([serialize_catalog_tool(t) for t in tools]))
+
+
+@router.post("/{agent_id}/tools")
+def attach_agent_tool_route(
+    agent_id: uuid.UUID,
+    body: AttachToolRequest,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """POST /agents/{id}/tools — add a tool reference."""
+    attach_agent_tool(session, agent_id=agent_id, tool_id=body.tool_id, principal=_principal(request))
+    return JSONResponse(status_code=201, content=_ok({"agent_id": str(agent_id), "tool_id": str(body.tool_id)}))
+
+
+@router.delete("/{agent_id}/tools/{tool_id}")
+def detach_agent_tool_route(
+    agent_id: uuid.UUID,
+    tool_id: uuid.UUID,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """DELETE /agents/{id}/tools/{tool_id} — remove a tool reference."""
+    detach_agent_tool(session, agent_id=agent_id, tool_id=tool_id, principal=_principal(request))
+    return JSONResponse(status_code=200, content=_ok({"agent_id": str(agent_id), "tool_id": str(tool_id)}))
+
+
+# ---------------------------------------------------------------------------
+# Agent -> KB document grants (the tick) (Sub-project A)
+# ---------------------------------------------------------------------------
+
+class AttachDocRequest(BaseModel):
+    document_id: uuid.UUID
+
+
+@router.get("/{agent_id}/kb-documents")
+def list_agent_kb_docs_route(
+    agent_id: uuid.UUID,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    docs = list_agent_documents(session, agent_id=agent_id)
+    return JSONResponse(status_code=200, content=_ok([serialize_kb_document(d) for d in docs]))
+
+
+@router.post("/{agent_id}/kb-documents")
+def attach_agent_kb_doc_route(
+    agent_id: uuid.UUID,
+    body: AttachDocRequest,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    attach_agent_document(session, agent_id=agent_id, document_id=body.document_id, principal=_principal(request))
+    return JSONResponse(status_code=201, content=_ok({"agent_id": str(agent_id), "document_id": str(body.document_id)}))
+
+
+@router.delete("/{agent_id}/kb-documents/{document_id}")
+def detach_agent_kb_doc_route(
+    agent_id: uuid.UUID,
+    document_id: uuid.UUID,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    detach_agent_document(session, agent_id=agent_id, document_id=document_id, principal=_principal(request))
+    return JSONResponse(status_code=200, content=_ok({"agent_id": str(agent_id), "document_id": str(document_id)}))
+
+
+# ---------------------------------------------------------------------------
+# API Integration routes — tenant-level shared pool (builder-managed).
+#
+# Integrations no longer belong to a single Agent (Shared Pool reshape); they
+# are CRUD-managed by `builder`-role principals and referenced by catalog
+# tools (`Tool.integration_id`). Mounted separately from `router` (which
+# keeps its `/agents` prefix) — see `integrations_router` below.
+# ---------------------------------------------------------------------------
+
+integrations_router = APIRouter(prefix="/integrations", tags=["integrations"])
+
+
+@integrations_router.post("")
+def create_integration_route(
+    body: CreateIntegrationRequest,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """POST /integrations — register a tenant-level Integration. Builder role required."""
+    integration = create_integration(
+        session,
+        principal=_principal(request),
+        name=body.name,
+        base_url=body.base_url,
+        auth_header=body.auth_header,
+        schema=body.schema_,
+    )
+    return JSONResponse(status_code=201, content=_ok(serialize_integration(integration)))
+
+
+@integrations_router.get("")
+def list_integrations_route(
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """GET /integrations — list, RLS-scoped, header masked."""
+    integrations = list_integrations(session)
+    return JSONResponse(
+        status_code=200, content=_ok([serialize_integration(i) for i in integrations])
+    )
+
+
+@integrations_router.get("/{integration_id}")
+def get_integration_route(
+    integration_id: uuid.UUID,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """GET /integrations/{id} — single Integration, header masked."""
+    integration = get_integration(session, integration_id)
+    return JSONResponse(status_code=200, content=_ok(serialize_integration(integration)))
+
+
+@integrations_router.patch("/{integration_id}")
+def update_integration_route(
+    integration_id: uuid.UUID,
+    body: UpdateIntegrationRequest,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """PATCH /integrations/{id} — builder role required."""
+    integration = update_integration(
+        session,
+        integration_id,
+        principal=_principal(request),
+        **body.model_dump(exclude_unset=True, by_alias=True),
+    )
+    return JSONResponse(status_code=200, content=_ok(serialize_integration(integration)))
+
+
+@integrations_router.delete("/{integration_id}")
+def delete_integration_route(
+    integration_id: uuid.UUID,
+    request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> JSONResponse:
+    """DELETE /integrations/{id} — soft-delete only, builder role required."""
+    delete_integration(session, integration_id, principal=_principal(request))
+    return JSONResponse(status_code=200, content=_ok({"id": str(integration_id)}))

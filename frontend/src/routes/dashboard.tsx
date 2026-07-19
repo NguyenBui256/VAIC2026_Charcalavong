@@ -44,9 +44,9 @@ export default function DashboardPage() {
   };
 
   // Click-to-trace: navigate to the trace view for the run.
-  // Real trace route arrives in Epic 4; for now we route to /audit.
+  // Audit V2 — open the run's trace/session in the Audit Explorer detail page.
   const handleOpenRun = (runId: string) => {
-    navigate(`/audit?run=${runId}`);
+    navigate(`/audit/${runId}`);
   };
 
   return (
