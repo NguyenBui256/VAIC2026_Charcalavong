@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VAIC — Style A</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,500;0,6..96,600;0,6..96,900;1,6..96,500;1,6..96,600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* === MANDATORY FIXED STAGE === */
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#08192b}
+.deck-viewport{position:fixed;inset:0;overflow:hidden;background:#08192b}
+.deck-stage{position:absolute;left:0;top:0;width:1920px;height:1080px;overflow:hidden;transform-origin:0 0}
+.slide{position:absolute;inset:0;width:1920px;height:1080px;overflow:hidden}
+
+/* === STYLE A — Institutional Navy / Gold === */
+:root{
+  --navy:#0b1e33; --navy-2:#102943; --bone:#f4efe4; --gold:#c9a24b;
+  --gold-soft:#e0c589; --muted:#8ea0b4; --ink:#eaf1f8;
+}
+.slide{
+  background:
+    radial-gradient(1200px 700px at 78% -10%, rgba(201,162,75,.16), transparent 60%),
+    radial-gradient(900px 600px at -8% 108%, rgba(201,162,75,.08), transparent 55%),
+    linear-gradient(160deg,#0b1e33 0%,#0d2039 55%,#08192b 100%);
+  font-family:'IBM Plex Sans',sans-serif;color:var(--ink);
+  padding:110px 130px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;
+}
+/* thin gold frame */
+.frame{position:absolute;inset:46px;border:1px solid rgba(201,162,75,.32);pointer-events:none}
+.frame::before{content:"";position:absolute;left:-1px;top:-1px;width:64px;height:64px;border-left:2px solid var(--gold);border-top:2px solid var(--gold)}
+.frame::after{content:"";position:absolute;right:-1px;bottom:-1px;width:64px;height:64px;border-right:2px solid var(--gold);border-bottom:2px solid var(--gold)}
+
+.top{display:flex;justify-content:space-between;align-items:flex-start;position:relative;z-index:2}
+.brand{font-family:'Bodoni Moda',serif;font-weight:900;font-size:34px;letter-spacing:.14em;color:var(--bone)}
+.brand b{color:var(--gold)}
+.kicker{font-size:20px;letter-spacing:.42em;text-transform:uppercase;color:var(--muted);font-weight:500}
+
+.mid{position:relative;z-index:2}
+.eyebrow{display:inline-flex;align-items:center;gap:16px;font-size:22px;letter-spacing:.3em;text-transform:uppercase;color:var(--gold-soft);margin-bottom:34px;opacity:0;animation:rise .7s .15s forwards}
+.eyebrow .dot{width:9px;height:9px;background:var(--gold);border-radius:50%;box-shadow:0 0 0 6px rgba(201,162,75,.15)}
+h1{font-family:'Bodoni Moda',serif;font-weight:600;font-size:118px;line-height:1.0;margin:0;color:var(--bone);letter-spacing:-.01em}
+h1 .accent{font-style:italic;color:var(--gold);font-weight:500}
+.sub{font-size:32px;line-height:1.5;color:var(--muted);max-width:1150px;margin-top:40px;font-weight:300}
+.eyebrow,h1 .l1,h1 .l2,.sub{opacity:0;animation:rise .8s forwards}
+h1 .l1{display:block;animation-delay:.3s}
+h1 .l2{display:block;animation-delay:.45s}
+.sub{animation-delay:.65s}
+
+.bot{display:flex;justify-content:space-between;align-items:flex-end;position:relative;z-index:2;
+  border-top:1px solid rgba(201,162,75,.25);padding-top:34px}
+.tags{display:flex;gap:14px}
+.tag{font-size:20px;padding:12px 22px;border:1px solid rgba(201,162,75,.4);border-radius:40px;color:var(--gold-soft);letter-spacing:.04em}
+.meta{font-size:22px;color:var(--muted);text-align:right;letter-spacing:.05em}
+.meta b{color:var(--bone);font-weight:600}
+
+@keyframes rise{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}.eyebrow,h1 .l1,h1 .l2,.sub{opacity:1}}
+</style>
+</head>
+<body>
+<div class="deck-viewport"><div class="deck-stage" id="stage">
+  <section class="slide">
+    <div class="frame"></div>
+    <div class="top">
+      <div class="brand">VA<b>I</b>C</div>
+      <div class="kicker">VAIC · 2026</div>
+    </div>
+    <div class="mid">
+      <div class="eyebrow"><span class="dot"></span> Nền tảng AI-Agent cho Ngân hàng</div>
+      <h1><span class="l1">Tự động hóa quy trình</span><span class="l2"><span class="accent">liên phòng ban</span></span></h1>
+      <p class="sub">Nhiều chuyên gia AI phối hợp, tự sinh mini-app có backend &amp; CSDL riêng — biến hội thoại thành hệ thống thực thi có kiểm toán.</p>
+    </div>
+    <div class="bot">
+      <div class="tags">
+        <span class="tag">Multi-Agent</span>
+        <span class="tag">Mini-App tự sinh</span>
+        <span class="tag">Vòng lặp đóng</span>
+      </div>
+      <div class="meta">Demo: <b>Thẩm định &amp; Giải ngân Vay Thế Chấp Ô tô</b></div>
+    </div>
+  </section>
+</div></div>
+<script>
+function fit(){var s=document.getElementById('stage');var k=Math.min(innerWidth/1920,innerHeight/1080);s.style.transform='translate('+(innerWidth-1920*k)/2+'px,'+(innerHeight-1080*k)/2+'px) scale('+k+')';}
+addEventListener('resize',fit);fit();
+</script>
+</body>
+</html>

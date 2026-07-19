@@ -34,6 +34,11 @@ class EntitySchema(BaseModel):
 
 class UiSpec(BaseModel):
     layout: Literal["table", "cards"] = "table"
+    # Render mode of the generated app:
+    #   full — create form + list table (default, backward-compatible)
+    #   form — create form only (customer intake; no list)
+    #   crm  — list table with edit/delete; the form shows only while editing
+    mode: Literal["full", "form", "crm"] = "full"
     components: list[dict[str, Any]] = Field(default_factory=list)
     primary_actions: list[Literal["create", "edit", "delete"]] = Field(
         default_factory=lambda: ["create", "edit", "delete"]

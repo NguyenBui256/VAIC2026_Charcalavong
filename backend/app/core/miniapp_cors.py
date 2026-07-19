@@ -36,10 +36,12 @@ from starlette.types import Receive, Scope, Send
 
 __all__ = ["MiniAppNullOriginCORSMiddleware"]
 
-# Matches /apps/{app_id}/rows and /apps/{app_id}/rows/{row_id} (or any
-# deeper subpath) — the mini-app generic row CRUD data plane registered in
-# `app/modules/mini_app/routes.py` (`mini_app_rows_router`).
-_MINI_APP_ROWS_PATH = re.compile(r"^/apps/[^/]+/rows(?:/.*)?$")
+# Matches /apps/{app_id}/rows and /apps/{app_id}/files (or any deeper subpath)
+# — the mini-app row CRUD data plane AND the `file` field upload/download plane,
+# both registered on `mini_app_rows_router` in `app/modules/mini_app/routes.py`.
+# The sandboxed iframe (Origin: null) calls both, so both need the null-origin
+# CORS grant.
+_MINI_APP_ROWS_PATH = re.compile(r"^/apps/[^/]+/(?:rows|files)(?:/.*)?$")
 
 _ALLOW_METHODS = "GET, POST, PATCH, DELETE, OPTIONS"
 _ALLOW_HEADERS = "authorization, content-type"
