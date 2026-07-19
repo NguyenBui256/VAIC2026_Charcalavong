@@ -1,17 +1,29 @@
 /* Chat panel for the graph editor's right column. Renders the message log and
  * a composer; delegates command execution to the injected `send`. */
 
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { SendHorizontal } from "lucide-react";
 import type { GraphChatMessage } from "../../../hooks/useGraphChat";
+import type { ChatProvider, ChatSessionDto } from "../../../lib/chatApi";
+import AttachmentPicker from "../../chat/attachment-picker";
+import ModelSelector from "../../chat/model-selector";
 
 interface Props {
   messages: GraphChatMessage[];
-  onSend: (text: string) => void;
+  onSend: (text: string, attachmentIds?: string[]) => void;
+  pending: boolean;
+  providers: ChatProvider[];
+  session: ChatSessionDto | null;
+  onModelChange: (providerId: string, modelName: string) => void;
+  onUndo: (mutationId: string) => void;
+  error?: string;
 }
 
-export default function GraphChatPanel({ messages, onSend }: Props) {
+export default function GraphChatPanel({ messages, onSend, pending, providers, session, onModelChange, onUndo, error }: Props) {
   const [value, setValue] = useState("");
+  const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
+  const [attachmentsReady, setAttachmentsReady] = useState(true);
+  const [attachmentEpoch, setAttachmentEpoch] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -20,10 +32,18 @@ export default function GraphChatPanel({ messages, onSend }: Props) {
 
   function submit() {
     const text = value.trim();
-    if (!text) return;
-    onSend(text);
+    if (!text || pending || !attachmentsReady) return;
+    onSend(text, attachmentIds);
     setValue("");
+    setAttachmentIds([]);
+    setAttachmentsReady(true);
+    setAttachmentEpoch((current) => current + 1);
   }
+
+  const onAttachmentsChange = useCallback((ids: string[], ready: boolean) => {
+    setAttachmentIds(ids);
+    setAttachmentsReady(ready);
+  }, []);
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -50,18 +70,25 @@ export default function GraphChatPanel({ messages, onSend }: Props) {
               border: m.role === "user" ? "none" : "1px solid var(--color-border)",
             }}
           >
-            {m.content}
+            {m.status === "pending" ? "Đang phân tích và kiểm tra graph…" : m.status === "failed" ? m.error?.message ?? "Không thể xử lý." : m.content}
+            {typeof m.metadata.mutation_id === "string" && (
+              <button type="button" onClick={() => onUndo(m.metadata.mutation_id as string)} style={{ display: "block", marginTop: 6 }}>Undo</button>
+            )}
           </div>
         ))}
         <div ref={endRef} />
       </div>
+      {error && <div role="alert" style={{ color: "var(--color-danger)", fontSize: 12 }}>{error}</div>}
+      <ModelSelector providers={providers} providerId={session?.provider_id ?? null} modelName={session?.model_name ?? null} disabled={pending} onChange={onModelChange} />
+      <AttachmentPicker key={attachmentEpoch} disabled={pending} onChange={onAttachmentsChange} />
       <div style={{ display: "flex", alignItems: "flex-end", gap: "var(--space-2)", paddingTop: "var(--space-2)", borderTop: "1px solid var(--color-border)" }}>
         <textarea
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={onKeyDown}
           rows={2}
-          placeholder='e.g. add node Review'
+          placeholder="Mô tả quy trình hoặc đính kèm DOCX/PDF đặc tả…"
+          disabled={pending}
           style={{
             flex: 1,
             resize: "none",
@@ -78,7 +105,7 @@ export default function GraphChatPanel({ messages, onSend }: Props) {
         <button
           type="button"
           onClick={submit}
-          disabled={!value.trim()}
+          disabled={!value.trim() || pending || !attachmentsReady}
           aria-label="Send"
           style={{
             display: "inline-flex", alignItems: "center", justifyContent: "center",

@@ -27,13 +27,19 @@ from app.modules.action.worker import (  # noqa: E402
     process_tenant_action_events,
     run_agent_task,
 )
-from app.modules.mini_app.mini_app_worker import build_mini_app  # noqa: E402
+from app.modules.chat.worker import (  # noqa: E402
+    chat_cron_jobs,
+    cleanup_chat_attachments,
+    extract_chat_attachment,
+    process_chat_message,
+)
 
 # Register the mini_app_databases table on the worker's SQLAlchemy metadata so
 # the MiniApp.database_id FK resolves during mapper config. The worker process
 # imports MiniApp (via mini_app_worker) but nothing else pulls in database_models,
 # so without this a build of a database-bound app raises NoReferencedTableError.
 from app.modules.mini_app import database_models  # noqa: E402,F401
+from app.modules.mini_app.mini_app_worker import build_mini_app  # noqa: E402
 from app.workers.orchestrator_worker import resume_orphaned_runs, worker_config  # noqa: E402
 
 __all__ = ["main"]
@@ -41,8 +47,16 @@ __all__ = ["main"]
 # Merge Mini-App builder + Action dispatch onto the orchestrator worker (AD-1).
 _combined_worker_config = replace(
     worker_config,
-    functions=[*worker_config.functions, build_mini_app, process_tenant_action_events, run_agent_task],
-    cron_jobs_list=[*worker_config.cron_jobs_list, *action_cron_jobs],
+    functions=[
+        *worker_config.functions,
+        build_mini_app,
+        process_tenant_action_events,
+        run_agent_task,
+        extract_chat_attachment,
+        process_chat_message,
+        cleanup_chat_attachments,
+    ],
+    cron_jobs_list=[*worker_config.cron_jobs_list, *action_cron_jobs, *chat_cron_jobs],
 )
 
 
