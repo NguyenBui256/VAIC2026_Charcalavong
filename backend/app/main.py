@@ -33,6 +33,7 @@ from app.modules.agent_builder.routes import integrations_router
 from app.modules.agent_builder.routes import router as agents_router
 from app.modules.agent_builder.tool_routes import router as tools_router
 from app.modules.audit.routes import router as audit_router
+from app.modules.chat.routes import router as chat_router
 from app.modules.mini_app.database_routes import mini_app_databases_router
 from app.modules.mini_app.routes import mini_app_rows_router, mini_apps_router
 from app.modules.notification.routes import notifications_router
@@ -118,6 +119,9 @@ app.include_router(workflows_files_router)
 # Epic 6 (FR-22) — Trace Dashboard read API (/audit).
 app.include_router(audit_router)
 
+# Persistent API shared by Agent, Workflow Graph, and Mini-App chats.
+app.include_router(chat_router)
+
 # Epic 4 (Stories 4-2/4-4) — Mini-App catalog + generic row CRUD routes.
 app.include_router(mini_apps_router)
 app.include_router(mini_app_rows_router)
@@ -141,6 +145,8 @@ _mini_app_bundle_root.mkdir(parents=True, exist_ok=True)
 
 # 3E — ensure the uploaded-workflow-files root exists at boot.
 Path(get_settings().workflow_files_root).mkdir(parents=True, exist_ok=True)
+# Chat files are only served through authenticated routes, never StaticFiles.
+Path(get_settings().chat_files_root).mkdir(parents=True, exist_ok=True)
 app.mount(
     "/mini-app-runtime",
     StaticFiles(directory=str(_mini_app_bundle_root), html=True),

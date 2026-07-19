@@ -3,7 +3,7 @@
  */
 
 import { useState } from "react";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, RefreshCw } from "lucide-react";
 import type { ChatMessage } from "../../lib/chatStore";
 import MarkdownMessage from "./markdown-message";
 
@@ -14,7 +14,13 @@ function formatTime(ts: number): string {
   });
 }
 
-export default function MessageBubble({ message }: { message: ChatMessage }) {
+export default function MessageBubble({
+  message,
+  onRetry,
+}: {
+  message: ChatMessage;
+  onRetry?: (message: ChatMessage) => void;
+}) {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
 
@@ -51,7 +57,13 @@ export default function MessageBubble({ message }: { message: ChatMessage }) {
           wordBreak: "break-word",
         }}
       >
-        {isUser ? message.content : <MarkdownMessage content={message.content} />}
+        {message.status === "pending" ? (
+          <span>Đang xử lý…</span>
+        ) : message.status === "failed" ? (
+          <span style={{ color: "var(--color-danger)" }}>
+            {message.error?.message ?? "Không thể xử lý tin nhắn."}
+          </span>
+        ) : isUser ? message.content : <MarkdownMessage content={message.content} />}
       </div>
       <div
         style={{
@@ -64,6 +76,14 @@ export default function MessageBubble({ message }: { message: ChatMessage }) {
         }}
       >
         <span>{formatTime(message.createdAt)}</span>
+        {!isUser && message.modelName && (
+          <span>{message.modelName}{message.latencyMs ? ` · ${message.latencyMs}ms` : ""}</span>
+        )}
+        {message.status === "failed" && onRetry && (
+          <button type="button" onClick={() => onRetry(message)} style={{ display: "inline-flex", gap: 4, border: 0, background: "none", color: "inherit", cursor: "pointer" }}>
+            <RefreshCw size={12} /> Retry
+          </button>
+        )}
         {!isUser && message.content && (
           <button
             type="button"

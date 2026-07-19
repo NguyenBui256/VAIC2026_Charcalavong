@@ -41,8 +41,7 @@ class ProviderCatalogEntry(BaseModel):
     models: list[ModelCatalogEntry]
 
 
-# Static registry: provider id -> {label, implemented, models}. Only Anthropic
-# has a real adapter (Story 1.6); the rest are placeholders (AC1).
+# Static registry: provider id -> {label, implemented, models}.
 _STATIC_PROVIDERS: dict[str, dict[str, Any]] = {
     "anthropic": {
         "label": "Anthropic",
@@ -53,14 +52,18 @@ _STATIC_PROVIDERS: dict[str, dict[str, Any]] = {
         ],
     },
     "openai": {
-        "label": "OpenAI-compatible",
+        "label": "FPT AI Marketplace",
         "implemented": True,
         # Fallback for `get_context_window` (no live ``settings`` there);
         # `get_provider_catalog` overrides this with the deployment's
         # configured `VAIC_LLM_MODEL` at call time (AC1, AC3).
         "models": [{"name": "DeepSeek-V4-Flash", "context_window": 128_000}],
     },
-    "google": {"label": "Google", "implemented": False, "models": []},
+    "google": {
+        "label": "Google Gemini",
+        "implemented": True,
+        "models": [{"name": "gemini-3.5-flash", "context_window": 1_000_000}],
+    },
     "ollama": {"label": "Ollama", "implemented": False, "models": []},
 }
 
@@ -90,6 +93,8 @@ def get_provider_catalog(settings: Settings) -> list[ProviderCatalogEntry]:
             # catalog truthful to whatever model is actually wired at
             # runtime for the passed-in ``settings`` (AD-7).
             models = [{"name": settings.llm_model, "context_window": 128_000}]
+        elif provider_id == "google":
+            models = [{"name": settings.gemini_model, "context_window": 1_000_000}]
         entries.append(
             ProviderCatalogEntry(
                 id=provider_id,

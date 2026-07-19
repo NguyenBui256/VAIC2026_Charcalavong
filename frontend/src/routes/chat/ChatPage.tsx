@@ -14,6 +14,7 @@ import MessageList from "../../components/chat/message-list";
 import ChatComposer from "../../components/chat/chat-composer";
 import ChatNewChatModal from "../../components/chat/chat-new-chat-modal";
 import ChatSidePanel from "../../components/chat/chat-side-panel";
+import ModelSelector from "../../components/chat/model-selector";
 
 /** Read-only chip showing the conversation's locked target. */
 function TargetChip({ type, name }: { type: "agent" | "workflow"; name: string }) {
@@ -52,6 +53,9 @@ export default function ChatPage() {
     deleteConversation,
     renameConversation,
     sendMessage,
+    switchModel,
+    models,
+    error,
   } = useChat();
   const { agents, workflows, loading } = useChatTargets();
   const [showPanel, setShowPanel] = useState(false);
@@ -59,6 +63,15 @@ export default function ChatPage() {
 
   const conv = activeConversation;
   const configured = Boolean(conv?.targetId && conv?.targetType);
+  const targetName = conv
+    ? conv.targetType === "agent"
+      ? agents.find((item) => item.id === conv.targetId)?.name
+      : workflows.find((item) => item.id === conv.targetId)?.name
+    : null;
+  const runId = [...(conv?.messages ?? [])]
+    .reverse()
+    .map((message) => message.metadata?.run_id)
+    .find((value): value is string => typeof value === "string");
 
   function handleStart(type: "agent" | "workflow", id: string, name: string) {
     createConversation(type, id, name);
@@ -102,10 +115,24 @@ export default function ChatPage() {
               <span className="text-caption" style={{ color: "var(--color-text-tertiary)" }}>
                 Click “New chat” to start
               </span>
-            ) : configured && conv.targetType && conv.targetName ? (
-              <TargetChip type={conv.targetType} name={conv.targetName} />
+            ) : configured && conv.targetType ? (
+              <TargetChip type={conv.targetType} name={targetName ?? conv.targetName ?? conv.title} />
             ) : null}
           </div>
+
+          {conv?.targetType === "agent" ? (
+            <ModelSelector
+              providers={models}
+              providerId={conv.providerId}
+              modelName={conv.modelName}
+              disabled={isTyping}
+              onChange={switchModel}
+            />
+          ) : conv?.targetType === "workflow" ? (
+            <span className="text-caption" style={{ color: "var(--color-text-tertiary)" }}>
+              Theo cấu hình Agent
+            </span>
+          ) : null}
 
           <button
             type="button"
@@ -130,11 +157,29 @@ export default function ChatPage() {
           </button>
         </div>
 
-        <MessageList messages={conv?.messages ?? []} isTyping={isTyping} />
+        {error && (
+          <div className="vaic-inline-alert" role="alert" style={{ margin: "var(--space-2) var(--space-6)" }}>
+            {(error as Error).message}
+          </div>
+        )}
+        <MessageList
+          messages={conv?.messages ?? []}
+          isTyping={isTyping}
+          onRetry={(failed) => {
+            const source = conv?.messages.find((message) => message.id === failed.replyToId);
+            if (source) sendMessage(source.content, source.attachmentIds ?? []);
+          }}
+        />
         <ChatComposer onSend={sendMessage} disabled={isTyping || !conv} />
       </div>
 
-      {showPanel && <ChatSidePanel targetType={conv?.targetType ?? null} />}
+      {showPanel && (
+        <ChatSidePanel
+          targetType={conv?.targetType ?? null}
+          runId={runId}
+          messages={conv?.messages ?? []}
+        />
+      )}
 
       <ChatNewChatModal
         open={showNewModal}

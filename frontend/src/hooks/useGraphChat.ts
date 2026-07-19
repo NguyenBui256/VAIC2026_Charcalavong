@@ -1,46 +1,45 @@
-/* Local (non-persisted) chat state for the graph-editing side panel. Each
- * send() parses the text, runs the command via the injected resolver, and
- * records the user message + the resolver's reply. No backend, no streaming. */
-
-import { useCallback, useState } from "react";
-import { parseGraphCommand } from "../lib/graphChatCommands";
+import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { usePersistentChatSession } from "./usePersistentChatSession";
 
 export interface GraphChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  status: "pending" | "completed" | "failed";
+  error?: { message: string } | null;
+  metadata: Record<string, unknown>;
+  modelName?: string | null;
 }
 
-let seq = 0;
-function nextId(): string {
-  seq += 1;
-  return `gcm-${seq}`;
-}
-
-const WELCOME =
-  'Type a command to edit the flow. Try "help". Examples: "add node Review", ' +
-  '"gán agent Reviewer cho Review", "connect Step 1 -> Step 2", "delete node Review".';
-
-export function useGraphChat(opts: { run: (cmd: ReturnType<typeof parseGraphCommand>) => string }) {
-  const { run } = opts;
-  const [messages, setMessages] = useState<GraphChatMessage[]>([
-    { id: nextId(), role: "assistant", content: WELCOME },
-  ]);
-
-  const send = useCallback(
-    (text: string) => {
-      const trimmed = text.trim();
-      if (!trimmed) return;
-      const cmd = parseGraphCommand(trimmed);
-      const reply = run(cmd);
-      setMessages((prev) => [
-        ...prev,
-        { id: nextId(), role: "user", content: trimmed },
-        { id: nextId(), role: "assistant", content: reply },
-      ]);
-    },
-    [run],
-  );
-
-  return { messages, send };
+export function useGraphChat(workflowId: string) {
+  const queryClient = useQueryClient();
+  const chat = usePersistentChatSession("graph_authoring", "workflow", workflowId);
+  const messages: GraphChatMessage[] = (chat.messages.data ?? []).map((message) => ({
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    status: message.status,
+    error: message.error,
+    metadata: message.metadata,
+    modelName: message.model_name,
+  }));
+  const mutationCount = messages.filter((message) => message.metadata.action === "apply").length;
+  useEffect(() => {
+    if (mutationCount) {
+      queryClient.invalidateQueries({ queryKey: ["workflow-graph", workflowId] });
+    }
+  }, [mutationCount, queryClient, workflowId]);
+  return {
+    messages,
+    send: (content: string, attachmentIds: string[] = []) =>
+      chat.send.mutate({ content, attachmentIds }),
+    pending: chat.pending || chat.send.isPending,
+    models: chat.models.data ?? [],
+    session: chat.session,
+    changeModel: (providerId: string, modelName: string) =>
+      chat.changeModel.mutate({ providerId, modelName }),
+    undo: (mutationId: string) => chat.undo.mutate(mutationId),
+    error: chat.messages.error ?? chat.create.error ?? chat.send.error ?? chat.undo.error,
+  };
 }

@@ -35,15 +35,18 @@ def test_anthropic_not_configured_when_key_absent() -> None:
     assert anthropic.configured is False
 
 
-def test_placeholder_providers_always_not_configured_with_no_models() -> None:
-    """Google/Ollama render 'Not configured' even with a key set, because the
-    adapter is not implemented (AC1). A disabled provider yields no
-    selectable models (AC2)."""
+def test_google_is_configured_with_selectable_model_when_key_present() -> None:
     catalog = get_provider_catalog(_settings(google_api_key="sk-g-test"))
-    for provider_id in ("google", "ollama"):
-        entry = _entry(catalog, provider_id)
-        assert entry.configured is False
-        assert entry.models == []
+    google = _entry(catalog, "google")
+    assert google.configured is True
+    assert google.label == "Google Gemini"
+    assert [model.name for model in google.models] == ["gemini-3.5-flash"]
+
+
+def test_ollama_remains_an_unimplemented_placeholder() -> None:
+    ollama = _entry(get_provider_catalog(_settings()), "ollama")
+    assert ollama.configured is False
+    assert ollama.models == []
 
 
 def test_openai_configured_when_llm_api_key_present() -> None:
@@ -52,6 +55,7 @@ def test_openai_configured_when_llm_api_key_present() -> None:
     catalog = get_provider_catalog(_settings(llm_api_key="sk-fpt-test"))
     openai_entry = _entry(catalog, "openai")
     assert openai_entry.configured is True
+    assert openai_entry.label == "FPT AI Marketplace"
     assert any(m.name == "DeepSeek-V4-Flash" for m in openai_entry.models)
 
 

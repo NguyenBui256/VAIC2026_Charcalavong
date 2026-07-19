@@ -465,21 +465,37 @@ def test_openai_adapter_embed_returns_embedding_result() -> None:
     assert result.vectors == [[0.1, 0.2]]
 
 
-def test_google_adapter_raises_not_implemented() -> None:
-    """GoogleLlmAdapter is a placeholder; calls raise NotImplementedError."""
+def test_google_adapter_complete_returns_completion_result() -> None:
+    from app.core.adapters.google import GoogleLlmAdapter
+
+    adapter = GoogleLlmAdapter(api_key="gemini-test")
+    fake_client = MagicMock()
+    choice = MagicMock()
+    choice.message.content = "Gemini response"
+    choice.finish_reason = "stop"
+    fake_response = MagicMock()
+    fake_response.choices = [choice]
+    fake_response.model = "gemini-3.5-flash"
+    fake_response.usage = MagicMock(prompt_tokens=5, completion_tokens=2)
+    fake_client.chat.completions.create.return_value = fake_response
+    adapter._client_instance = fake_client  # noqa: SLF001
+
+    result = adapter.complete(
+        _make_messages(), ModelRef(provider="google", model_name="gemini-3.5-flash")
+    )
+    assert result.content == "Gemini response"
+    assert result.usage == {"input_tokens": 5, "output_tokens": 2}
+
+
+def test_google_adapter_missing_key_raises_at_call_time() -> None:
     from app.core.adapters.google import GoogleLlmAdapter
 
     adapter = GoogleLlmAdapter()
-    with pytest.raises(NotImplementedError):
-        adapter.complete(_make_messages(), _make_model())
-
-
-def test_google_adapter_embed_raises_not_implemented() -> None:
-    from app.core.adapters.google import GoogleLlmAdapter
-
-    adapter = GoogleLlmAdapter()
-    with pytest.raises(NotImplementedError):
-        adapter.embed(["hi"], ModelRef(provider="google", model_name="x"))
+    adapter._api_key = ""  # noqa: SLF001
+    with pytest.raises(RuntimeError, match="Google Gemini API key is not configured"):
+        adapter.complete(
+            _make_messages(), ModelRef(provider="google", model_name="gemini-3.5-flash")
+        )
 
 
 def test_ollama_adapter_raises_not_implemented() -> None:
