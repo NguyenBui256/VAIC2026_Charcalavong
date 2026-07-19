@@ -67,7 +67,6 @@ def _build_item(
     uid = str(user_id)
 
     my_awaiting: list[dict[str, str]] = []
-    current: dict[str, str] | None = None
     latest = run.started_at or run.created_at
     for e in execs:
         approvers = [str(a) for a in (e.approver_user_ids or [])]
@@ -81,14 +80,26 @@ def _build_item(
         ):
             label = _label_for(run.graph_snapshot, e.node_key)
             my_awaiting.append({"node_key": e.node_key, "label": label})
-        # "current" = the node the run is actively on: prefer awaiting_approval,
-        # else running, else pending frontier. First match by that priority.
-        if current is None and e.status in ("awaiting_approval", "running"):
-            current = {
-                "node_key": e.node_key,
-                "label": _label_for(run.graph_snapshot, e.node_key),
-                "status": e.status,
-            }
+
+    # "current" = the node the run is actively on, by strict priority:
+    # awaiting_approval > running > pending. Deterministic node_key tie-break
+    # so identical data always yields the same node.
+    def _pick(status: str) -> dict[str, str] | None:
+        matches = sorted(
+            (e for e in execs if e.status == status), key=lambda e: e.node_key
+        )
+        if not matches:
+            return None
+        e = matches[0]
+        return {
+            "node_key": e.node_key,
+            "label": _label_for(run.graph_snapshot, e.node_key),
+            "status": e.status,
+        }
+
+    current: dict[str, str] | None = (
+        _pick("awaiting_approval") or _pick("running") or _pick("pending")
+    )
 
     # Look up workflow name (RLS-scoped).
     _reassert_rls(session)
