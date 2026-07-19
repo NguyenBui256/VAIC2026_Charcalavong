@@ -92,7 +92,19 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(default="", description="OpenAI API key")
     evaluation_max_context_tokens: int = Field(default=32000, ge=4000, le=200000)
     evaluation_chunk_tokens: int = Field(default=8000, ge=2000, le=32000)
-    google_api_key: str = Field(default="", description="Google Gemini API key")
+    google_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("VAIC_GOOGLE_API_KEY", "GEMINI_API_KEY"),
+        description="Google Gemini API key",
+    )
+    gemini_base_url: str = Field(
+        default="https://generativelanguage.googleapis.com/v1beta/openai/",
+        description="Google Gemini OpenAI-compatible API root",
+    )
+    gemini_model: str = Field(
+        default="gemini-3.5-flash",
+        description="Default Google Gemini model exposed by the chat catalog",
+    )
     ollama_base_url: str = Field(
         default="http://localhost:11434",
         description="Ollama HTTP base URL for local models",
@@ -176,9 +188,14 @@ class Settings(BaseSettings):
     # public StaticFiles mount) — run data is tenant-private.
     workflow_files_root: str = Field(
         default=".workflow-files",
-        description="Root directory for uploaded workflow files (relative to cwd `backend/`)."
+        description="Root directory for uploaded workflow files (relative to cwd `backend/`).",
     )
-      
+
+    chat_files_root: str = Field(
+        default=".chat-files",
+        description="Private tenant-scoped storage root for chat attachments.",
+    )
+
     # vaic_tools integration — real MCP tool server (retrieve/gmail/calendar
     # via MCP /mcp/, KB ingest/delete via REST /api/v1/documents). When
     # disabled the McpClientStub is used, so dev/test without a running

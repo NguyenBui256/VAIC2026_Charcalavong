@@ -9,9 +9,10 @@ import MessageBubble from "./message-bubble";
 interface Props {
   messages: ChatMessage[];
   isTyping: boolean;
+  onRetry?: (message: ChatMessage) => void;
 }
 
-export default function MessageList({ messages, isTyping }: Props) {
+export default function MessageList({ messages, isTyping, onRetry }: Props) {
   const endRef = useRef<HTMLDivElement | null>(null);
 
   // Auto-scroll on new content / typing progress.
@@ -50,7 +51,7 @@ export default function MessageList({ messages, isTyping }: Props) {
       }}
     >
       {messages.map((m) => (
-        <MessageBubble key={m.id} message={m} />
+        <MessageBubble key={m.id} message={m} onRetry={onRetry} />
       ))}
       {lastAssistantEmpty && (
         <p

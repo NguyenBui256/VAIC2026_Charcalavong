@@ -216,7 +216,10 @@ export default function GraphTab({ workflowId, onDirtyChange }: GraphTabProps) {
     }
   }
 
-  const chat = useGraphChat({ run: runChatCommand });
+  // Live authoring path: the backend/provider validates and auto-applies the full graph.
+  // The deterministic parser above is retained temporarily for compatibility tests only.
+  void runChatCommand;
+  const chat = useGraphChat(workflowId);
 
   async function save() {
     if (error) {
@@ -296,7 +299,16 @@ export default function GraphTab({ workflowId, onDirtyChange }: GraphTabProps) {
             onChange: patchSelected,
             onDelete: () => selectedId && deleteNode(selectedId),
           }}
-          chat={{ messages: chat.messages, onSend: chat.send }}
+          chat={{
+            messages: chat.messages,
+            onSend: chat.send,
+            pending: chat.pending,
+            providers: chat.models,
+            session: chat.session,
+            onModelChange: chat.changeModel,
+            onUndo: chat.undo,
+            error: chat.error ? (chat.error as Error).message : undefined,
+          }}
         />
       </div>
     </div>
