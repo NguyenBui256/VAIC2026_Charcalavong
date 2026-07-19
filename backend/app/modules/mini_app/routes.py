@@ -14,8 +14,8 @@ from datetime import datetime
 from typing import Any
 
 from arq.connections import ArqRedis
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, File, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
@@ -25,7 +25,7 @@ from app.core.deps import crud_audit_ids, get_tenant_session
 from app.core.errors import AuthorizationError, DomainError
 from app.core.ids import utcnow_iso_ms
 from app.core.ports.audit import AuditEntry
-from app.modules.mini_app import database_service, service
+from app.modules.mini_app import database_service, file_service, service
 from app.modules.mini_app.emission import emit_schema
 from app.modules.mini_app.lifecycle import enqueue_build
 from app.modules.mini_app.schema_validation import (
@@ -252,3 +252,35 @@ def delete_row_route(app_id: uuid.UUID, row_id: uuid.UUID, request: Request,
     app, _ = _load_and_gate(app_id, request, session)
     service.delete_row(session, app, row_id)
     return JSONResponse(status_code=200, content=_ok({"deleted": str(row_id)}))
+
+
+@mini_app_rows_router.post("/{app_id}/files")
+def upload_app_file_route(
+    app_id: uuid.UUID, request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+    file: UploadFile = File(...),  # noqa: B008
+) -> JSONResponse:
+    """Upload a file for a `file` field. Scoped-token authorized (same gate as
+    row writes). Returns a reference `{id, name, mime, size}` to store in the row."""
+    _load_and_gate(app_id, request, session)
+    user_id = getattr(request.state, "user_id", None)
+    ref = file_service.save_upload(
+        session,
+        tenant_id=uuid.UUID(str(request.state.tenant_id)),
+        user_id=uuid.UUID(str(user_id)) if user_id else None,
+        filename=file.filename or "file",
+        content_type=file.content_type or "application/octet-stream",
+        reader=file.file.read,
+    )
+    return JSONResponse(status_code=201, content=_ok(ref))
+
+
+@mini_app_rows_router.get("/{app_id}/files/{file_id}")
+def download_app_file_route(
+    app_id: uuid.UUID, file_id: uuid.UUID, request: Request,
+    session: Session = Depends(get_tenant_session),  # noqa: B008
+) -> FileResponse:
+    """Download a previously uploaded file. Scoped-token authorized + RLS-scoped."""
+    _load_and_gate(app_id, request, session)
+    row = file_service.resolve_file(session, file_id)
+    return FileResponse(row.storage_path, media_type=row.content_type, filename=row.filename)

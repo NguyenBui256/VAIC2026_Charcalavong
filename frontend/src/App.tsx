@@ -23,6 +23,7 @@ import KnowledgeBasePage from "./routes/knowledge-base/KnowledgeBasePage";
 import ChatPage from "./routes/chat/ChatPage";
 import DatabasePage from "./routes/database";
 import ActionsPage from "./routes/actions/ActionsPage";
+import TrackingPage from "./routes/tracking";
 import { isAuthenticated } from "./lib/auth";
 import { CommandPaletteProvider } from "./components/CommandPalette/CommandPaletteContext";
 import CommandPalette from "./components/CommandPalette/CommandPalette";
@@ -76,6 +77,7 @@ export function AppRoutes() {
         <Route path="/workflows" element={<WorkflowsPage />} />
         <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
         <Route path="/workflows/:id/runs/:runId" element={<RunTrackingPage />} />
+        <Route path="/tracking" element={<TrackingPage />} />
         {/* Story 4.7 — Mini-App catalog list + create. */}
         <Route path="/mini-apps" element={<MiniAppsPage />} />
         {/* Task 16 — sandboxed Mini-App host page (iframe + scoped token). */}

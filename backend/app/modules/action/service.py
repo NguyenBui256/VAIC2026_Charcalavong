@@ -7,6 +7,7 @@ appended in Task 5; this file starts with binding CRUD only.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
@@ -16,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import assume_app_role
 from app.core.errors import ConflictError, NotFoundError
 from app.core.tenant_context import set_tenant_context, set_tenant_session_var
-from app.modules.action.models import EVENT_TYPES, ActionBinding, ActionEvent
+from app.modules.action.models import EVENT_TYPES, TARGET_TYPES, ActionBinding, ActionEvent
 from app.modules.mini_app.visibility import MiniAppPrincipal
 
 
@@ -35,15 +36,18 @@ def get_binding(session: Session, binding_id: uuid.UUID) -> ActionBinding:
 
 def create_binding(
     session: Session, *, principal: MiniAppPrincipal, name: str,
-    database_id: uuid.UUID, event_type: str, workflow_id: uuid.UUID,
+    database_id: uuid.UUID, event_type: str, target_type: str,
+    workflow_id: uuid.UUID | None, agent_id: uuid.UUID | None,
     notify_user_ids: list[uuid.UUID], is_active: bool = True,
 ) -> ActionBinding:
     _validate_event_type(event_type)
+    _validate_target(target_type, workflow_id, agent_id)
     if _name_taken(session, principal.tenant_id, name):
         raise ConflictError(f"an action named '{name}' already exists")
     b = ActionBinding(
         tenant_id=principal.tenant_id, owner_id=principal.user_id, name=name,
-        database_id=database_id, event_type=event_type, workflow_id=workflow_id,
+        database_id=database_id, event_type=event_type, target_type=target_type,
+        workflow_id=workflow_id, agent_id=agent_id,
         notify_user_ids=notify_user_ids, is_active=is_active,
     )
     session.add(b)
@@ -55,7 +59,8 @@ def create_binding(
 def update_binding(
     session: Session, binding_id: uuid.UUID, *,
     name: str | None, database_id: uuid.UUID | None, event_type: str | None,
-    workflow_id: uuid.UUID | None, notify_user_ids: list[uuid.UUID] | None, is_active: bool | None,
+    target_type: str | None, workflow_id: uuid.UUID | None, agent_id: uuid.UUID | None,
+    notify_user_ids: list[uuid.UUID] | None, is_active: bool | None,
 ) -> ActionBinding:
     b = get_binding(session, binding_id)
     if name is not None and name != b.name:
@@ -67,8 +72,22 @@ def update_binding(
     if event_type is not None:
         _validate_event_type(event_type)
         b.event_type = event_type
-    if workflow_id is not None:
-        b.workflow_id = workflow_id
+
+    # Resolve the effective target from the patch, then validate + apply
+    # atomically so we never leave both/neither target id set.
+    if target_type is not None or workflow_id is not None or agent_id is not None:
+        new_type = target_type if target_type is not None else b.target_type
+        if new_type == "workflow":
+            new_wf = workflow_id if workflow_id is not None else b.workflow_id
+            new_ag = None
+        else:  # "agent"
+            new_ag = agent_id if agent_id is not None else b.agent_id
+            new_wf = None
+        _validate_target(new_type, new_wf, new_ag)
+        b.target_type = new_type
+        b.workflow_id = new_wf
+        b.agent_id = new_ag
+
     if notify_user_ids is not None:
         b.notify_user_ids = notify_user_ids
     if is_active is not None:
@@ -88,7 +107,9 @@ def delete_binding(session: Session, binding_id: uuid.UUID) -> None:
 def serialize_binding(b: ActionBinding) -> dict[str, Any]:
     return {
         "id": str(b.id), "name": b.name, "database_id": str(b.database_id),
-        "event_type": b.event_type, "workflow_id": str(b.workflow_id),
+        "event_type": b.event_type, "target_type": b.target_type,
+        "workflow_id": str(b.workflow_id) if b.workflow_id else None,
+        "agent_id": str(b.agent_id) if b.agent_id else None,
         "notify_user_ids": [str(u) for u in (b.notify_user_ids or [])],
         "is_active": b.is_active, "owner_id": str(b.owner_id),
         "created_at": b.created_at.isoformat(), "updated_at": b.updated_at.isoformat(),
@@ -98,6 +119,17 @@ def serialize_binding(b: ActionBinding) -> dict[str, Any]:
 def _validate_event_type(event_type: str) -> None:
     if event_type not in EVENT_TYPES:
         raise ConflictError(f"event_type must be one of {EVENT_TYPES}")
+
+
+def _validate_target(
+    target_type: str, workflow_id: uuid.UUID | None, agent_id: uuid.UUID | None
+) -> None:
+    if target_type not in TARGET_TYPES:
+        raise ConflictError(f"target_type must be one of {TARGET_TYPES}")
+    if target_type == "workflow" and (workflow_id is None or agent_id is not None):
+        raise ConflictError("workflow target requires workflow_id and no agent_id")
+    if target_type == "agent" and (agent_id is None or workflow_id is not None):
+        raise ConflictError("agent target requires agent_id and no workflow_id")
 
 
 def _name_taken(session: Session, tenant_id: uuid.UUID, name: str) -> bool:
@@ -118,6 +150,21 @@ def _name_taken(session: Session, tenant_id: uuid.UUID, name: str) -> bool:
 TERMINAL_RUN_STATUSES = {"completed", "completed_with_failures", "failed", "timed_out"}
 
 
+@dataclass
+class DispatchOutcome:
+    """Result of one dispatch pass: workflow runs to enqueue + agent tasks to run."""
+    run_ids: list[str] = field(default_factory=list)
+    agent_tasks: list[dict[str, str]] = field(default_factory=list)  # {"event_id","binding_id"}
+
+
+@dataclass
+class AgentTaskSpec:
+    """Everything run_agent_task needs to invoke one agent for one event."""
+    agent_id: uuid.UUID
+    department_id: uuid.UUID
+    payload: dict[str, Any]
+
+
 def _reassert(session: Session, tenant_id: uuid.UUID) -> None:
     """Re-apply role + tenant RLS var after a commit (SET LOCAL is txn-scoped)."""
     set_tenant_context(tenant_id)
@@ -125,7 +172,7 @@ def _reassert(session: Session, tenant_id: uuid.UUID) -> None:
     set_tenant_session_var(session, tenant_id)
 
 
-def dispatch_pending_events(session: Session, tenant_id: uuid.UUID) -> list[str]:
+def dispatch_pending_events(session: Session, tenant_id: uuid.UUID) -> DispatchOutcome:
     """Resolve each pending action_event -> create WorkflowRun(s) + notifications.
 
     Returns the list of created run ids for the caller to enqueue as
@@ -144,7 +191,7 @@ def dispatch_pending_events(session: Session, tenant_id: uuid.UUID) -> list[str]
         ).scalars()
     )
 
-    run_ids: list[str] = []
+    outcome = DispatchOutcome()
     for event_id in event_ids:
         _reassert(session, tenant_id)
         ev = session.get(ActionEvent, event_id)
@@ -176,12 +223,35 @@ def dispatch_pending_events(session: Session, tenant_id: uuid.UUID) -> list[str]
         data = (ev.payload or {}).get("data", {})
 
         dispatched: list[dict[str, Any]] = []
+        first_run_id: str | None = None
         for b in bindings:
             binding_id = str(b.id)
             binding_name = b.name
-            workflow_id = b.workflow_id
             recipients = list(b.notify_user_ids or []) or [b.owner_id]
 
+            if b.target_type == "agent":
+                # Agent target: no WorkflowRun. Record the dispatch, notify, and
+                # hand the (event, binding) to run_agent_task via the outcome.
+                outcome.agent_tasks.append({"event_id": str(event_id), "binding_id": binding_id})
+                _reassert(session, tenant_id)
+                notif_ids: list[str] = []
+                for uid in recipients:
+                    n = create_notification(
+                        session, tenant_id=tenant_id, user_id=uid,
+                        category="action.dispatched",
+                        title=f"New submission received — {binding_name}",
+                        body="A new record started background agent processing.",
+                        ref={"agent_id": str(b.agent_id), "app_id": app_id,
+                             "action_id": binding_id, "row_id": row_id},
+                    )
+                    notif_ids.append(str(n.id))
+                session.commit()
+                dispatched.append({"action_id": binding_id, "kind": "agent",
+                                   "agent_id": str(b.agent_id), "notification_ids": notif_ids})
+                continue
+
+            # Workflow target (unchanged behaviour).
+            workflow_id = b.workflow_id
             _reassert(session, tenant_id)
             run = create_run(
                 session, workflow_id, role="builder",
@@ -191,10 +261,12 @@ def dispatch_pending_events(session: Session, tenant_id: uuid.UUID) -> list[str]
                 },
             )
             run_id = str(run.id)
-            run_ids.append(run_id)
+            outcome.run_ids.append(run_id)
+            if first_run_id is None:
+                first_run_id = run_id
 
             _reassert(session, tenant_id)
-            notif_ids: list[str] = []
+            notif_ids = []
             for uid in recipients:
                 n = create_notification(
                     session, tenant_id=tenant_id, user_id=uid,
@@ -214,10 +286,10 @@ def dispatch_pending_events(session: Session, tenant_id: uuid.UUID) -> list[str]
             _finish_event(
                 session, ev, status="dispatched",
                 result={"dispatched": dispatched},
-                workflow_run_id=uuid.UUID(dispatched[0]["run_id"]) if dispatched else None,
+                workflow_run_id=uuid.UUID(first_run_id) if first_run_id else None,
             )
 
-    return run_ids
+    return outcome
 
 
 def notify_completed_events(session: Session, tenant_id: uuid.UUID) -> None:
@@ -274,3 +346,81 @@ def _finish_event(
     ev.workflow_run_id = workflow_run_id
     ev.processed_at = datetime.now(UTC)
     session.commit()
+
+
+def claim_agent_task(
+    session: Session, tenant_id: uuid.UUID, *, event_id: str, binding_id: str
+) -> AgentTaskSpec:
+    """Build the AgentExecutor payload for one (event, agent-binding). Sync, no
+    commit — leaves the RLS role/tenant var in place for execute_task's reads."""
+    from app.modules.agent_builder.service import get_agent
+
+    _reassert(session, tenant_id)
+    ev = session.get(ActionEvent, uuid.UUID(event_id))
+    b = session.get(ActionBinding, uuid.UUID(binding_id))
+    if ev is None or b is None or b.agent_id is None:
+        raise NotFoundError(f"agent task {event_id}/{binding_id} not resolvable")
+    agent = get_agent(session, b.agent_id)
+    data = (ev.payload or {}).get("data", {})
+    payload = {
+        "task": {"summary": f"Process {ev.event_type} on mini-app {ev.app_id}"},
+        "input": {
+            "source": "action", "action_id": binding_id, "app_id": str(ev.app_id),
+            "row_id": str(ev.row_id) if ev.row_id else None,
+            "event_type": ev.event_type, "data": data,
+        },
+        "expected": [],
+        "criteria": {},  # no forced tool — execute_task is no-tool-safe
+    }
+    return AgentTaskSpec(agent_id=agent.id, department_id=agent.department_id, payload=payload)
+
+
+def finalize_agent_event(
+    session: Session, tenant_id: uuid.UUID, *, event_id: str, binding_id: str,
+    output: dict[str, Any], confidence: float, rationale: str, success: bool, error: str,
+) -> None:
+    """Persist one agent result onto the event (appended under result.agent_results),
+    notify recipients, and mark the event completed. Sync; commits."""
+    from app.modules.notification.service import create_notification
+    from sqlalchemy.orm.attributes import flag_modified
+
+    _reassert(session, tenant_id)
+    ev = session.get(ActionEvent, uuid.UUID(event_id))
+    b = session.get(ActionBinding, uuid.UUID(binding_id))
+    if ev is None:
+        return
+
+    entry = {
+        "action_id": binding_id, "success": success, "confidence": confidence,
+        "rationale": rationale, "output": output, "error": error,
+    }
+    result = dict(ev.result or {})
+    result.setdefault("agent_results", []).append(entry)
+    ev.result = result
+    flag_modified(ev, "result")
+    # Only own the event-level completion gate for a pure agent-target event.
+    # If a workflow run is also attached (mixed bindings), leave status +
+    # completed_notified to the workflow completion sweep so its notification
+    # still fires; the agent result is recorded above and notified below.
+    if ev.workflow_run_id is None:
+        if not success:
+            ev.status = "failed"
+            ev.error = error or "agent task failed"
+        ev.completed_notified = True
+    ev.processed_at = datetime.now(UTC)
+    session.commit()
+
+    if b is not None:
+        _reassert(session, tenant_id)
+        recipients = list(b.notify_user_ids or []) or [b.owner_id]
+        summary = (rationale or str(output))[:200]
+        title = (f"Agent finished — {b.name}" if success else f"Agent failed — {b.name}")
+        for uid in recipients:
+            create_notification(
+                session, tenant_id=tenant_id, user_id=uid,
+                category="action.completed",
+                title=title,
+                body=summary or "Background agent processing finished.",
+                ref={"agent_id": str(b.agent_id), "app_id": str(ev.app_id), "action_id": binding_id},
+            )
+        session.commit()

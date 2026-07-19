@@ -16,12 +16,14 @@ import {
   AppWindow,
   // Zap, // tạm ẩn Actions
   Activity,
+  ClipboardList,
   // Settings, // tạm ẩn Settings
   // HelpCircle, // tạm ẩn Help
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 import { useState, type ComponentType } from "react";
+import { useTrackingSummary } from "../hooks/useTracking";
 
 // UX-DR14: expanded 256px, collapsed to icon-only rail 72px.
 const COLLAPSED_W = "72px";
@@ -41,8 +43,8 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/tools", label: "Tools", icon: Wrench },
   { to: "/workflows", label: "Workflows", icon: Workflow },
   { to: "/mini-apps", label: "Mini-Apps", icon: AppWindow },
-  // Tạm ẩn — khôi phục khi cần:
   // { to: "/actions", label: "Actions", icon: Zap },
+  { to: "/tracking", label: "Tracking", icon: ClipboardList },
   { to: "/audit", label: "Audit", icon: Activity },
   // { to: "/settings", label: "Settings", icon: Settings },
 ];
@@ -121,6 +123,9 @@ export default function Sidebar() {
     () => localStorage.getItem(STORAGE_KEY) === "1",
   );
 
+  const trackingSummary = useTrackingSummary();
+  const awaitingCount = trackingSummary.data?.awaiting_my_review ?? 0;
+
   const toggle = () => {
     setCollapsed((prev) => {
       const next = !prev;
@@ -195,6 +200,27 @@ export default function Sidebar() {
             >
               <Icon size={18} strokeWidth={1.5} />
               {!collapsed && <span>{item.label}</span>}
+              {item.to === "/tracking" && awaitingCount > 0 && (
+                <span
+                  data-testid="vaic-tracking-badge"
+                  style={{
+                    marginLeft: "auto",
+                    minWidth: 18,
+                    height: 18,
+                    padding: "0 5px",
+                    borderRadius: 9,
+                    background: "var(--color-warning, #b8860b)",
+                    color: "#fff",
+                    fontSize: "0.7rem",
+                    fontWeight: 700,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {awaitingCount}
+                </span>
+              )}
             </NavLink>
           );
         })}

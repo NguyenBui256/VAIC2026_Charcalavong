@@ -15,6 +15,7 @@ from app.modules.mini_app.schemas import EntitySchema, UiSpec
 _WIDGET = {
     "string": "text", "longtext": "textarea", "integer": "number",
     "number": "number", "boolean": "checkbox", "date": "date", "enum": "select",
+    "file": "file",
 }
 
 
@@ -64,7 +65,7 @@ export default function MiniApp() {{
         <tbody>
           {{rows.map((r) => (
             <tr key={{r.id}}>
-              {{FIELDS.map((f) => <td key={{f.name}}>{{String(r.data?.[f.name] ?? "")}}</td>)}}
+              {{FIELDS.map((f) => <td key={{f.name}}>{{f.type === "file" ? (r.data?.[f.name]?.name ?? "") : String(r.data?.[f.name] ?? "")}}</td>)}}
               <td>
                 <button onClick={{() => {{ setEditing(r); setForm(r.data || {{}}); }}}}>Edit</button>
                 <button onClick={{async () => {{ await sdk.remove(r.id); reload(); }}}}>Delete</button>
@@ -83,6 +84,7 @@ function renderWidget(f, form, setForm) {{
   if (f.type === "boolean") return <input type="checkbox" checked={{!!form[f.name]}} onChange={{(e) => set(e.target.checked)}} />;
   if (f.type === "longtext") return <textarea value={{val}} onChange={{(e) => set(e.target.value)}} />;
   if (f.type === "enum") return <select value={{val}} onChange={{(e) => set(e.target.value)}}><option value="">--</option>{{(f.options||[]).map((o) => <option key={{o}} value={{o}}>{{o}}</option>)}}</select>;
+  if (f.type === "file") return <span><input type="file" onChange={{async (e) => {{ const file = e.target.files?.[0]; if (file) set(await sdk.uploadFile(file)); }}}} />{{form[f.name]?.name ? <em style={{{{ marginLeft: 8 }}}}>{{form[f.name].name}}</em> : null}}</span>;
   const inputType = {{ integer: "number", number: "number", date: "date" }}[f.type] || "text";
   return <input type={{inputType}} value={{val}} onChange={{(e) => set(f.type === "integer" || f.type === "number" ? Number(e.target.value) : e.target.value)}} />;
 }}

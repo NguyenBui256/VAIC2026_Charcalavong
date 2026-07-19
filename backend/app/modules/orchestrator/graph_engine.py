@@ -233,6 +233,51 @@ def finalize_run(
     _reassert_rls(session)
 
 
+def _notify_approvers(
+    session: Session, run: WorkflowRun, node_exec: RunNodeExecution
+) -> None:
+    """Create one bell notification per approver when a node needs review.
+
+    Reuses notification.service.create_notification. Called at the human-gate
+    pause; the retry/rollback re-entry path also flows back through this same
+    gate, so a re-review is not missed. Best-effort: a notification failure
+    must never break run orchestration.
+    """
+    from app.modules.notification.service import create_notification
+    from app.modules.orchestrator.models import Workflow
+
+    approvers = node_exec.approver_user_ids or []
+    if not approvers:
+        return
+    _reassert_rls(session)
+    wf = session.get(Workflow, run.workflow_id)
+    wf_name = wf.name if wf else ""
+    _keys, nodes_by_key, _edges = load_graph(run.graph_snapshot or {"nodes": [], "edges": []})
+    node_label = nodes_by_key.get(node_exec.node_key, {}).get("label", node_exec.node_key)
+    ref = {
+        "run_id": str(run.id),
+        "workflow_id": str(run.workflow_id),
+        "node_key": node_exec.node_key,
+    }
+    try:
+        for uid in approvers:
+            create_notification(
+                session,
+                tenant_id=run.tenant_id,
+                user_id=uuid.UUID(str(uid)),
+                category="graph_review",
+                title=f"Đến lượt bạn review: {wf_name} / {node_label}",
+                body="Một node trong quy trình đang chờ bạn duyệt.",
+                ref=ref,
+            )
+        session.commit()
+        _reassert_rls(session)
+    except Exception:
+        # Notification is best-effort; never block the engine.
+        session.rollback()
+        _reassert_rls(session)
+
+
 async def graph_orchestrate(
     session: Session, run_id: uuid.UUID | str, *, executor: Any | None = None
 ) -> None:
@@ -298,6 +343,9 @@ async def graph_orchestrate(
                 extra_cols={"output": json.dumps(res.output)},
             )
             _set_run_awaiting_human(session, run_id)
+            _reassert_rls(session)
+            gated = execs.get(nxt.node_key) or nxt
+            _notify_approvers(session, run, gated)
             return
         # Non-gated node: no human to catch an unsuccessful result, so a
         # tool failure (res.success == False) must fail the node rather

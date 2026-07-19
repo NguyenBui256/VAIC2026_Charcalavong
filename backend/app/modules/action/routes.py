@@ -35,7 +35,9 @@ class CreateActionRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     database_id: uuid.UUID
     event_type: str = "row.created"
-    workflow_id: uuid.UUID
+    target_type: str = "workflow"
+    workflow_id: uuid.UUID | None = None
+    agent_id: uuid.UUID | None = None
     notify_user_ids: list[uuid.UUID] = Field(default_factory=list)
     is_active: bool = True
 
@@ -44,7 +46,9 @@ class UpdateActionRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     database_id: uuid.UUID | None = None
     event_type: str | None = None
+    target_type: str | None = None
     workflow_id: uuid.UUID | None = None
+    agent_id: uuid.UUID | None = None
     notify_user_ids: list[uuid.UUID] | None = None
     is_active: bool | None = None
 
@@ -60,7 +64,8 @@ def create_action_route(  # noqa: B008
 ) -> JSONResponse:
     b = svc.create_binding(
         session, principal=_principal(request), name=body.name,
-        database_id=body.database_id, event_type=body.event_type, workflow_id=body.workflow_id,
+        database_id=body.database_id, event_type=body.event_type,
+        target_type=body.target_type, workflow_id=body.workflow_id, agent_id=body.agent_id,
         notify_user_ids=body.notify_user_ids, is_active=body.is_active,
     )
     return JSONResponse(status_code=201, content=_ok(svc.serialize_binding(b)))
@@ -77,7 +82,8 @@ def update_action_route(  # noqa: B008
 ) -> JSONResponse:
     b = svc.update_binding(
         session, binding_id, name=body.name, database_id=body.database_id,
-        event_type=body.event_type, workflow_id=body.workflow_id,
+        event_type=body.event_type, target_type=body.target_type,
+        workflow_id=body.workflow_id, agent_id=body.agent_id,
         notify_user_ids=body.notify_user_ids, is_active=body.is_active,
     )
     return JSONResponse(status_code=200, content=_ok(svc.serialize_binding(b)))

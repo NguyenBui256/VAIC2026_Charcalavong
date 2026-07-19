@@ -57,6 +57,12 @@ def _check_field(f: FieldSpec) -> None:
             re.compile(f.pattern)
         except re.error as exc:
             raise SchemaValidationError(f"field '{f.name}' pattern invalid: {exc}") from exc
+    if f.type == "file" and (
+        f.min is not None or f.max is not None
+        or f.minLength is not None or f.maxLength is not None
+        or f.pattern is not None or f.options is not None
+    ):
+        raise SchemaValidationError(f"file field '{f.name}' cannot have value constraints")
 
 
 def validate_ui_spec(raw: dict[str, Any]) -> UiSpec:
@@ -112,6 +118,17 @@ def _coerce_value(f: FieldSpec, value: Any) -> Any:  # noqa: ANN401
         except ValueError as exc:
             raise SchemaValidationError(f"field '{f.name}' invalid date: {exc}") from exc
         return value
+    if f.type == "file":
+        if not isinstance(value, dict):
+            raise SchemaValidationError(f"field '{f.name}' file must be an object")
+        fid, name, mime, size = (
+            value.get("id"), value.get("name"), value.get("mime"), value.get("size"),
+        )
+        if not isinstance(fid, str) or not isinstance(name, str) or not isinstance(mime, str):
+            raise SchemaValidationError(f"field '{f.name}' file needs string id/name/mime")
+        if isinstance(size, bool) or not isinstance(size, int):
+            raise SchemaValidationError(f"field '{f.name}' file needs integer size")
+        return {"id": fid, "name": name, "mime": mime, "size": size}
     # string / longtext
     if not isinstance(value, str):
         raise SchemaValidationError(f"field '{f.name}' must be a string")

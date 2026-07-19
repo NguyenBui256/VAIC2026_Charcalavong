@@ -439,7 +439,7 @@ class WorkflowFile(Base):
         UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
-    content_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(255), nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     storage_path: Mapped[str] = mapped_column(Text, nullable=False)
     created_by: Mapped[uuid.UUID | None] = mapped_column(

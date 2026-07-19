@@ -25,6 +25,7 @@ if str(_BACKEND_DIR) not in sys.path:
 from app.modules.action.worker import (  # noqa: E402
     action_cron_jobs,
     process_tenant_action_events,
+    run_agent_task,
 )
 from app.modules.mini_app.mini_app_worker import build_mini_app  # noqa: E402
 
@@ -40,7 +41,7 @@ __all__ = ["main"]
 # Merge Mini-App builder + Action dispatch onto the orchestrator worker (AD-1).
 _combined_worker_config = replace(
     worker_config,
-    functions=[*worker_config.functions, build_mini_app, process_tenant_action_events],
+    functions=[*worker_config.functions, build_mini_app, process_tenant_action_events, run_agent_task],
     cron_jobs_list=[*worker_config.cron_jobs_list, *action_cron_jobs],
 )
 

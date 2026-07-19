@@ -15,7 +15,8 @@ import {
 } from "../../components/ui";
 import { useActions, useActionMutations, useMiniAppDatabasesList } from "../../hooks/useActions";
 import { useWorkflows } from "../../hooks/useWorkflows";
-import type { ActionBinding, ActionEventType, CreateActionInput } from "../../lib/actionsApi";
+import { useAgents } from "../../hooks/useAgents";
+import type { ActionBinding, ActionEventType, ActionTargetType, CreateActionInput } from "../../lib/actionsApi";
 
 const EVENT_TYPES: ActionEventType[] = ["row.created", "row.updated", "row.deleted"];
 
@@ -24,20 +25,24 @@ interface DraftState {
   name: string;
   database_id: string;
   event_type: ActionEventType;
+  target_type: ActionTargetType;
   workflow_id: string;
+  agent_id: string;
   notify_user_ids: string; // comma-separated in the form
   is_active: boolean;
 }
 
 const EMPTY_DRAFT: DraftState = {
   id: null, name: "", database_id: "", event_type: "row.created",
-  workflow_id: "", notify_user_ids: "", is_active: true,
+  target_type: "workflow", workflow_id: "", agent_id: "",
+  notify_user_ids: "", is_active: true,
 };
 
 export default function ActionsPage() {
   const query = useActions();
   const dbQuery = useMiniAppDatabasesList();
   const { data: workflowsData } = useWorkflows({});
+  const { data: agentsData } = useAgents({});
   const { create, update, remove } = useActionMutations();
   const { show } = useToast();
 
@@ -49,12 +54,16 @@ export default function ActionsPage() {
   const workflows = workflowsData ?? [];
   const dbName = (id: string) => databases.find((d) => d.id === id)?.name ?? id;
   const wfName = (id: string) => workflows.find((w) => w.id === id)?.name ?? id;
+  const agents = agentsData ?? [];
+  const agName = (id: string) => agents.find((a) => a.id === id)?.name ?? id;
 
   function startCreate() { setDraft({ ...EMPTY_DRAFT }); }
   function startEdit(a: ActionBinding) {
     setDraft({
       id: a.id, name: a.name, database_id: a.database_id, event_type: a.event_type,
-      workflow_id: a.workflow_id, notify_user_ids: a.notify_user_ids.join(", "), is_active: a.is_active,
+      target_type: a.target_type,
+      workflow_id: a.workflow_id ?? "", agent_id: a.agent_id ?? "",
+      notify_user_ids: a.notify_user_ids.join(", "), is_active: a.is_active,
     });
   }
 
@@ -63,12 +72,15 @@ export default function ActionsPage() {
     if (!draft) return;
     if (!draft.name.trim()) { show("Name is required", "error"); return; }
     if (!draft.database_id) { show("Pick a Mini-App Database", "error"); return; }
-    if (!draft.workflow_id) { show("Pick a Workflow", "error"); return; }
+    if (draft.target_type === "workflow" && !draft.workflow_id) { show("Pick a Workflow", "error"); return; }
+    if (draft.target_type === "agent" && !draft.agent_id) { show("Pick an Agent", "error"); return; }
     const input: CreateActionInput = {
       name: draft.name.trim(),
       database_id: draft.database_id,
       event_type: draft.event_type,
-      workflow_id: draft.workflow_id,
+      target_type: draft.target_type,
+      workflow_id: draft.target_type === "workflow" ? draft.workflow_id : null,
+      agent_id: draft.target_type === "agent" ? draft.agent_id : null,
       notify_user_ids: draft.notify_user_ids.split(",").map((s) => s.trim()).filter(Boolean),
       is_active: draft.is_active,
     };
@@ -98,7 +110,13 @@ export default function ActionsPage() {
     { key: "name", header: "Name" },
     { key: "database", header: "Database", render: (a) => dbName(a.database_id) },
     { key: "event", header: "Event", render: (a) => a.event_type },
-    { key: "workflow", header: "Workflow", render: (a) => wfName(a.workflow_id) },
+    {
+      key: "target", header: "Target",
+      render: (a) =>
+        a.target_type === "agent"
+          ? `Agent: ${agName(a.agent_id ?? "")}`
+          : `Workflow: ${wfName(a.workflow_id ?? "")}`,
+    },
     { key: "active", header: "Active", render: (a) => (a.is_active ? "Yes" : "No") },
     {
       key: "actions", header: "",
@@ -173,15 +191,40 @@ export default function ActionsPage() {
             </div>
 
             <div className="vaic-form-field">
-              <label className="vaic-form-label" htmlFor="vaic-action-workflow">Workflow</label>
+              <label className="vaic-form-label" htmlFor="vaic-action-target-type">Target type</label>
               <select
-                id="vaic-action-workflow" className="vaic-form-input vaic-focusable"
-                value={draft.workflow_id} onChange={(e) => setDraft({ ...draft, workflow_id: e.target.value })}
+                id="vaic-action-target-type" className="vaic-form-input vaic-focusable"
+                value={draft.target_type}
+                onChange={(e) => setDraft({ ...draft, target_type: e.target.value as ActionTargetType })}
               >
-                <option value="">— Select a workflow —</option>
-                {workflows.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                <option value="workflow">Workflow</option>
+                <option value="agent">Agent</option>
               </select>
             </div>
+
+            {draft.target_type === "workflow" ? (
+              <div className="vaic-form-field">
+                <label className="vaic-form-label" htmlFor="vaic-action-workflow">Workflow</label>
+                <select
+                  id="vaic-action-workflow" className="vaic-form-input vaic-focusable"
+                  value={draft.workflow_id} onChange={(e) => setDraft({ ...draft, workflow_id: e.target.value })}
+                >
+                  <option value="">— Select a workflow —</option>
+                  {workflows.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+              </div>
+            ) : (
+              <div className="vaic-form-field">
+                <label className="vaic-form-label" htmlFor="vaic-action-agent">Agent</label>
+                <select
+                  id="vaic-action-agent" className="vaic-form-input vaic-focusable"
+                  value={draft.agent_id} onChange={(e) => setDraft({ ...draft, agent_id: e.target.value })}
+                >
+                  <option value="">— Select an agent —</option>
+                  {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
+            )}
 
             <FormField
               label="Notify user IDs (comma-separated, optional)"
