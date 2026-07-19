@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import assume_app_role
 from app.core.errors import ConflictError, NotFoundError
 from app.core.tenant_context import set_tenant_context, set_tenant_session_var
-from app.modules.action.models import EVENT_TYPES, ActionBinding, ActionEvent
+from app.modules.action.models import EVENT_TYPES, TARGET_TYPES, ActionBinding, ActionEvent
 from app.modules.mini_app.visibility import MiniAppPrincipal
 
 
@@ -35,15 +35,18 @@ def get_binding(session: Session, binding_id: uuid.UUID) -> ActionBinding:
 
 def create_binding(
     session: Session, *, principal: MiniAppPrincipal, name: str,
-    database_id: uuid.UUID, event_type: str, workflow_id: uuid.UUID,
+    database_id: uuid.UUID, event_type: str, target_type: str,
+    workflow_id: uuid.UUID | None, agent_id: uuid.UUID | None,
     notify_user_ids: list[uuid.UUID], is_active: bool = True,
 ) -> ActionBinding:
     _validate_event_type(event_type)
+    _validate_target(target_type, workflow_id, agent_id)
     if _name_taken(session, principal.tenant_id, name):
         raise ConflictError(f"an action named '{name}' already exists")
     b = ActionBinding(
         tenant_id=principal.tenant_id, owner_id=principal.user_id, name=name,
-        database_id=database_id, event_type=event_type, workflow_id=workflow_id,
+        database_id=database_id, event_type=event_type, target_type=target_type,
+        workflow_id=workflow_id, agent_id=agent_id,
         notify_user_ids=notify_user_ids, is_active=is_active,
     )
     session.add(b)
@@ -55,7 +58,8 @@ def create_binding(
 def update_binding(
     session: Session, binding_id: uuid.UUID, *,
     name: str | None, database_id: uuid.UUID | None, event_type: str | None,
-    workflow_id: uuid.UUID | None, notify_user_ids: list[uuid.UUID] | None, is_active: bool | None,
+    target_type: str | None, workflow_id: uuid.UUID | None, agent_id: uuid.UUID | None,
+    notify_user_ids: list[uuid.UUID] | None, is_active: bool | None,
 ) -> ActionBinding:
     b = get_binding(session, binding_id)
     if name is not None and name != b.name:
@@ -67,8 +71,22 @@ def update_binding(
     if event_type is not None:
         _validate_event_type(event_type)
         b.event_type = event_type
-    if workflow_id is not None:
-        b.workflow_id = workflow_id
+
+    # Resolve the effective target from the patch, then validate + apply
+    # atomically so we never leave both/neither target id set.
+    if target_type is not None or workflow_id is not None or agent_id is not None:
+        new_type = target_type if target_type is not None else b.target_type
+        if new_type == "workflow":
+            new_wf = workflow_id if workflow_id is not None else b.workflow_id
+            new_ag = None
+        else:  # "agent"
+            new_ag = agent_id if agent_id is not None else b.agent_id
+            new_wf = None
+        _validate_target(new_type, new_wf, new_ag)
+        b.target_type = new_type
+        b.workflow_id = new_wf
+        b.agent_id = new_ag
+
     if notify_user_ids is not None:
         b.notify_user_ids = notify_user_ids
     if is_active is not None:
@@ -88,7 +106,9 @@ def delete_binding(session: Session, binding_id: uuid.UUID) -> None:
 def serialize_binding(b: ActionBinding) -> dict[str, Any]:
     return {
         "id": str(b.id), "name": b.name, "database_id": str(b.database_id),
-        "event_type": b.event_type, "workflow_id": str(b.workflow_id),
+        "event_type": b.event_type, "target_type": b.target_type,
+        "workflow_id": str(b.workflow_id) if b.workflow_id else None,
+        "agent_id": str(b.agent_id) if b.agent_id else None,
         "notify_user_ids": [str(u) for u in (b.notify_user_ids or [])],
         "is_active": b.is_active, "owner_id": str(b.owner_id),
         "created_at": b.created_at.isoformat(), "updated_at": b.updated_at.isoformat(),
@@ -98,6 +118,17 @@ def serialize_binding(b: ActionBinding) -> dict[str, Any]:
 def _validate_event_type(event_type: str) -> None:
     if event_type not in EVENT_TYPES:
         raise ConflictError(f"event_type must be one of {EVENT_TYPES}")
+
+
+def _validate_target(
+    target_type: str, workflow_id: uuid.UUID | None, agent_id: uuid.UUID | None
+) -> None:
+    if target_type not in TARGET_TYPES:
+        raise ConflictError(f"target_type must be one of {TARGET_TYPES}")
+    if target_type == "workflow" and (workflow_id is None or agent_id is not None):
+        raise ConflictError("workflow target requires workflow_id and no agent_id")
+    if target_type == "agent" and (agent_id is None or workflow_id is not None):
+        raise ConflictError("agent target requires agent_id and no workflow_id")
 
 
 def _name_taken(session: Session, tenant_id: uuid.UUID, name: str) -> bool:
