@@ -398,10 +398,15 @@ def finalize_agent_event(
     result.setdefault("agent_results", []).append(entry)
     ev.result = result
     flag_modified(ev, "result")
-    if not success:
-        ev.status = "failed"
-        ev.error = error or "agent task failed"
-    ev.completed_notified = True
+    # Only own the event-level completion gate for a pure agent-target event.
+    # If a workflow run is also attached (mixed bindings), leave status +
+    # completed_notified to the workflow completion sweep so its notification
+    # still fires; the agent result is recorded above and notified below.
+    if ev.workflow_run_id is None:
+        if not success:
+            ev.status = "failed"
+            ev.error = error or "agent task failed"
+        ev.completed_notified = True
     ev.processed_at = datetime.now(UTC)
     session.commit()
 
