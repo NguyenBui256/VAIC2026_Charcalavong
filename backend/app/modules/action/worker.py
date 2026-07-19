@@ -106,17 +106,18 @@ async def run_agent_task(ctx: dict[str, Any], *, event_id: str, binding_id: str)
         raise RuntimeError("run_agent_task: tenant_context unset at entry")
     loop = asyncio.get_running_loop()
 
-    spec = await loop.run_in_executor(
-        None, lambda: claim_agent_task(session, tenant_id, event_id=event_id, binding_id=binding_id)
-    )
-
+    output: dict[str, Any] = {}
+    confidence, rationale, success, error = 0.0, "", False, ""
     try:
+        spec = await loop.run_in_executor(
+            None, lambda: claim_agent_task(session, tenant_id, event_id=event_id, binding_id=binding_id)
+        )
         result = await AgentExecutor(session).execute_task(
             spec.agent_id, spec.payload, tenant_id=tenant_id, department_id=spec.department_id
         )
         output, confidence, rationale = result.output, result.confidence, result.rationale
         success, error = result.success, result.error
-    except Exception as exc:  # noqa: BLE001 — record + notify failure, never crash the job
+    except Exception as exc:  # noqa: BLE001 — record + notify failure, never leave the event stuck
         logger.exception("run_agent_task failed for event %s", event_id)
         output, confidence, rationale, success, error = {}, 0.0, "", False, str(exc)
 
