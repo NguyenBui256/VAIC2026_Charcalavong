@@ -8,14 +8,21 @@
  * localStorage or platform token.
  */
 
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Card, ErrorState, Skeleton } from "../components/ui";
+import { Button, Card, ErrorState, Skeleton, useToast } from "../components/ui";
 import { getMiniApp, getScopedToken, type MiniApp } from "../lib/miniAppsApi";
 import { useMiniAppDatabases } from "../hooks/useMiniAppDatabases";
 import MiniAppChatPanel from "../components/mini-apps/MiniAppChatPanel";
 
 const POLL_INTERVAL_MS = 2000;
+
+const VISIBILITY_LABELS: Record<MiniApp["visibility_tier"], string> = {
+  public: "Công khai",
+  need_auth: "Cần đăng nhập",
+  private: "Riêng tư",
+};
 
 export function MiniAppHostPage() {
   const { appId } = useParams<{ appId: string }>();
@@ -43,6 +50,10 @@ export function MiniAppHostPage() {
     queryFn: () => getScopedToken(appId as string),
     enabled: Boolean(appId) && isReady,
   });
+
+  const { show } = useToast();
+  // Local-only visibility override (mock control; not persisted).
+  const [visOverride, setVisOverride] = useState<MiniApp["visibility_tier"] | "">("");
 
   if (appQuery.isLoading) {
     return (
@@ -75,19 +86,72 @@ export function MiniAppHostPage() {
       data-testid="vaic-mini-app-host-page"
       style={{ display: "flex", flexDirection: "column", height: "calc(100vh - var(--topbar-h, 64px) - 2 * var(--space-4))", gap: "var(--space-3)" }}
     >
-      <header>
-        <h1 className="text-h1" style={{ marginBottom: "var(--space-1)" }}>{app.name}</h1>
-        {app.description && (
-          <p className="text-body" style={{ color: "var(--color-text-tertiary)" }}>{app.description}</p>
-        )}
-        {app.database_id && (
-          <p className="text-small" style={{ color: "var(--color-text-tertiary)", marginTop: "var(--space-1)" }}>
-            Database:{" "}
-            <Link to="/database" className="vaic-focusable" style={{ color: "var(--color-primary)" }}>
-              {boundDb?.name ?? "View in Database"}
-            </Link>
-          </p>
-        )}
+      <header
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: "var(--space-3)",
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <h1 className="text-h1" style={{ marginBottom: "var(--space-1)" }}>{app.name}</h1>
+          {app.description && (
+            <p className="text-body" style={{ color: "var(--color-text-tertiary)" }}>{app.description}</p>
+          )}
+          {app.database_id && (
+            <p className="text-small" style={{ color: "var(--color-text-tertiary)", marginTop: "var(--space-1)" }}>
+              Database:{" "}
+              <Link to="/database" className="vaic-focusable" style={{ color: "var(--color-primary)" }}>
+                {boundDb?.name ?? "View in Database"}
+              </Link>
+            </p>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap", flexShrink: 0 }}>
+          <label
+            htmlFor="vaic-miniapp-visibility"
+            className="text-small"
+            style={{ color: "var(--color-text-tertiary)" }}
+          >
+            Hiển thị
+          </label>
+          <select
+            id="vaic-miniapp-visibility"
+            className="vaic-form-input vaic-focusable"
+            style={{ width: "auto", padding: "6px 10px" }}
+            value={visOverride || app.visibility_tier}
+            onChange={(e) => {
+              const v = e.target.value as MiniApp["visibility_tier"];
+              setVisOverride(v);
+              show(`Đã đặt hiển thị: ${VISIBILITY_LABELS[v]} (demo)`);
+            }}
+          >
+            <option value="public">{VISIBILITY_LABELS.public}</option>
+            <option value="need_auth">{VISIBILITY_LABELS.need_auth}</option>
+            <option value="private">{VISIBILITY_LABELS.private}</option>
+          </select>
+          <Button
+            variant="secondary"
+            disabled={!isReady || !tokenQuery.data}
+            onClick={() => {
+              const token = tokenQuery.data?.token;
+              if (!appId || !token) return;
+              const apiBase = import.meta.env.VITE_API_BASE ?? "";
+              const src = `${apiBase}/mini-app-runtime/${appId}/index.html`;
+              const hash = new URLSearchParams({
+                appId,
+                token,
+                apiBase,
+                cb: app.updated_at,
+              }).toString();
+              window.open(`${src}#${hash}`, "_blank", "noopener");
+            }}
+          >
+            Mở tab mới ↗
+          </Button>
+        </div>
       </header>
 
       <div

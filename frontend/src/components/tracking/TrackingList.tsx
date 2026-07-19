@@ -2,7 +2,7 @@
  * renders a TrackingRow per session with loading/error/empty states.
  */
 import { useState } from "react";
-import { ErrorState, Skeleton } from "../ui";
+import { Button, ErrorState, Skeleton } from "../ui";
 import TrackingRow from "./TrackingRow";
 import { useTrackingList } from "../../hooks/useTracking";
 
@@ -12,23 +12,21 @@ export default function TrackingList() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-      <div style={{ display: "flex", gap: "var(--space-2)" }}>
-        <button
-          type="button"
+      <div role="tablist" aria-label="Phạm vi" style={{ display: "flex", gap: "var(--space-1)" }}>
+        <Button
+          variant={scope === "active" ? "primary" : "ghost"}
           onClick={() => setScope("active")}
           aria-pressed={scope === "active"}
-          style={{ fontWeight: scope === "active" ? 700 : 400 }}
         >
           Đang hoạt động
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant={scope === "all" ? "primary" : "ghost"}
           onClick={() => setScope("all")}
           aria-pressed={scope === "all"}
-          style={{ fontWeight: scope === "all" ? 700 : 400 }}
         >
           Tất cả
-        </button>
+        </Button>
       </div>
 
       {query.isLoading && <Skeleton lines={4} height="56px" />}

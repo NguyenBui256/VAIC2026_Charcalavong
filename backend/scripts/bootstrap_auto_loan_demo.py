@@ -68,7 +68,8 @@ WORKFLOW_DESC = (
 )
 
 DATABASE_NAME = "Hồ sơ vay thế chấp ô tô"
-APP_NAME = "Đăng ký vay mua ô tô (SHB)"
+APP_NAME = "Đăng ký vay mua ô tô (SHB)"          # form-only intake for the customer
+CRM_APP_NAME = "Quản lý hồ sơ vay (CRM)"          # list + edit/delete for staff
 
 BINDING_NAME = "Auto-Loan Intake → Thẩm định & Giải ngân"
 
@@ -224,12 +225,23 @@ AGENT_SPECS = [
 
 
 def seed_mini_app(session, people):
+    """Idempotent seed of the DB template + mini-app.
+
+    On a fresh run: creates both. On re-run with a CHANGED `LOAN_ENTITY_SCHEMA`
+    (e.g. checkbox docs → file uploads): overwrites the existing template schema,
+    syncs it onto the app, and marks the app `build_status="pending"` so `main()`
+    re-enqueues the esbuild job — otherwise the app stays on the old built form.
+    """
     tid = people["tenant_id"]
     owner = people["owner"]
     principal = MiniAppPrincipal(
         user_id=owner.id, tenant_id=tid,
         department_id=owner.department_id, role="builder",
     )
+
+    # Normalized form of the target schema, for change detection + app sync.
+    target_schema = validate_entity_schema(LOAN_ENTITY_SCHEMA)
+    target_dump = target_schema.model_dump()
 
     db = session.execute(
         select(MiniAppDatabase).where(
@@ -243,21 +255,56 @@ def seed_mini_app(session, people):
             description="Hồ sơ khách nộp để vay thế chấp mua ô tô.",
             entity_schema=LOAN_ENTITY_SCHEMA,
         )
-
-    app = session.execute(
-        select(MiniApp).where(MiniApp.tenant_id == tid, MiniApp.name == APP_NAME)
-    ).scalar_one_or_none()
-    if app is None:
+    elif validate_entity_schema(db.entity_schema).model_dump() != target_dump:
+        # Template drifted from the seed definition → overwrite it.
         set_tenant_context(tid)
-        schema = validate_entity_schema(db.entity_schema)
-        ui_spec = validate_ui_spec({})
-        app = mini_app_service.create_app_from_schema(
-            session, principal=principal, name=APP_NAME,
-            description="Biểu mẫu khách hàng đăng ký vay mua ô tô.",
-            schema=schema, ui_spec=ui_spec, visibility_tier="public",
+        db = database_service.update_database(
+            session, db.id, name=None, description=None,
+            entity_schema=LOAN_ENTITY_SCHEMA,
+        )
+
+    # Two apps share this database (list scopes by database_id, so they see the
+    # same submissions): a form-only intake for the customer, and a CRM list +
+    # edit/delete for staff.
+    form_app = _ensure_app(
+        session, principal, db, tenant_id=tid, name=APP_NAME, mode="form",
+        description="Biểu mẫu khách hàng đăng ký vay mua ô tô.",
+        target_schema=target_schema, target_dump=target_dump,
+    )
+    crm_app = _ensure_app(
+        session, principal, db, tenant_id=tid, name=CRM_APP_NAME, mode="crm",
+        description="Quản lý & xử lý hồ sơ vay mua ô tô (nội bộ).",
+        target_schema=target_schema, target_dump=target_dump,
+    )
+    return db, form_app, crm_app
+
+
+def _ensure_app(session, principal, db, *, tenant_id, name, mode, description,
+                target_schema, target_dump):
+    """Create the app if absent; else sync schema + ui-mode and flag a rebuild
+    on drift (main() enqueues the esbuild for any non-ready app)."""
+    app = session.execute(
+        select(MiniApp).where(MiniApp.tenant_id == tenant_id, MiniApp.name == name)
+    ).scalar_one_or_none()
+    ui_spec = validate_ui_spec({"mode": mode})
+    if app is None:
+        set_tenant_context(tenant_id)
+        return mini_app_service.create_app_from_schema(
+            session, principal=principal, name=name, description=description,
+            schema=target_schema, ui_spec=ui_spec, visibility_tier="public",
             whitelist_user_ids=[], database_id=db.id,
         )
-    return db, app
+    schema_drift = validate_entity_schema(app.entity_schema).model_dump() != target_dump
+    mode_drift = (app.ui_spec or {}).get("mode", "full") != mode
+    if schema_drift or mode_drift:
+        app.entity_schema = target_dump
+        app.ui_spec = ui_spec.model_dump()
+        app.build_status = "pending"
+        app.build_error = None
+        app.updated_at = mini_app_service.datetime_now()
+        session.commit()
+        session.refresh(app)
+    return app
 
 
 def seed_binding(session, people, workflow, db) -> ActionBinding:
@@ -379,20 +426,24 @@ def main() -> int:
             print(f"  - {key}: {a.name} (id={a.id})")
         workflow = seed_workflow(session, people, agents)
         print(f"[auto-loan] workflow: {workflow.name} (id={workflow.id})")
-        db, app = seed_mini_app(session, people)
+        db, form_app, crm_app = seed_mini_app(session, people)
         print(f"[auto-loan] database: {db.name} (id={db.id})")
-        print(f"[auto-loan] mini-app: {app.name} (id={app.id}, database_id={app.database_id}, "
-              f"build_status={app.build_status})")
+        for label, a in (("form", form_app), ("crm", crm_app)):
+            print(f"[auto-loan] mini-app[{label}]: {a.name} (id={a.id}, "
+                  f"database_id={a.database_id}, build_status={a.build_status})")
         binding = seed_binding(session, people, workflow, db)
         print(f"[auto-loan] binding: {binding.name} (id={binding.id}, active={binding.is_active})")
         tid = people["tenant_id"]
-        app_id = app.id
-        build_status = app.build_status
+        # Snapshot (id, build_status) for any app that needs a build.
+        pending_builds = [
+            (a.id, a.name) for a in (form_app, crm_app) if a.build_status != "ready"
+        ]
 
-    if build_status != "ready":
-        print("[auto-loan] enqueuing mini-app build…")
+    for app_id, app_name in pending_builds:
+        print(f"[auto-loan] enqueuing mini-app build… ({app_name})")
         asyncio.run(enqueue_app_build(tid, app_id))
-        print("[auto-loan] build enqueued — ensure an arq worker is running to complete it.")
+    if pending_builds:
+        print("[auto-loan] build(s) enqueued — ensure an arq worker is running to complete them.")
     print("\n[auto-loan] DONE. Login emails (pw Password123!):")
     print("  khách:      khachhang@shb.demo")
     print("  duyệt N4:   truongphong.td@shb.demo")

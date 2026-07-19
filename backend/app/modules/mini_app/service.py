@@ -170,14 +170,35 @@ def create_row(session: Session, app: MiniApp, principal: MiniAppPrincipal, data
     return row
 
 
+def _row_scope_app_ids(session: Session, app: MiniApp) -> list[uuid.UUID]:
+    """App ids whose rows `app` operates on.
+
+    Apps bound to the same database share ONE row set — so a form-only app and
+    a CRM app on the same database see/edit the same submissions. A standalone
+    app (no database_id) is scoped to its own rows only.
+    """
+    if app.database_id is None:
+        return [app.id]
+    ids = list(
+        session.execute(
+            select(MiniApp.id).where(MiniApp.database_id == app.database_id)
+        ).scalars()
+    )
+    return ids or [app.id]
+
+
 def list_rows(session: Session, app: MiniApp) -> list[MiniAppRow]:
-    stmt = select(MiniAppRow).where(MiniAppRow.app_id == app.id).order_by(MiniAppRow.created_at.desc())
+    stmt = (
+        select(MiniAppRow)
+        .where(MiniAppRow.app_id.in_(_row_scope_app_ids(session, app)))
+        .order_by(MiniAppRow.created_at.desc())
+    )
     return list(session.execute(stmt).scalars())
 
 
 def get_row(session: Session, app: MiniApp, row_id: uuid.UUID) -> MiniAppRow:
     row = session.get(MiniAppRow, row_id)
-    if row is None or row.app_id != app.id:
+    if row is None or row.app_id not in _row_scope_app_ids(session, app):
         raise NotFoundError(f"row {row_id} not found")
     return row
 
@@ -188,12 +209,13 @@ def update_row(
 ) -> MiniAppRow:
     """CAS on updated_at (Divergence-3). Mismatch -> ConflictError (409)."""
     from sqlalchemy import update as sa_update
+    scope_ids = _row_scope_app_ids(session, app)
     coerced = coerce_row_data(_schema_of(app), data)
     result = session.execute(
         sa_update(MiniAppRow)
         .where(
             MiniAppRow.id == row_id,
-            MiniAppRow.app_id == app.id,
+            MiniAppRow.app_id.in_(scope_ids),
             MiniAppRow.updated_at == expected_updated_at,
         )
         .values(data=coerced, updated_at=datetime_now())
@@ -203,7 +225,7 @@ def update_row(
         # Distinguish "gone" from "stale" for a correct 404 vs 409.
         exists = session.get(MiniAppRow, row_id)
         session.rollback()
-        if exists is None or exists.app_id != app.id:
+        if exists is None or exists.app_id not in scope_ids:
             raise NotFoundError(f"row {row_id} not found")
         raise ConflictError("row was modified concurrently (updated_at mismatch)")
     session.commit()

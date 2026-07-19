@@ -247,9 +247,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
         scope = claims.get("scope")
         if scope == "miniapp:rows":
             miniapp_id = claims.get("miniapp_id")
-            allowed_prefix = f"/apps/{miniapp_id}/rows"
-            if not miniapp_id or not (
-                path == allowed_prefix or path.startswith(allowed_prefix + "/")
+            # Rows are the data plane; files are the `file` field upload/download
+            # plane (both gated per-app by `_load_and_gate`). Both live under the
+            # token's own `/apps/{miniapp_id}` prefix; everything else is 403.
+            allowed_prefixes = (
+                f"/apps/{miniapp_id}/rows",
+                f"/apps/{miniapp_id}/files",
+            )
+            if not miniapp_id or not any(
+                path == p or path.startswith(p + "/") for p in allowed_prefixes
             ):
                 reset_tenant_context()
                 return _forbidden(
