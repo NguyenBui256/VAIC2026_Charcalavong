@@ -11,12 +11,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-FIELD_TYPES = ("string", "longtext", "integer", "number", "boolean", "date", "enum")
+FIELD_TYPES = ("string", "longtext", "integer", "number", "boolean", "date", "enum", "file")
 
 
 class FieldSpec(BaseModel):
     name: str = Field(..., pattern=r"^[a-z][a-z0-9_]{0,63}$")
-    type: Literal["string", "longtext", "integer", "number", "boolean", "date", "enum"]
+    type: Literal["string", "longtext", "integer", "number", "boolean", "date", "enum", "file"]
     label: str | None = None
     required: bool = False
     min: float | None = None
