@@ -4,7 +4,6 @@ import { Button } from "../ui";
 import type { MiniApp } from "../../lib/miniAppsApi";
 import { usePersistentChatSession } from "../../hooks/usePersistentChatSession";
 import AttachmentPicker from "../chat/attachment-picker";
-import ModelSelector from "../chat/model-selector";
 
 export interface MiniAppChatPanelProps {
   app: MiniApp;
@@ -49,15 +48,6 @@ export default function MiniAppChatPanel({ app, appId }: MiniAppChatPanelProps) 
   const error = chat.messages.error ?? chat.create.error ?? chat.send.error ?? chat.undo.error;
   return (
     <div data-testid="vaic-miniapp-chat" style={{ display: "flex", flexDirection: "column", height: "100%", border: "1px solid var(--color-border)", borderRadius: "var(--radius-control)", background: "var(--color-surface)", overflow: "hidden" }}>
-      <div style={{ padding: "var(--space-2) var(--space-3)", borderBottom: "1px solid var(--color-border)" }}>
-        <ModelSelector
-          providers={chat.models.data ?? []}
-          providerId={chat.session?.provider_id ?? null}
-          modelName={chat.session?.model_name ?? null}
-          disabled={chat.pending}
-          onChange={(providerId, modelName) => chat.changeModel.mutate({ providerId, modelName })}
-        />
-      </div>
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
         {messages.length === 0 && (
           <ChatBubble role="assistant" text="Mô tả thay đổi hoặc tải CSV/XLSX để sinh field/schema. Mọi thay đổi hợp lệ sẽ tự áp dụng và có thể Undo." />

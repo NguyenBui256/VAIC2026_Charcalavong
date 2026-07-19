@@ -35,10 +35,6 @@ export function useGraphChat(workflowId: string) {
     send: (content: string, attachmentIds: string[] = []) =>
       chat.send.mutate({ content, attachmentIds }),
     pending: chat.pending || chat.send.isPending,
-    models: chat.models.data ?? [],
-    session: chat.session,
-    changeModel: (providerId: string, modelName: string) =>
-      chat.changeModel.mutate({ providerId, modelName }),
     undo: (mutationId: string) => chat.undo.mutate(mutationId),
     error: chat.messages.error ?? chat.create.error ?? chat.send.error ?? chat.undo.error,
   };

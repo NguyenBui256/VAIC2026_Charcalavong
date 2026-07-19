@@ -5,7 +5,6 @@ import { Button } from "../../ui";
 import NodeInspector, { type NodeInspectorProps } from "./NodeInspector";
 import GraphChatPanel from "./GraphChatPanel";
 import type { GraphChatMessage } from "../../../hooks/useGraphChat";
-import type { ChatProvider, ChatSessionDto } from "../../../lib/chatApi";
 
 interface Props {
   inspector: NodeInspectorProps;
@@ -13,9 +12,6 @@ interface Props {
     messages: GraphChatMessage[];
     onSend: (text: string, attachmentIds?: string[]) => void;
     pending: boolean;
-    providers: ChatProvider[];
-    session: ChatSessionDto | null;
-    onModelChange: (providerId: string, modelName: string) => void;
     onUndo: (mutationId: string) => void;
     error?: string;
   };
